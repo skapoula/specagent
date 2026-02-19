@@ -52,6 +52,7 @@ dependencies = [
     "numpy>=1.26.0",
     "pandas>=2.2.0",
     "huggingface-hub>=0.26.0",
+    "markitdown[pdf,docx,pptx,xlsx]>=0.1.0",
     
     # Utilities
     "python-dotenv>=1.0.0",
@@ -233,6 +234,7 @@ module = [
     "ragas.*",
     "phoenix.*",
     "gradio.*",
+    "markitdown",
 ]
 ignore_missing_imports = true
 

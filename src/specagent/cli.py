@@ -103,9 +103,10 @@ def index(
 
     from specagent.config import settings
     from specagent.retrieval.chunker import chunk_markdown
+    from specagent.retrieval.converter import convert_to_markdown
     from specagent.retrieval.data_ingestion import (
         clone_dataset_with_git_lfs,
-        discover_markdown_files,
+        discover_documents,
         download_all_required_specs,
     )
     from specagent.retrieval.embeddings import LocalEmbedder
@@ -166,13 +167,13 @@ def index(
 
     console.print(f"[blue]Building index from {data_path}...[/blue]\n")
 
-    # Step 1: Load markdown files
-    console.print("[cyan]Step 1: Discovering markdown files...[/cyan]")
-    md_files = discover_markdown_files(data_path)
-    if not md_files:
-        console.print(f"[red]No markdown files found in {data_path}[/red]")
+    # Step 1: Discover documents
+    console.print("[cyan]Step 1: Discovering documents...[/cyan]")
+    doc_files = discover_documents(data_path)
+    if not doc_files:
+        console.print(f"[red]No supported documents found in {data_path}[/red]")
         raise typer.Exit(1)
-    console.print(f"[green]Found {len(md_files)} markdown files[/green]\n")
+    console.print(f"[green]Found {len(doc_files)} documents[/green]\n")
 
     # Step 2: Initialize embedder (load model once)
     console.print("[cyan]Step 2: Loading embedding model...[/cyan]")
@@ -188,11 +189,11 @@ def index(
     all_embeddings = []
     total_chars = 0
 
-    for idx, md_file in enumerate(md_files, 1):
-        console.print(f"[blue]({idx}/{len(md_files)}) Processing {md_file.name}[/blue]")
+    for idx, doc_file in enumerate(doc_files, 1):
+        console.print(f"[blue]({idx}/{len(doc_files)}) Processing {doc_file.name}[/blue]")
 
-        # Read and chunk document
-        text = md_file.read_text(encoding="utf-8")
+        # Convert and chunk document
+        text = convert_to_markdown(doc_file)
         total_chars += len(text)
 
         chunks = chunk_markdown(
@@ -203,7 +204,7 @@ def index(
 
         # Update source_file metadata
         for chunk in chunks:
-            chunk.metadata["source_file"] = md_file.name
+            chunk.metadata["source_file"] = doc_file.name
 
         console.print(f"[dim]  • Chunked: {len(chunks)} chunks ({len(text):,} chars)[/dim]")
 
@@ -220,11 +221,15 @@ def index(
         # Explicitly release memory to help garbage collector
         del text, chunk_texts
 
-        console.print(f"[green]  ✓ Complete ({len(chunks)} chunks, {len(embeddings)} embeddings)[/green]\n")
+        console.print(
+            f"[green]  ✓ Complete ({len(chunks)} chunks, {len(embeddings)} embeddings)[/green]\n"
+        )
 
     # Combine all embeddings efficiently
     embeddings = np.vstack(all_embeddings)
-    console.print(f"[green]Processed {len(md_files)} files: {len(all_chunks)} chunks from {total_chars:,} characters[/green]")
+    console.print(
+        f"[green]Processed {len(doc_files)} files: {len(all_chunks)} chunks from {total_chars:,} characters[/green]"
+    )
     console.print(f"[green]Total embeddings: {len(embeddings)} vectors with dimension {embeddings.shape[1]}[/green]\n")
 
     # Step 4: Build FAISS index
@@ -247,7 +252,7 @@ def index(
 
     # Summary
     console.print("[bold green]✓ Index building complete![/bold green]")
-    console.print(f"  Files processed: {len(md_files)}")
+    console.print(f"  Files processed: {len(doc_files)}")
     console.print(f"  Total chunks: {len(all_chunks)}")
     console.print(f"  Index size: {faiss_index.size} vectors")
     console.print(f"  Output: {index_path}.{{index,json}}")

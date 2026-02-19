@@ -171,9 +171,31 @@ def discover_markdown_files(data_dir: Path) -> list[Path]:
     return md_files
 
 
+def discover_documents(data_dir: Path) -> list[Path]:
+    """
+    Discover all supported documents in a directory and its subdirectories.
+
+    Searches recursively for all file formats supported by the converter
+    (markdown, PDF, DOCX, PPTX, XLSX, etc.).
+
+    Args:
+        data_dir: Directory to search
+
+    Returns:
+        List of document file paths, sorted alphabetically
+    """
+    from specagent.retrieval.converter import ALL_SUPPORTED_EXTENSIONS
+
+    found: list[Path] = []
+    for ext in ALL_SUPPORTED_EXTENSIONS:
+        found.extend(data_dir.glob(f"**/*{ext}"))
+    found.sort()
+    return found
+
+
 def validate_data_directory(data_dir: Path) -> tuple[bool, str]:
     """
-    Validate that a data directory contains markdown files.
+    Validate that a data directory contains supported documents.
 
     Args:
         data_dir: Directory to validate
@@ -187,11 +209,11 @@ def validate_data_directory(data_dir: Path) -> tuple[bool, str]:
     if not data_dir.is_dir():
         return False, f"Not a directory: {data_dir}"
 
-    md_files = discover_markdown_files(data_dir)
-    if not md_files:
-        return False, f"No markdown files found in: {data_dir}"
+    docs = discover_documents(data_dir)
+    if not docs:
+        return False, f"No supported documents found in: {data_dir}"
 
-    return True, f"Found {len(md_files)} markdown files"
+    return True, f"Found {len(docs)} documents"
 
 
 def clear_data_directory(data_dir: Path) -> None:
