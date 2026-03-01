@@ -38,8 +38,10 @@ dependencies = [
     "langchain-huggingface>=0.1.0",
     
     # Vector Store & Embeddings
-    "faiss-cpu>=1.8.0",
-    "sentence-transformers>=3.0.0",
+    "lancedb>=0.13.0",
+    "fastembed>=0.3.0",
+    "pyarrow>=15.0.0",
+    "tantivy>=0.22.0",
     
     # API & Web
     "fastapi>=0.115.0",
@@ -52,7 +54,7 @@ dependencies = [
     "numpy>=1.26.0",
     "pandas>=2.2.0",
     "huggingface-hub>=0.26.0",
-    "markitdown[pdf,docx,pptx,xlsx]>=0.1.0",
+    "markitdown[pdf,docx,pptx,xlsx,html]>=0.1.0",
     
     # Utilities
     "python-dotenv>=1.0.0",
@@ -225,8 +227,10 @@ pretty = true
 
 [[tool.mypy.overrides]]
 module = [
-    "faiss",
-    "sentence_transformers",
+    "lancedb",
+    "lancedb.*",
+    "fastembed",
+    "fastembed.*",
     "langgraph.*",
     "langchain.*",
     "langchain_community.*",
@@ -235,6 +239,7 @@ module = [
     "phoenix.*",
     "gradio.*",
     "markitdown",
+    "tantivy",
 ]
 ignore_missing_imports = true
 
