@@ -44,16 +44,12 @@ class Settings(BaseSettings):
     # Model Configuration
     # ==========================================================================
     embedding_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
-        description="Sentence transformer model for document/query embeddings",
+        default="nomic-ai/nomic-embed-text-v1.5",
+        description="fastembed model ID for document/query embeddings",
     )
     embedding_dimension: int = Field(
-        default=384,
-        description="Dimension of embedding vectors (must match model)",
-    )
-    use_local_embeddings: bool = Field(
-        default=True,
-        description="Use local sentence-transformers instead of HF API",
+        default=768,
+        description="Vector dimension (must match embedding_model output)",
     )
 
     # LLM Configuration
@@ -126,16 +122,90 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================================
+    # LanceDB Configuration
+    # ==========================================================================
+    lancedb_uri: Path = Field(
+        default=Path("data/lancedb"),
+        description="Path to LanceDB storage directory",
+    )
+    lancedb_table_name: str = Field(
+        default="documents",
+        description="LanceDB table name",
+    )
+    default_library: str = Field(
+        default="3gpp-specs",
+        description="Default library name for ingested documents",
+    )
+
+    # ==========================================================================
+    # Ingestion Configuration
+    # ==========================================================================
+    docs_dir: Path = Field(
+        default=Path("data/docs"),
+        description="Directory where user places input documents",
+    )
+    chunk_size_tokens: int = Field(
+        default=512,
+        ge=64,
+        le=2048,
+        description="Target chunk size in tokens",
+    )
+    chunk_overlap_tokens: int = Field(
+        default=64,
+        ge=0,
+        le=512,
+        description="Overlap in tokens between consecutive chunks",
+    )
+    chunk_min_tokens: int = Field(
+        default=50,
+        ge=1,
+        le=256,
+        description="Minimum chunk size; shorter chunks kept as-is",
+    )
+    embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Batch size for fastembed inference",
+    )
+    max_ingest_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Maximum concurrent files during folder ingestion",
+    )
+
+    # ==========================================================================
+    # Search Configuration
+    # ==========================================================================
+    hybrid_search_enabled: bool = Field(
+        default=True,
+        description="Enable BM25 full-text + vector hybrid search",
+    )
+    search_refine_factor: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="ANN re-ranking candidates (higher = better recall)",
+    )
+
+    # ==========================================================================
+    # HTTP Configuration (for URL ingestion)
+    # ==========================================================================
+    http_timeout_seconds: int = Field(
+        default=10,
+        ge=1,
+        le=300,
+        description="Timeout for URL fetch requests in seconds",
+    )
+    http_user_agent: str = Field(
+        default="specagent/1.0",
+        description="User-Agent header for HTTP requests",
+    )
+
+    # ==========================================================================
     # Retrieval Configuration
     # ==========================================================================
-    faiss_index_path: Path = Field(
-        default=Path("data/index/faiss.index"),
-        description="Path to FAISS index file",
-    )
-    metadata_path: Path = Field(
-        default=Path("data/index/metadata.json"),
-        description="Path to chunk metadata JSON file",
-    )
     retrieval_top_k: int = Field(
         default=10,
         ge=1,
@@ -241,21 +311,11 @@ class Settings(BaseSettings):
             raise ValueError(f"chunk_overlap ({v}) must be less than chunk_size ({chunk_size})")
         return v
 
-    @field_validator("faiss_index_path", "metadata_path", "data_dir", "raw_data_dir", "processed_data_dir")
+    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir")
     @classmethod
     def resolve_path(cls, v: Path) -> Path:
         """Resolve paths to absolute paths."""
         return v.resolve()
-
-    # ==========================================================================
-    # Computed Properties
-    # ==========================================================================
-    @property
-    def hf_api_key_value(self) -> Optional[str]:
-        """Get the actual API key value (use sparingly)."""
-        if self.hf_api_key:
-            return self.hf_api_key.get_secret_value()
-        return None
 
 
 @lru_cache

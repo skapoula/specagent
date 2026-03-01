@@ -1,6 +1,4 @@
-"""
-Unit tests for configuration module.
-"""
+"""Unit tests for configuration module."""
 
 import os
 from unittest.mock import patch
@@ -13,18 +11,9 @@ class TestSettings:
 
     def test_settings_loads_from_env(self, mock_settings):
         """Settings should load values from environment variables."""
-        assert mock_settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
         assert mock_settings.chunk_size == 512
         assert mock_settings.chunk_overlap == 64
         assert mock_settings.enable_tracing is False
-
-    def test_settings_validates_api_key(self):
-        """Settings should require HF_API_KEY."""
-        with patch.dict(os.environ, {}, clear=True):
-            from specagent.config import Settings
-            
-            with pytest.raises(Exception):  # ValidationError
-                Settings()
 
     def test_settings_chunk_overlap_validation(self):
         """Chunk overlap must be less than chunk size."""
@@ -38,22 +27,14 @@ class TestSettings:
             clear=True,
         ):
             from specagent.config import Settings
-            
+
             with pytest.raises(Exception):  # ValidationError
                 Settings()
 
-    def test_settings_hf_api_key_is_secret(self, mock_settings):
-        """API key should be stored as SecretStr."""
-        # Direct access should not reveal the value
-        assert "test-api-key" not in str(mock_settings.hf_api_key)
-        
-        # Explicit method should reveal the value
-        assert mock_settings.hf_api_key_value == "test-api-key"
-
     def test_settings_paths_are_resolved(self, mock_settings):
         """Path settings should be resolved to absolute paths."""
-        assert mock_settings.faiss_index_path.is_absolute()
         assert mock_settings.data_dir.is_absolute()
+        assert mock_settings.lancedb_uri.is_absolute()
 
     def test_get_settings_is_cached(self):
         """get_settings should return cached instance."""
@@ -67,3 +48,45 @@ class TestSettings:
             settings2 = get_settings()
 
             assert settings1 is settings2
+
+
+class TestNewPipelineSettings:
+    """Tests for LanceDB/fastembed pipeline settings added in v0.3."""
+
+    @pytest.mark.unit
+    def test_lancedb_uri_has_default(self):
+        """lancedb_uri field exists and defaults to a path containing 'lancedb'."""
+        from specagent.config import get_settings
+
+        get_settings.cache_clear()
+        s = get_settings()
+        assert hasattr(s, "lancedb_uri")
+        assert "lancedb" in str(s.lancedb_uri).lower()
+
+    @pytest.mark.unit
+    def test_embedding_dimension_is_768(self):
+        """embedding_dimension defaults to 768 for nomic-embed-text-v1.5."""
+        from specagent.config import get_settings
+
+        get_settings.cache_clear()
+        s = get_settings()
+        assert s.embedding_dimension == 768
+
+    @pytest.mark.unit
+    def test_chunk_size_tokens_has_default(self):
+        """chunk_size_tokens field exists and defaults to 512."""
+        from specagent.config import get_settings
+
+        get_settings.cache_clear()
+        s = get_settings()
+        assert hasattr(s, "chunk_size_tokens")
+        assert s.chunk_size_tokens == 512
+
+    @pytest.mark.unit
+    def test_hybrid_search_enabled_by_default(self):
+        """hybrid_search_enabled is True by default."""
+        from specagent.config import get_settings
+
+        get_settings.cache_clear()
+        s = get_settings()
+        assert getattr(s, "hybrid_search_enabled", False) is True
