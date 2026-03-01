@@ -29,11 +29,15 @@ class TestGeneratorNode:
             GradedChunk(
                 chunk=RetrievedChunk(
                     content=chunk["content"],
+                    chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
+                    doc_id="doc-uuid",
+                    source=chunk.get("source", "TS38.321.docx"),
+                    title=chunk.get("title", "TS 38.321 MAC"),
+                    chunk_index=chunk.get("chunk_index", 0),
+                    file_type=chunk.get("file_type", "docx"),
                     spec_id=chunk.get("spec_id", "TS38.321"),
                     section=chunk.get("section", "5.4"),
                     similarity_score=chunk.get("similarity_score", 0.8),
-                    chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
-                    source_file=chunk.get("source_file", "TS38.321.md")
                 ),
                 relevant=chunk.get("relevant", "yes"),
                 confidence=chunk.get("confidence", 0.85)
@@ -669,9 +673,9 @@ class TestGeneratorNode:
         prompt = invoke_call_args[0][0]
 
         # New prompt should have these elements
-        assert "3GPP expert" in prompt
-        assert "Answer precisely from context" in prompt
-        assert "Extract exact values/units/terms" in prompt
+        assert "3GPP specification expert" in prompt
+        assert "Extract precise answers from" in prompt
+        assert "Extract the EXACT value with units" in prompt
 
         # Old prompt should NOT have these verbose elements
         assert "STEP 1" not in prompt
@@ -764,6 +768,6 @@ class TestGeneratorNode:
         prompt = invoke_call_args[0][0]
 
         # Should include explicit guidance about numbers with units
-        assert "For numbers:" in prompt or "numbers" in prompt.lower()
+        assert "For numerical" in prompt or "numerical" in prompt.lower()
         assert "exact value" in prompt.lower() or "Extract exact" in prompt
         assert "unit" in prompt.lower()

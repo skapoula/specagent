@@ -11,25 +11,37 @@ from typing import Literal, Optional, TypedDict
 
 @dataclass
 class RetrievedChunk:
-    """A document chunk retrieved from the FAISS index."""
+    """A document chunk retrieved from the LanceDB store."""
 
     content: str
     """The text content of the chunk."""
 
+    chunk_id: str
+    """Chunk-level unique ID (ChunkRecord.id, UUID4)."""
+
+    doc_id: str
+    """Document-level UUID grouping all chunks from one source."""
+
+    source: str
+    """Full file path or URL of the source document."""
+
+    title: str
+    """Document title (first heading or source filename stem)."""
+
+    chunk_index: int
+    """Zero-based position of this chunk within the document."""
+
+    file_type: str
+    """File extension: 'docx', 'pdf', 'md', etc."""
+
     spec_id: str
-    """Specification identifier (e.g., 'TS38.331')."""
+    """3GPP spec ID derived from source filename (e.g., 'TS38.321')."""
 
     section: str
-    """Section reference within the spec (e.g., '5.3.3')."""
+    """Section heading from metadata (e.g., '5.4 HARQ Entity')."""
 
     similarity_score: float
     """Cosine similarity to the query (0.0 to 1.0)."""
-
-    chunk_id: str
-    """Unique identifier for this chunk."""
-
-    source_file: str = ""
-    """Original filename from TSpec-LLM dataset."""
 
 
 @dataclass

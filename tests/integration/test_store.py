@@ -38,6 +38,8 @@ def sample_record():
 @pytest.mark.integration
 def test_upsert_and_search(store, sample_record):
     """Upsert a chunk and retrieve it via search."""
+    from specagent.retrieval.store import ChunkRecord
+
     store.upsert_chunks([sample_record])
     results = store.search(
         embedding=sample_record.embedding,
@@ -47,6 +49,9 @@ def test_upsert_and_search(store, sample_record):
         filter=None,
     )
     assert len(results) >= 1
+    record, score = results[0]
+    assert isinstance(record, ChunkRecord)
+    assert 0.0 <= score <= 1.0
 
 
 @pytest.mark.integration

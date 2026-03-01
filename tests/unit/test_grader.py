@@ -66,11 +66,15 @@ class TestGraderNode:
         state["retrieved_chunks"] = [
             RetrievedChunk(
                 content=chunk["content"],
+                chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
+                doc_id="doc-uuid",
+                source=chunk.get("source", "TS38.321.docx"),
+                title=chunk.get("title", "TS 38.321 MAC"),
+                chunk_index=chunk.get("chunk_index", 0),
+                file_type=chunk.get("file_type", "docx"),
                 spec_id=chunk.get("spec_id", "TS38.321"),
                 section=chunk.get("section", "5.4"),
                 similarity_score=chunk.get("similarity_score", 0.8),
-                chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
-                source_file=chunk.get("source_file", "TS38.321.md")
             )
             for i, chunk in enumerate(chunks_data)
         ]
@@ -184,7 +188,7 @@ class TestGraderNode:
                 "section": "5.4.1",
                 "similarity_score": 0.7,  # Mid-range to trigger LLM
                 "chunk_id": "test_chunk_123",
-                "source_file": "TS38.321.md"
+                "source": "TS38.321.docx"
             }
         ]
         state = self._create_state_with_chunks("Test question", chunks)
@@ -198,7 +202,7 @@ class TestGraderNode:
         assert graded_chunk.chunk.section == "5.4.1"
         assert graded_chunk.chunk.similarity_score == 0.7
         assert graded_chunk.chunk.chunk_id == "test_chunk_123"
-        assert graded_chunk.chunk.source_file == "TS38.321.md"
+        assert graded_chunk.chunk.source == "TS38.321.docx"
 
     @patch('specagent.nodes.grader.create_llm')
     def test_grader_single_chunk(self, mock_create_llm):

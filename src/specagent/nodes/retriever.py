@@ -1,36 +1,37 @@
-"""
-Retriever node: Fetches relevant document chunks from FAISS index.
+"""Retriever node: Fetches relevant document chunks from LanceDB.
 
-Embeds the user's query and searches the FAISS index for the top-10
-most similar document chunks. Grader will only grade the top-3 for latency optimization.
+Embeds the query with the 'search_query: ' prefix (required by
+nomic-embed-text-v1.5's asymmetric search design), then runs
+hybrid BM25+vector search against the LanceDB store.
 """
 
-import asyncio
+import json
+import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from specagent.config import settings
 from specagent.graph.state import RetrievedChunk
-from specagent.retrieval.resources import (
-    get_faiss_index,
-    get_hf_embedder,
-    get_local_embedder,
-)
+from specagent.retrieval.resources import get_embedder, get_store
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
 
+logger = logging.getLogger(__name__)
+
+# nomic-embed-text-v1.5 asymmetric search requires task-specific prefix
+_QUERY_PREFIX = "search_query: "
+
 
 def retriever_node(state: "GraphState") -> "GraphState":
-    """
-    Retrieve relevant chunks from FAISS index for the query.
+    """Retrieve relevant chunks from LanceDB for the query.
 
     Args:
-        state: Current graph state containing the user's question or rewritten_question
+        state: Current graph state with question or rewritten_question.
 
     Returns:
-        Updated state with retrieved_chunks populated (top-10 similar chunks)
+        Updated state with retrieved_chunks populated.
     """
-    # Get query from state - prioritize rewritten_question over original question
     query = state.get("rewritten_question") or state.get("question", "")
 
     if not query:
@@ -39,58 +40,55 @@ def retriever_node(state: "GraphState") -> "GraphState":
         return state
 
     try:
-        # Get cached embedder based on config
-        if settings.use_local_embeddings:
-            embedder = get_local_embedder()
-            # Use synchronous method for local embeddings
-            query_embedding = embedder.embed_query(query)
-        else:
-            embedder = get_hf_embedder()
-            # Embed query asynchronously for HF API
-            query_embedding = asyncio.run(embedder.aembed_texts([query]))[0]
+        embedder = get_embedder()
+        store = get_store()
 
-        # Get cached FAISS index (no more disk loading on every call!)
-        index = get_faiss_index()
+        # Embed with query prefix (asymmetric search requirement)
+        query_vector = list(next(embedder.embed([_QUERY_PREFIX + query])))
 
-        # Search index for top-10 similar chunks (grader will only grade top-3)
-        results = index.search(query_embedding, k=10)
+        # Hybrid search: BM25 + ANN vector
+        results = store.search(
+            embedding=query_vector,
+            query_text=query,
+            top_k=settings.retrieval_top_k,
+            library=settings.default_library,
+            filter=None,
+        )
 
-        # Convert results to RetrievedChunk objects
         retrieved_chunks: list[RetrievedChunk] = []
-        for chunk, similarity_score in results:
-            # Extract spec_id from source_file (e.g., "TS38.321.md" -> "TS38.321")
-            source_file = chunk.metadata.get("source_file", "unknown")
-            spec_id = source_file.replace(".md", "").replace("-", ".")
+        for record, similarity_score in results:
+            # Derive spec_id from filename stem
+            # "TS38.321.docx" -> stem "TS38.321"
+            stem = Path(record.source).stem
 
-            # Get section from metadata
-            section = chunk.metadata.get("section_header", "")
+            # Deserialize section header from metadata JSON
+            try:
+                meta = json.loads(record.metadata or "{}")
+                section = meta.get("section_header", "")
+            except (json.JSONDecodeError, AttributeError):
+                section = ""
 
-            # Create unique chunk_id
-            chunk_index = chunk.metadata.get("chunk_index", 0)
-            chunk_id = f"{source_file}:{chunk_index}"
-
-            # Create RetrievedChunk
-            retrieved_chunk = RetrievedChunk(
-                content=chunk.content,
-                spec_id=spec_id,
-                section=section,
-                similarity_score=float(similarity_score),
-                chunk_id=chunk_id,
-                source_file=source_file,
+            retrieved_chunks.append(
+                RetrievedChunk(
+                    content=record.content,
+                    chunk_id=record.id,
+                    doc_id=record.doc_id,
+                    source=record.source,
+                    title=record.title,
+                    chunk_index=record.chunk_index,
+                    file_type=record.file_type,
+                    spec_id=stem,
+                    section=section,
+                    similarity_score=float(similarity_score),
+                )
             )
-            retrieved_chunks.append(retrieved_chunk)
 
-        # Update state with retrieved chunks
         state["retrieved_chunks"] = retrieved_chunks
-
-    except FileNotFoundError as e:
-        # Handle missing index file
-        state["error"] = f"Retriever error: Index not found - {str(e)}"
-        state["retrieved_chunks"] = []
+        logger.info("Retrieved %d chunks for query", len(retrieved_chunks))
 
     except Exception as e:
-        # Handle other errors gracefully
-        state["error"] = f"Retriever error: {str(e)}"
+        logger.error("Retriever error: %s", e, exc_info=True)
+        state["error"] = f"Retriever error: {e!s}"
         state["retrieved_chunks"] = []
 
     return state

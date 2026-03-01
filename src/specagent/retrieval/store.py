@@ -362,7 +362,7 @@ class Store:
         top_k: int,
         library: str | None,
         filter: dict | None,  # noqa: A002
-    ) -> list[ChunkRecord]:
+    ) -> list[tuple["ChunkRecord", float]]:
         """Hybrid (BM25 + vector) search over stored chunks.
 
         Attempts hybrid search when hybrid_search_enabled is True; falls back to
@@ -377,7 +377,8 @@ class Store:
                 Keys must be valid column names; string and int values supported.
 
         Returns:
-            List of ChunkRecord objects sorted by relevance descending.
+            List of (ChunkRecord, similarity_score) tuples sorted by relevance
+            descending. similarity_score is in [0.0, 1.0].
 
         Raises:
             StoreError: If the search fails or a filter key is invalid.
@@ -407,10 +408,13 @@ class Store:
             else:
                 rows = self._vector_search(table, embedding, where, top_k)
 
-            return [
-                ChunkRecord(**{k: v for k, v in row.items() if k != "_distance"})
-                for row in rows
-            ]
+            results = []
+            for row in rows:
+                distance = float(row.get("_distance") or 0.0)
+                similarity = max(0.0, 1.0 - distance)
+                record = ChunkRecord(**{k: v for k, v in row.items() if k != "_distance"})
+                results.append((record, similarity))
+            return results
         except StoreError:
             raise
         except Exception as e:

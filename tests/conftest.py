@@ -60,60 +60,49 @@ def reset_resource_cache():
 
 @pytest.fixture
 def sample_chunks():
-    """Provide sample 3GPP document chunks for testing."""
-    from specagent.retrieval.chunker import Chunk
+    """Sample ChunkRecord objects for testing."""
+    import json
+    import uuid as _uuid
+    from specagent.retrieval.store import ChunkRecord
 
+    data = [
+        ("TS38.321.docx", "5.4 HARQ Entity",
+         "The maximum number of HARQ processes for NR is 16 for both FDD and TDD."),
+        ("TS38.101-1.docx", "5.5A Carrier Aggregation",
+         "The UE shall support a maximum of 16 component carriers for CA."),
+        ("TS38.331.docx", "5.3.7 RRC Connection Re-establishment",
+         "RRC connection re-establishment is initiated when T311 expires."),
+        ("TS38.211.docx", "7.3 Physical Downlink Control Channel",
+         "The PDCCH carries downlink control information (DCI)."),
+        ("TS38.401.docx", "6.1 F1 Interface",
+         "The gNB-DU and gNB-CU are connected via the F1 interface."),
+    ]
     return [
-        Chunk(
-            content="The maximum number of HARQ processes for NR is 16 for both FDD and TDD.",
-            metadata={
-                "source_file": "TS38.321.md",
-                "section_header": "5.4 HARQ Entity",
-                "chunk_index": 0,
-            },
-        ),
-        Chunk(
-            content="The UE shall support a maximum of 16 component carriers for carrier aggregation.",
-            metadata={
-                "source_file": "TS38.101-1.md",
-                "section_header": "5.5A Carrier Aggregation",
-                "chunk_index": 0,
-            },
-        ),
-        Chunk(
-            content="RRC connection re-establishment procedure is initiated when T311 expires.",
-            metadata={
-                "source_file": "TS38.331.md",
-                "section_header": "5.3.7 RRC connection re-establishment",
-                "chunk_index": 0,
-            },
-        ),
-        Chunk(
-            content="The PDCCH is used to carry downlink control information (DCI).",
-            metadata={
-                "source_file": "TS38.211.md",
-                "section_header": "7.3 Physical downlink control channel",
-                "chunk_index": 0,
-            },
-        ),
-        Chunk(
-            content="The gNB-DU and gNB-CU are connected via the F1 interface.",
-            metadata={
-                "source_file": "TS38.401.md",
-                "section_header": "6.1 F1 Interface",
-                "chunk_index": 0,
-            },
-        ),
+        ChunkRecord(
+            id=str(_uuid.uuid4()),
+            doc_id=str(_uuid.uuid4()),
+            library="3gpp-specs",
+            source=src,
+            content_hash=f"hash{i}",
+            title=src.replace(".docx", ""),
+            content=content,
+            embedding=[0.0] * 768,
+            chunk_index=0,
+            created_at="2026-03-01T00:00:00Z",
+            metadata=json.dumps({"section_header": section}),
+            file_type="docx",
+            last_modified="2026-03-01T00:00:00Z",
+            page=0,
+        )
+        for i, (src, section, content) in enumerate(data)
     ]
 
 
 @pytest.fixture
 def sample_embeddings():
-    """Provide sample embeddings for testing."""
-    # Generate random normalized embeddings
+    """Sample 768d embeddings for testing."""
     rng = np.random.default_rng(42)
-    embeddings = rng.random((5, 384)).astype(np.float32)
-    # Normalize for cosine similarity
+    embeddings = rng.random((5, 768)).astype(np.float32)
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     return embeddings / norms
 
@@ -228,22 +217,49 @@ def initial_graph_state(sample_question):
 
 
 @pytest.fixture
-def state_after_retrieval(initial_graph_state, sample_chunks):
-    """Provide graph state after retrieval step."""
+def state_after_retrieval(initial_graph_state):
+    """Graph state after retrieval, using the unified RetrievedChunk schema."""
     from specagent.graph.state import RetrievedChunk
 
     state = initial_graph_state.copy()
     state["route_decision"] = "retrieve"
     state["retrieved_chunks"] = [
         RetrievedChunk(
-            content=chunk.content,
-            spec_id=chunk.metadata.get("source_file", "").replace(".md", "").replace("-", "."),
-            section=chunk.metadata.get("section_header", ""),
-            similarity_score=0.85 - i * 0.1,
-            chunk_id=f"{chunk.metadata.get('source_file', 'unknown')}:{chunk.metadata.get('chunk_index', i)}",
-            source_file=chunk.metadata.get("source_file", ""),
-        )
-        for i, chunk in enumerate(sample_chunks[:3])
+            content="The maximum number of HARQ processes for NR is 16.",
+            chunk_id="TS38.321.docx:0",
+            doc_id="doc-uuid-1",
+            source="TS38.321.docx",
+            title="TS 38.321 MAC Protocol",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.321",
+            section="5.4 HARQ Entity",
+            similarity_score=0.85,
+        ),
+        RetrievedChunk(
+            content="The UE shall support a maximum of 16 component carriers for CA.",
+            chunk_id="TS38.101-1.docx:0",
+            doc_id="doc-uuid-2",
+            source="TS38.101-1.docx",
+            title="TS 38.101-1",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.101",
+            section="5.5A Carrier Aggregation",
+            similarity_score=0.75,
+        ),
+        RetrievedChunk(
+            content="RRC re-establishment is initiated when T311 expires.",
+            chunk_id="TS38.331.docx:0",
+            doc_id="doc-uuid-3",
+            source="TS38.331.docx",
+            title="TS 38.331 RRC",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.331",
+            section="5.3.7 RRC Connection Re-establishment",
+            similarity_score=0.65,
+        ),
     ]
     return state
 

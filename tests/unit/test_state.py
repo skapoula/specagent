@@ -13,37 +13,58 @@ from specagent.graph.state import (
 )
 
 
+def _make_chunk(**kwargs) -> RetrievedChunk:
+    """Build a RetrievedChunk with sensible defaults for tests."""
+    defaults = dict(
+        content="Test content",
+        chunk_id="TS38.321.docx:0",
+        doc_id="doc-uuid",
+        source="/path/TS38.321.docx",
+        title="TS 38.321 MAC",
+        chunk_index=0,
+        file_type="docx",
+        spec_id="TS38.321",
+        section="5.4",
+        similarity_score=0.9,
+    )
+    defaults.update(kwargs)
+    return RetrievedChunk(**defaults)
+
+
 class TestRetrievedChunk:
     """Tests for RetrievedChunk dataclass."""
 
     def test_retrieved_chunk_creation(self):
         """RetrievedChunk should store all required fields."""
-        chunk = RetrievedChunk(
-            content="Test content",
-            spec_id="TS38.321",
-            section="5.4",
-            similarity_score=0.95,
-            chunk_id="TS38.321.md:0",
-            source_file="TS38.321.md",
-        )
+        chunk = _make_chunk(similarity_score=0.95, chunk_id="TS38.321.docx:0")
 
         assert chunk.content == "Test content"
         assert chunk.spec_id == "TS38.321"
         assert chunk.section == "5.4"
         assert chunk.similarity_score == 0.95
-        assert chunk.chunk_id == "TS38.321.md:0"
+        assert chunk.chunk_id == "TS38.321.docx:0"
 
-    def test_retrieved_chunk_default_source_file(self):
-        """source_file should default to empty string."""
-        chunk = RetrievedChunk(
-            content="Test",
-            spec_id="TS38.321",
-            section="5.4",
-            similarity_score=0.9,
-            chunk_id="test",
+    def test_retrieved_chunk_has_source_not_source_file(self):
+        """RetrievedChunk uses 'source' (LanceDB field name), not 'source_file'."""
+        chunk = _make_chunk(source="/path/TS38.321.docx")
+        assert chunk.source == "/path/TS38.321.docx"
+        assert not hasattr(chunk, "source_file")
+
+    def test_retrieved_chunk_has_doc_id_title_chunk_index(self):
+        """RetrievedChunk includes LanceDB fields: doc_id, title, chunk_index, file_type."""
+        chunk = _make_chunk(
+            doc_id="doc-xyz",
+            title="My Document",
+            chunk_index=3,
+            file_type="docx",
+            spec_id="TS38.101",
+            section="5.5A",
+            similarity_score=0.75,
         )
-
-        assert chunk.source_file == ""
+        assert chunk.doc_id == "doc-xyz"
+        assert chunk.title == "My Document"
+        assert chunk.chunk_index == 3
+        assert chunk.file_type == "docx"
 
 
 class TestGradedChunk:
@@ -51,13 +72,7 @@ class TestGradedChunk:
 
     def test_graded_chunk_creation(self):
         """GradedChunk should wrap RetrievedChunk with grade info."""
-        retrieved = RetrievedChunk(
-            content="Test content",
-            spec_id="TS38.321",
-            section="5.4",
-            similarity_score=0.9,
-            chunk_id="TS38.321.md:0",
-        )
+        retrieved = _make_chunk(similarity_score=0.9)
 
         graded = GradedChunk(
             chunk=retrieved,
@@ -117,11 +132,9 @@ class TestGraphState:
 
     def test_graph_state_allows_partial(self):
         """GraphState should allow partial initialization (total=False)."""
-        # This should not raise an error
         state: GraphState = {
             "question": "Test question",
         }
 
         assert state["question"] == "Test question"
-        # Other fields should not be present
         assert "generation" not in state

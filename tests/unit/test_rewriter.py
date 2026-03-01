@@ -33,11 +33,15 @@ class TestRewriterNode:
         state["retrieved_chunks"] = [
             RetrievedChunk(
                 content=chunk["content"],
+                chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
+                doc_id="doc-uuid",
+                source=chunk.get("source", "TS38.211.docx"),
+                title=chunk.get("title", "TS 38.211"),
+                chunk_index=chunk.get("chunk_index", 0),
+                file_type=chunk.get("file_type", "docx"),
                 spec_id=chunk.get("spec_id", "TS38.211"),
                 section=chunk.get("section", "7.3"),
                 similarity_score=chunk.get("similarity_score", 0.5),
-                chunk_id=chunk.get("chunk_id", f"chunk_{i}"),
-                source_file=chunk.get("source_file", "TS38.211.md")
             )
             for i, chunk in enumerate(chunks_data)
         ]
