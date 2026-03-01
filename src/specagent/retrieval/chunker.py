@@ -1,161 +1,218 @@
-"""
-Document chunking with metadata preservation.
+"""Token-aware recursive text chunking using a shared tokenizer singleton."""
 
-Splits large markdown documents into smaller chunks while preserving:
-    - Section headers for context
-    - Source file information
-    - Chunk position/index
-"""
+import logging
+import re as _re
+from typing import TYPE_CHECKING
 
-import re
-from dataclasses import dataclass, field
+from specagent.config import settings
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizerBase
 
+logger = logging.getLogger(__name__)
 
-@dataclass
-class Chunk:
-    """A document chunk with metadata."""
+_tokenizer: "PreTrainedTokenizerBase | None" = None
 
-    content: str
-    """The text content of the chunk."""
+# Separator hierarchy for recursive splitting
+_SEPARATORS = ["\n\n", "\n", " ", ""]
 
-    metadata: dict[str, str | int] = field(default_factory=dict)
-    """Metadata containing source_file, section_header, and chunk_index."""
+# Compiled regex for markdown headings (used by chunk_with_metadata)
+_HEADER_RE = _re.compile(r"^#{1,6}\s+(.+)$", _re.MULTILINE)
 
 
-def chunk_markdown(
-    text: str,
-    chunk_size: int,
-    overlap: int,
-) -> list[Chunk]:
-    """
-    Split markdown text into chunks with metadata.
+def _get_tokenizer() -> "PreTrainedTokenizerBase":
+    """Return the tokenizer singleton, loading it on first call.
 
-    Uses LangChain's RecursiveCharacterTextSplitter under the hood
-    with markdown-aware separators.
-
-    Args:
-        text: Markdown document text to chunk
-        chunk_size: Target chunk size in characters
-        overlap: Number of characters to overlap between chunks
-
-    Returns:
-        List of Chunk objects with content and metadata
+    Uses settings.embedding_model as the HuggingFace Hub model ID so the
+    tokenizer always matches the configured embedding model.
 
     Raises:
-        ValueError: If chunk_size <= 0 or overlap >= chunk_size
+        RuntimeError: If the tokenizer is not cached locally. Run
+            'python -m specagent download-model' to download it.
     """
-    # Validate inputs
-    if chunk_size <= 0:
-        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
-    if overlap < 0:
-        raise ValueError(f"overlap must be non-negative, got {overlap}")
-    if overlap >= chunk_size:
-        raise ValueError(
-            f"overlap ({overlap}) must be less than chunk_size ({chunk_size})"
-        )
+    global _tokenizer  # noqa: PLW0603
+    if _tokenizer is None:
+        from transformers import AutoTokenizer
 
-    # Handle empty or whitespace-only input
-    if not text or not text.strip():
-        return []
+        model_id = settings.embedding_model
+        logger.info("Loading tokenizer %s", model_id)
+        try:
+            _tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+                model_id, local_files_only=True, trust_remote_code=True
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Tokenizer '{model_id}' is not in the local cache. "
+                "Run 'specagent download-model' to download it, "
+                "then restart the server."
+            ) from exc
+    return _tokenizer
 
-    # Extract section headers from the entire document
-    section_headers = _extract_section_headers(text)
 
-    # Create text splitter with markdown-aware separators
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=overlap,
-        length_function=len,
-        is_separator_regex=False,
-        separators=[
-            "\n\n",  # Double newline (paragraph breaks)
-            "\n",  # Single newline
-            " ",  # Space
-            "",  # Character-level fallback
-        ],
-    )
+def _token_length(text: str) -> int:
+    """Return the number of tokens in *text* using the embedding tokenizer."""
+    tok = _get_tokenizer()
+    return len(tok.encode(text, add_special_tokens=False))
 
-    # Split the text
-    text_chunks = splitter.split_text(text)
 
-    # Create Chunk objects with metadata
-    chunks: list[Chunk] = []
-    for i, chunk_content in enumerate(text_chunks):
-        # Find the nearest section header for this chunk
-        section_header = _find_nearest_header(chunk_content, text, section_headers)
+def _merge_splits(
+    splits: list[str], separator: str, chunk_size: int, overlap: int
+) -> list[str]:
+    """Merge small splits into chunks respecting chunk_size and overlap.
 
-        chunk = Chunk(
-            content=chunk_content,
-            metadata={
-                "source_file": "unknown",  # Default value
-                "section_header": section_header,
-                "chunk_index": i,
-            },
-        )
-        chunks.append(chunk)
+    Token lengths for each split are cached to avoid redundant tokenizer calls
+    during overlap trimming. Separator tokens are counted in the assembled
+    chunk length so the configured limit is never silently exceeded.
+    """
+    sep_len = _token_length(separator) if separator else 0
+    chunks: list[str] = []
+    current: list[str] = []
+    lengths: list[int] = []  # cached token lengths, parallel to current
+    current_len = 0
+
+    for split in splits:
+        split_len = _token_length(split)
+        # Separator tokens added before this split when current is non-empty
+        sep_addition = sep_len if current else 0
+        # If adding this split would exceed chunk_size, flush current
+        if current_len + sep_addition + split_len > chunk_size and current:
+            chunks.append(separator.join(current))
+            # Keep overlap: drop splits from the front until under overlap budget
+            while current and current_len > overlap:
+                removed_len = lengths.pop(0)
+                current.pop(0)
+                current_len -= removed_len
+                if current:
+                    # The separator that preceded this element is also gone
+                    current_len -= sep_len
+            # Recalculate sep_addition after overlap trimming
+            sep_addition = sep_len if current else 0
+        current.append(split)
+        lengths.append(split_len)
+        current_len += sep_addition + split_len
+
+    if current:
+        chunks.append(separator.join(current))
 
     return chunks
 
 
-def _extract_section_headers(text: str) -> dict[int, str]:
+def _split_recursive(
+    text: str, separators: list[str], chunk_size: int, overlap: int
+) -> list[str]:
+    """Recursively split text using the first separator that produces usable pieces.
+
+    Sub-pieces that required recursion are not re-joined with the parent separator;
+    they are flushed as independent chunks to preserve the separator that was
+    actually used at each recursion level.
+
+    For the character-level fallback (empty separator), the text is encoded once
+    and decoded as token windows to avoid O(n) per-character tokenizer calls.
     """
-    Extract markdown section headers from text.
+    if not separators:
+        # No more separators — return text as-is (may be oversized, caller filters)
+        return [text]
+
+    sep = separators[0]
+    remaining = separators[1:]
+
+    # Character-level last resort: encode once and decode sliding windows.
+    if sep == "":
+        tok = _get_tokenizer()
+        token_ids = tok.encode(text, add_special_tokens=False)
+        if len(token_ids) <= chunk_size:
+            return [text]
+        step = max(1, chunk_size - overlap)
+        return [
+            tok.decode(token_ids[i : i + chunk_size])
+            for i in range(0, len(token_ids), step)
+        ]
+
+    splits = text.split(sep)
+
+    # Separate direct (small) splits from oversized ones that need recursion.
+    # Flush good_splits before appending recursed output so each group is merged
+    # with the separator that was actually used to produce its pieces.
+    final_chunks: list[str] = []
+    good_splits: list[str] = []
+
+    for s in splits:
+        if not s:
+            continue
+        if _token_length(s) > chunk_size:
+            if good_splits:
+                final_chunks.extend(
+                    _merge_splits(good_splits, sep, chunk_size, overlap)
+                )
+                good_splits = []
+            final_chunks.extend(_split_recursive(s, remaining, chunk_size, overlap))
+        else:
+            good_splits.append(s)
+
+    if good_splits:
+        final_chunks.extend(_merge_splits(good_splits, sep, chunk_size, overlap))
+
+    return final_chunks
+
+
+def chunk(text: str) -> list[str]:
+    """Split *text* into token-bounded chunks suitable for embedding.
 
     Args:
-        text: Markdown text to parse
+        text: The Markdown text to split.
 
     Returns:
-        Dictionary mapping character position to header text
+        List of chunk strings, each between chunk_min_tokens and chunk_size_tokens.
     """
-    headers: dict[int, str] = {}
-    # Match markdown headers (# Header, ## Header, etc.)
-    pattern = r"^(#{1,6})\s+(.+)$"
+    if not text.strip():
+        return []
 
-    for match in re.finditer(pattern, text, re.MULTILINE):
-        position = match.start()
-        header_text = match.group(2).strip()
-        headers[position] = header_text
+    raw_chunks = _split_recursive(
+        text,
+        _SEPARATORS,
+        settings.chunk_size_tokens,
+        settings.chunk_overlap_tokens,
+    )
+    filtered = [c for c in raw_chunks if _token_length(c) >= settings.chunk_min_tokens]
 
-    return headers
+    if not filtered and raw_chunks:
+        # Document is shorter than chunk_min_tokens — preserve raw_chunks rather
+        # than returning text.strip() which is not size-validated.
+        logger.debug(
+            "All chunks below min-token floor (%d); indexing document as-is",
+            settings.chunk_min_tokens,
+        )
+        filtered = raw_chunks
+
+    logger.debug(
+        "Chunked text: %d raw → %d after min-token filter",
+        len(raw_chunks),
+        len(filtered),
+    )
+    return filtered
 
 
-def _find_nearest_header(
-    chunk_content: str, full_text: str, section_headers: dict[int, str]
-) -> str:
-    """
-    Find the nearest section header for a chunk.
+def chunk_with_metadata(text: str) -> list[tuple[str, str]]:
+    """Split text into chunks, attaching the nearest section heading to each.
+
+    Each chunk inherits the most recently seen markdown heading. When a chunk
+    itself starts a new heading, that heading propagates to subsequent chunks.
 
     Args:
-        chunk_content: The content of the current chunk
-        full_text: The full document text
-        section_headers: Dictionary of header positions and text
+        text: The Markdown text to split.
 
     Returns:
-        The nearest section header text, or empty string if none found
+        List of (chunk_text, section_header) tuples.
+        section_header is "" if no heading has appeared yet.
     """
-    # First check if the chunk itself contains a header
-    chunk_headers = _extract_section_headers(chunk_content)
-    if chunk_headers:
-        # Return the first header in the chunk
-        first_position = min(chunk_headers.keys())
-        return chunk_headers[first_position]
+    chunks = chunk(text)
+    result: list[tuple[str, str]] = []
+    last_header = ""
 
-    # Find the chunk's position in the full text
-    try:
-        chunk_position = full_text.index(chunk_content)
-    except ValueError:
-        # Chunk not found in full text (shouldn't happen, but handle gracefully)
-        return ""
+    for chunk_text in chunks:
+        match = _HEADER_RE.search(chunk_text)
+        if match:
+            last_header = match.group(1).strip()
+        result.append((chunk_text, last_header))
 
-    # Find the nearest header before this chunk
-    nearest_header = ""
-    nearest_position = -1
-
-    for position, header_text in section_headers.items():
-        if position < chunk_position and position > nearest_position:
-            nearest_position = position
-            nearest_header = header_text
-
-    return nearest_header
+    return result
