@@ -1,62 +1,94 @@
-"""
-File format converter using MarkItDown.
+"""Convert local files to Markdown text via MarkItDown."""
 
-Converts local files (PDF, DOCX, PPTX, XLSX, etc.) to markdown strings
-for ingestion into the chunking pipeline.
-"""
-
+import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
-    {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".html", ".htm", ".csv", ".epub", ".zip"}
-)
+from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
 
-ALL_SUPPORTED_EXTENSIONS: frozenset[str] = SUPPORTED_EXTENSIONS | frozenset({".md"})
+if TYPE_CHECKING:
+    from markitdown import MarkItDown
 
-_converter_instance = None
+logger = logging.getLogger(__name__)
+
+# Extensions MarkItDown[all] can handle. Checked before calling to give a clear error.
+SUPPORTED_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".ppt",
+    ".xlsx",
+    ".xls",
+    ".html",
+    ".htm",
+    ".txt",
+    ".md",
+    ".csv",
+    ".json",
+    ".xml",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".mp3",
+    ".wav",
+    ".ogg",
+    ".m4a",
+    ".zip",
+}
+
+_md: "MarkItDown | None" = None
 
 
-def _get_converter():  # type: ignore[no-untyped-def]
-    """Return a lazy singleton MarkItDown instance."""
-    global _converter_instance
-    if _converter_instance is None:
+def _get_markitdown() -> "MarkItDown":
+    """Return the MarkItDown singleton, initialising on first call."""
+    global _md  # noqa: PLW0603
+    if _md is None:
         from markitdown import MarkItDown
 
-        _converter_instance = MarkItDown()
-    return _converter_instance
+        _md = MarkItDown()
+    return _md
 
 
-def convert_to_markdown(file_path: Path) -> str:
-    """
-    Convert a file to a markdown string.
-
-    For .md files, reads the content directly. For all other supported
-    formats, delegates to MarkItDown for conversion.
+def convert(source: Path) -> str:
+    """Convert a local file to Markdown text.
 
     Args:
-        file_path: Path to the file to convert.
+        source: Path to the local file to convert.
 
     Returns:
-        Markdown string representation of the file content.
+        Markdown text extracted from the file, or an empty string if the
+        file contains no extractable text content.
 
     Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If the file extension is not supported.
+        UnsupportedFormatError: If the file has no extension or an unsupported one.
+        IngestionError: If MarkItDown fails to convert the file.
     """
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
+    source = source.resolve()
+    ext = source.suffix.lower()
 
-    suffix = file_path.suffix.lower()
-
-    if suffix not in ALL_SUPPORTED_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported file extension '{suffix}'. "
-            f"Supported: {sorted(ALL_SUPPORTED_EXTENSIONS)}"
+    if ext == "":
+        raise UnsupportedFormatError(
+            f"No file extension detected for {source.name!r} — cannot determine format."
+        )
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise UnsupportedFormatError(
+            f"Unsupported file extension: {ext!r}. "
+            f"Supported: {sorted(SUPPORTED_EXTENSIONS)}"
         )
 
-    if suffix == ".md":
-        return file_path.read_text(encoding="utf-8")
+    logger.debug("Converting %s (ext=%s)", source, ext)
+    try:
+        result = _get_markitdown().convert(str(source))
+        text = result.text_content or ""
+    except Exception as exc:
+        raise IngestionError(f"Failed to convert {source.name!r}: {exc}") from exc
 
-    converter = _get_converter()
-    result = converter.convert(str(file_path))
-    return result.text_content
+    if not text:
+        logger.warning("Converted %s produced empty text content", source)
+    else:
+        logger.debug("Converted %s → %d chars", source, len(text))
+    return text
