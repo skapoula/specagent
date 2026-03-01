@@ -46,6 +46,7 @@ def _get_tokenizer() -> "PreTrainedTokenizerBase":
                 "Run 'specagent download-model' to download it, "
                 "then restart the server."
             ) from exc
+    assert _tokenizer is not None  # guaranteed by the if-block above
     return _tokenizer
 
 
