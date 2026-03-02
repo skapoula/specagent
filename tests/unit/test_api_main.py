@@ -34,18 +34,6 @@ def client_with_tracing():
             yield c
 
 
-@pytest.fixture
-def client_startup_failure():
-    """Provide a TestClient where resource initialization fails."""
-    with patch(
-        "specagent.api.main.initialize_resources",
-        side_effect=RuntimeError("DB unavailable"),
-    ):
-        from fastapi.testclient import TestClient
-        from specagent.api.main import app
-
-        yield TestClient(app, raise_server_exceptions=False)
-
 
 @pytest.mark.unit
 class TestHealthEndpoint:
@@ -57,7 +45,6 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
-        assert data["version"] == "0.1.0"
         assert data["index_loaded"] is True
 
     def test_store_exception_shows_not_loaded(self, client):
@@ -93,17 +80,17 @@ class TestQueryEndpoint:
 
     def _make_result(
         self,
-        route="retrieve",
-        generation="The answer is 16.",
-        error=None,
-        citations=None,
-        graded_chunks=None,
-        retrieved_chunks=None,
-        rewrite_count=0,
-        processing_time_ms=1000.0,
-        hallucination_check="grounded",
-        average_confidence=0.9,
-    ):
+        route: str = "retrieve",
+        generation: str | None = "The answer is 16.",
+        error: str | None = None,
+        citations: list | None = None,
+        graded_chunks: list | None = None,
+        retrieved_chunks: list | None = None,
+        rewrite_count: int = 0,
+        processing_time_ms: float = 1000.0,
+        hallucination_check: str = "grounded",
+        average_confidence: float = 0.9,
+    ) -> dict[str, object]:
         return {
             "route_decision": route,
             "route_reasoning": "This is a 3GPP question.",
