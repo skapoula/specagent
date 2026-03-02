@@ -130,6 +130,12 @@ class TestQueryCommand:
             result = runner.invoke(app, ["query", "test question here"])
         assert result.exit_code == 0
 
+    def test_query_exception_exits_with_error(self):
+        """query exits non-zero or captures exception when run_query raises."""
+        with patch("specagent.graph.workflow.run_query", side_effect=RuntimeError("LLM down")):
+            result = runner.invoke(app, ["query", "What is HARQ?"])
+        assert result.exit_code != 0 or "error" in result.output.lower() or result.exception is not None
+
     def test_query_verbose_shows_metadata_table(self):
         """query --verbose renders a metadata table."""
         with patch("specagent.graph.workflow.run_query", return_value=_ok_result()):
@@ -182,9 +188,10 @@ class TestIndexCommand:
             errors=[],
         )
 
-        with patch("asyncio.run", return_value=mock_result):
+        with patch("asyncio.run", return_value=mock_result) as mock_run:
             result = runner.invoke(app, ["index", "--docs-dir", str(tmp_path)])
 
+        mock_run.assert_called_once()
         assert result.exit_code == 0
         assert "Indexing complete" in result.output or "Indexed" in result.output
 
@@ -222,6 +229,7 @@ class TestIndexCommand:
             )
 
         assert result.exit_code == 0
+        mock_store.delete_document.assert_called()
 
     def test_index_force_store_error_shows_warning(self, tmp_path):
         """index --force continues with a warning when the store raises an exception."""
