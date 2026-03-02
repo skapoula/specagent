@@ -234,7 +234,8 @@ def test_run_benchmark_basic(sample_tspec_dataset, mock_graph_response, tmp_path
         report = run_benchmark(
             questions=questions,
             limit=None,
-            output_dir=tmp_path / "results"
+            output_dir=tmp_path / "results",
+            skip_health_check=True,
         )
 
         assert report.total_questions == 3
@@ -248,16 +249,18 @@ def test_run_benchmark_with_limit(sample_tspec_dataset, mock_graph_response, tmp
     questions = load_benchmark_questions(sample_tspec_dataset)
 
     with patch("specagent.graph.workflow.run_query") as mock_run_query:
-        mock_run_query.return_value = mock_graph_response("Q", "16", 1000.0)
+        with patch("specagent.evaluation.benchmark.llm_judge_answer", return_value=False):
+            mock_run_query.return_value = mock_graph_response("Q", "16", 1000.0)
 
-        report = run_benchmark(
-            questions=questions,
-            limit=2,
-            output_dir=tmp_path / "results"
-        )
+            report = run_benchmark(
+                questions=questions,
+                limit=2,
+                output_dir=tmp_path / "results",
+                skip_health_check=True,
+            )
 
-        assert report.total_questions == 2
-        assert len(report.results) == 2
+            assert report.total_questions == 2
+            assert len(report.results) == 2
 
 
 def test_run_benchmark_accuracy_by_difficulty(sample_tspec_dataset, mock_graph_response, tmp_path):
@@ -265,22 +268,24 @@ def test_run_benchmark_accuracy_by_difficulty(sample_tspec_dataset, mock_graph_r
     questions = load_benchmark_questions(sample_tspec_dataset)
 
     with patch("specagent.graph.workflow.run_query") as mock_run_query:
-        # Return correct for Easy, incorrect for Intermediate and Hard
-        mock_run_query.side_effect = [
-            mock_graph_response("Q1", "16", 1000.0),      # Easy - correct
-            mock_graph_response("Q2", "T310", 1000.0),    # Intermediate - wrong
-            mock_graph_response("Q3", "Wrong", 1000.0),   # Hard - wrong
-        ]
+        with patch("specagent.evaluation.benchmark.llm_judge_answer", return_value=False):
+            # Return correct for Easy, incorrect for Intermediate and Hard
+            mock_run_query.side_effect = [
+                mock_graph_response("Q1", "16", 1000.0),      # Easy - correct
+                mock_graph_response("Q2", "T310", 1000.0),    # Intermediate - wrong
+                mock_graph_response("Q3", "Wrong", 1000.0),   # Hard - wrong
+            ]
 
-        report = run_benchmark(
-            questions=questions,
-            limit=None,
-            output_dir=tmp_path / "results"
-        )
+            report = run_benchmark(
+                questions=questions,
+                limit=None,
+                output_dir=tmp_path / "results",
+                skip_health_check=True,
+            )
 
-        assert report.accuracy_by_difficulty["Easy"] == 1.0
-        assert report.accuracy_by_difficulty["Intermediate"] == 0.0
-        assert report.accuracy_by_difficulty["Hard"] == 0.0
+            assert report.accuracy_by_difficulty["Easy"] == 1.0
+            assert report.accuracy_by_difficulty["Intermediate"] == 0.0
+            assert report.accuracy_by_difficulty["Hard"] == 0.0
 
 
 def test_run_benchmark_saves_results(sample_tspec_dataset, mock_graph_response, tmp_path):
@@ -294,7 +299,8 @@ def test_run_benchmark_saves_results(sample_tspec_dataset, mock_graph_response, 
         report = run_benchmark(
             questions=questions,
             limit=1,
-            output_dir=output_dir
+            output_dir=output_dir,
+            skip_health_check=True,
         )
 
         # Check that output directory was created
@@ -327,7 +333,8 @@ def test_run_benchmark_handles_errors(sample_tspec_dataset, tmp_path):
         report = run_benchmark(
             questions=questions,
             limit=1,
-            output_dir=tmp_path / "results"
+            output_dir=tmp_path / "results",
+            skip_health_check=True,
         )
 
         # Should still generate report with error recorded
