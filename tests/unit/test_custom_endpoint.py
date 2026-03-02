@@ -3,16 +3,16 @@ import pytest
 import requests
 from unittest.mock import MagicMock, patch
 
+from specagent.llm.custom_endpoint import CustomEndpointLLM
 
-def _llm(retries=1, delay=0.0):
-    from specagent.llm.custom_endpoint import CustomEndpointLLM
 
+def _llm(retries: int = 1, delay: float = 0.0) -> CustomEndpointLLM:
     return CustomEndpointLLM(
         "http://test/v1/chat/completions", max_retries=retries, retry_delay=delay
     )
 
 
-def _ok(text="ok"):
+def _ok(text: str = "ok") -> MagicMock:
     resp = MagicMock()
     resp.json.return_value = {"choices": [{"message": {"content": text}}]}
     resp.raise_for_status = MagicMock()
@@ -32,7 +32,8 @@ class TestInvoke:
             "specagent.llm.custom_endpoint.requests.post", return_value=_ok()
         ):
             text, ms = _llm().invoke_with_timing("p")
-        assert text == "ok" and ms >= 0
+        assert text == "ok"
+        assert isinstance(ms, float)
 
     def test_retry_on_502(self):
         err = MagicMock()
@@ -233,7 +234,7 @@ def test_create_custom_llm_settings_fallback():
         del ms.custom_endpoint_url
         llm = create_custom_llm()
     # The fallback URL contains qwen3 (hardcoded default)
-    assert llm.endpoint_url is not None
+    assert "qwen3" in llm.endpoint_url
 
 
 @pytest.mark.unit
