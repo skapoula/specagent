@@ -36,7 +36,7 @@ src/specagent/
 ├── cli.py            # Typer CLI
 ├── nodes/            # LangGraph nodes (router, grader, rewriter, generator, hallucination)
 ├── graph/            # State definition and workflow assembly
-├── retrieval/        # Chunking, embeddings, FAISS indexer
+├── retrieval/        # Chunking, embeddings, LanceDB vector store
 ├── api/              # FastAPI endpoints
 ├── evaluation/       # RAGAS metrics, benchmark runner
 └── tracing/          # Phoenix integration
@@ -80,7 +80,7 @@ Implemented (ready to use):
 Needs implementation (placeholders exist):
 - `retrieval/chunker.py` - Document chunking
 - `retrieval/embeddings.py` - HuggingFace embeddings client
-- `retrieval/indexer.py` - FAISS index management
+- `retrieval/resources.py` - LanceDB Store + fastembed singletons
 - `nodes/*.py` - All LangGraph nodes
 
 ## Key Patterns
