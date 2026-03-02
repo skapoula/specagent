@@ -89,3 +89,110 @@ async def test_ingest_records_include_section_header(md_file):
     assert len(captured_chunks) >= 1
     meta = json.loads(captured_chunks[0].metadata)
     assert "section_header" in meta
+
+
+@pytest.mark.unit
+def test_get_store_singleton():
+    from specagent.retrieval import ingestor
+
+    ingestor._store = None
+    with patch("specagent.retrieval.ingestor.Store") as mock_cls:
+        mock_cls.return_value = MagicMock()
+        s1 = ingestor._get_store()
+        s2 = ingestor._get_store()
+    assert s1 is s2
+    mock_cls.assert_called_once()
+    ingestor._store = None
+
+
+@pytest.mark.unit
+def test_get_embedder_singleton():
+    from specagent.retrieval import ingestor
+
+    ingestor._embedder = None
+    with patch("fastembed.TextEmbedding") as mock_cls:
+        mock_cls.return_value = MagicMock()
+        e1 = ingestor._get_embedder()
+        e2 = ingestor._get_embedder()
+    assert e1 is e2
+    ingestor._embedder = None
+
+
+@pytest.mark.unit
+def test_extract_title_from_heading():
+    from specagent.retrieval.ingestor import _extract_title
+
+    assert _extract_title("# My Title\n\nContent.", "/f.docx") == "My Title"
+
+
+@pytest.mark.unit
+def test_extract_title_fallback():
+    from specagent.retrieval.ingestor import _extract_title
+
+    assert _extract_title("no heading", "/docs/spec.docx") == "spec.docx"
+
+
+@pytest.mark.integration
+async def test_ingest_missing_file(tmp_path):
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store):
+        with pytest.raises(IngestionError, match="Cannot read file"):
+            await ingest(tmp_path / "missing.md", library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_skips_on_same_hash(tmp_path):
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nContent.")
+    h = hashlib.sha256(md.read_bytes()).hexdigest()
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = ("existing-id", h)
+    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store):
+        result = await ingest(md, library="test")
+    assert result.status == "skipped"
+
+
+@pytest.mark.integration
+async def test_ingest_empty_text_raises(tmp_path):
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "empty.md"
+    md.write_text("   ")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store), \
+         patch("specagent.retrieval.ingestor.convert", return_value=""):
+        with pytest.raises(IngestionError, match="No text"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_no_chunks_raises(tmp_path):
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nText.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store), \
+         patch("specagent.retrieval.ingestor.convert", return_value="text"), \
+         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[]):
+        with pytest.raises(IngestionError, match="No usable chunks"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_folder_bad_path():
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest_folder
+
+    with pytest.raises(IngestionError, match="not found"):
+        await ingest_folder("/nonexistent/xyz", library="test")
