@@ -324,7 +324,13 @@ class TestEvaluateE2E:
 
 @pytest.mark.unit
 class TestRetryOnRateLimit:
-    def test_rate_limit_error_triggers_print_and_reraise(self, capsys):
+    @pytest.fixture(autouse=True)
+    def no_sleep(self, monkeypatch):
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+    def test_rate_limit_error_triggers_log_and_reraise(self, caplog):
+        import logging
+
         from specagent.evaluation.metrics import _retry_on_rate_limit
 
         call_count = 0
@@ -335,15 +341,15 @@ class TestRetryOnRateLimit:
             call_count += 1
             raise Exception("rate limit exceeded, 429")
 
-        with pytest.raises(Exception, match="rate limit"):
-            failing_func()
+        with caplog.at_level(logging.WARNING, logger="specagent.evaluation.metrics"):
+            with pytest.raises(Exception, match="rate limit"):
+                failing_func()
 
         # Should have retried (3 attempts total)
         assert call_count == 3
-        captured = capsys.readouterr()
-        assert "Rate limit hit" in captured.out
+        assert "Rate limit hit" in caplog.text
 
-    def test_non_rate_limit_error_still_retries_via_tenacity(self):
+    def test_non_rate_limit_error_does_not_retry(self):
         from specagent.evaluation.metrics import _retry_on_rate_limit
 
         call_count = 0
@@ -357,10 +363,9 @@ class TestRetryOnRateLimit:
         with pytest.raises(ValueError, match="some other error"):
             failing_func()
 
-        # tenacity's retry_if_exception_type(Exception) is broad — it matches
-        # ValueError too, so tenacity retries all 3 attempts even though the
-        # inner code does not print "Rate limit hit" for non-rate-limit errors.
-        assert call_count == 3
+        # retry_if_exception(_is_rate_limit_error) is narrow — a non-rate-limit
+        # error is not retried, so tenacity stops after 1 attempt.
+        assert call_count == 1
 
     def test_success_returns_value(self):
         from specagent.evaluation.metrics import _retry_on_rate_limit

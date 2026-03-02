@@ -9,6 +9,7 @@ Metrics:
     - Retrieval metrics: Recall@k, MRR
 """
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,13 +17,21 @@ from typing import Any, TypeVar
 
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
 
+logger = logging.getLogger(__name__)
+
 # Type variable for generic retry decorator
 T = TypeVar("T")
+
+
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    """Return True if the exception looks like a rate limit error."""
+    msg = str(exc).lower()
+    return any(p in msg for p in ["rate limit", "429", "too many requests", "ratelimit"])
 
 
 def _retry_on_rate_limit(func: Callable[..., T]) -> Callable[..., T]:
@@ -32,13 +41,9 @@ def _retry_on_rate_limit(func: Callable[..., T]) -> Callable[..., T]:
     Retries up to 3 times with exponential backoff (1s, 2s, 4s).
     Catches common rate limit exceptions from OpenAI/HuggingFace APIs.
     """
-    # Common rate limit exception types
-    rate_limit_exceptions = (
-        Exception,  # Broad catch - RAGAS may wrap exceptions
-    )
 
     @retry(
-        retry=retry_if_exception_type(rate_limit_exceptions),
+        retry=retry_if_exception(_is_rate_limit_error),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
@@ -47,17 +52,9 @@ def _retry_on_rate_limit(func: Callable[..., T]) -> Callable[..., T]:
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            # Only retry on rate limit errors
-            error_msg = str(e).lower()
-            if any(
-                phrase in error_msg
-                for phrase in ["rate limit", "too many requests", "429", "quota"]
-            ):
-                # Log and retry
-                print(f"Rate limit hit, retrying: {e}")
+            if _is_rate_limit_error(e):
+                logger.warning("Rate limit hit, retrying: %s", e)
                 time.sleep(1)  # Additional small delay
-                raise
-            # Re-raise non-rate-limit errors immediately
             raise
 
     return wrapper
