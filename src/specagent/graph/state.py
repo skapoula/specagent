@@ -114,7 +114,7 @@ class GraphState(TypedDict, total=False):
     """Reformulated question for improved retrieval (if rewriting was needed)."""
 
     retrieved_chunks: list[RetrievedChunk]
-    """Chunks retrieved from FAISS index."""
+    """Chunks retrieved from LanceDB vector store."""
 
     # ==========================================================================
     # Grading

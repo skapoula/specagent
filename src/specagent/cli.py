@@ -4,7 +4,7 @@ Command-line interface for SpecAgent.
 Commands:
     serve     - Start the FastAPI server
     query     - Run a single query
-    index     - Build or update the FAISS index
+    index     - Build or update the LanceDB index
     benchmark - Run evaluation benchmark
 """
 

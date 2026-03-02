@@ -3,7 +3,7 @@ LangGraph nodes for the agentic RAG pipeline.
 
 Each node represents a discrete step in the workflow:
     - router: Determines if query should retrieve documents or be rejected
-    - retriever: Fetches relevant chunks from FAISS index
+    - retriever: Fetches relevant chunks from LanceDB vector store
     - grader: Scores relevance of retrieved chunks
     - rewriter: Reformulates query for better retrieval
     - generator: Synthesizes answer from graded chunks

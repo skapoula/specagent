@@ -8,7 +8,7 @@ natural language.
 Key Components:
     - nodes: LangGraph nodes (router, grader, rewriter, generator, etc.)
     - graph: LangGraph workflow definition and state management
-    - retrieval: Document chunking, embedding, and FAISS indexing
+    - retrieval: Document chunking, embedding, and vector indexing
     - api: FastAPI REST endpoints
     - evaluation: RAGAS metrics and benchmark runners
     - tracing: Arize Phoenix observability integration

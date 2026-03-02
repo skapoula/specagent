@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     Application lifespan handler.
 
     Startup:
-        - Load FAISS index into memory (cached)
+        - Open LanceDB store (cached)
         - Initialize embedder model (cached)
         - Initialize tracing if enabled
 
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     try:
         status = initialize_resources()
         logger.info(f"Resource initialization status: {status}")
-        logger.info("FAISS index loaded successfully")
+        logger.info("LanceDB store opened successfully")
         logger.info("Embedder initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize resources: {e}")

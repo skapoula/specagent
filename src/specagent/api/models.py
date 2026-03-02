@@ -122,7 +122,7 @@ class HealthResponse(BaseModel):
         description="API version",
     )
     index_loaded: bool = Field(
-        description="Whether FAISS index is loaded",
+        description="Whether LanceDB store is open",
     )
 
 

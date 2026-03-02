@@ -6,11 +6,11 @@ Use a .env file for local development.
 
 Environment Variables:
     HF_API_KEY: HuggingFace API key (optional, for embeddings API)
-    EMBEDDING_MODEL: Sentence transformer model for embeddings
+    EMBEDDING_MODEL: fastembed model ID for embeddings (e.g. nomic-ai/nomic-embed-text-v1.5)
     LLM_MODEL_PATH: Path to local GGUF model file
     CHUNK_SIZE: Token size for document chunks
     CHUNK_OVERLAP: Overlap between chunks
-    FAISS_INDEX_PATH: Path to FAISS index file
+    LANCEDB_URI: Path to LanceDB storage directory
     LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
 """
 
