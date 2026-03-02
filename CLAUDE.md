@@ -21,8 +21,8 @@ Build a question-answering system that:
 ## Tech Stack
 
 - **Framework**: LangGraph for agentic orchestration
-- **Vector Store**: FAISS (CPU, in-memory)
-- **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2` (local)
+- **Vector Store**: LanceDB (embedded, persistent, hybrid BM25+vector)
+- **Embeddings**: `nomic-ai/nomic-embed-text-v1.5` via fastembed (ONNX, 768d, local)
 - **LLM**: `Qwen/Qwen2.5-3B-Instruct` via HuggingFace Inference API (or local GGUF)
 - **API**: FastAPI
 - **Observability**: Arize Phoenix with OpenTelemetry
@@ -56,7 +56,9 @@ mypy src/specagent              # Type check
 # Application
 specagent serve                 # Start FastAPI server (port 8000)
 specagent query "question"      # Run single query
-specagent index                 # Build FAISS index
+specagent index                 # Build LanceDB index from data/docs/
+specagent index --force         # Rebuild index from scratch
+specagent index --docs-dir PATH # Ingest from custom directory
 specagent benchmark             # Run evaluation
 
 # Docker

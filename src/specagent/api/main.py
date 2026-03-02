@@ -109,11 +109,11 @@ async def health_check() -> HealthResponse:
     Returns:
         Health status and basic metrics
     """
-    from specagent.retrieval.resources import get_faiss_index
+    from specagent.retrieval.resources import get_store
 
     try:
-        index = get_faiss_index()
-        index_loaded = index.is_built
+        store = get_store()
+        index_loaded = store is not None
     except Exception:
         index_loaded = False
 

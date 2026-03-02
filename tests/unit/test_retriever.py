@@ -1,13 +1,14 @@
 """Unit tests for the retriever node (LanceDB-backed)."""
+
 import json
-import pytest
 from unittest.mock import MagicMock, patch
 
-from specagent.graph.state import GraphState, RetrievedChunk, create_initial_state
+import pytest
+
+from specagent.graph.state import RetrievedChunk, create_initial_state
 
 
-def _mock_record(source="TS38.321.docx", section="5.4 HARQ Entity",
-                 content="HARQ content."):
+def _mock_record(source="TS38.321.docx", section="5.4 HARQ Entity", content="HARQ content."):
     """Build a minimal mock ChunkRecord."""
     r = MagicMock()
     r.id = "chunk-1"
@@ -24,11 +25,14 @@ def _mock_record(source="TS38.321.docx", section="5.4 HARQ Entity",
 @pytest.mark.unit
 def test_retriever_populates_retrieved_chunks():
     from specagent.nodes.retriever import retriever_node
+
     state = create_initial_state("What is HARQ in NR?")
     record = _mock_record()
 
-    with patch("specagent.nodes.retriever.get_store") as mock_store_fn, \
-         patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn:
+    with (
+        patch("specagent.nodes.retriever.get_store") as mock_store_fn,
+        patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn,
+    ):
         mock_store_fn.return_value.search.return_value = [(record, 0.9)]
         mock_emb = MagicMock()
         mock_emb.embed.return_value = iter([[0.1] * 768])
@@ -48,11 +52,14 @@ def test_retriever_populates_retrieved_chunks():
 @pytest.mark.unit
 def test_retriever_uses_rewritten_question():
     from specagent.nodes.retriever import retriever_node
+
     state = create_initial_state("HARQ?")
     state["rewritten_question"] = "What is the HARQ process in 5G NR?"
 
-    with patch("specagent.nodes.retriever.get_store") as mock_store_fn, \
-         patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn:
+    with (
+        patch("specagent.nodes.retriever.get_store") as mock_store_fn,
+        patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn,
+    ):
         mock_store_fn.return_value.search.return_value = []
         mock_emb = MagicMock()
         mock_emb.embed.return_value = iter([[0.1] * 768])
@@ -67,10 +74,13 @@ def test_retriever_uses_rewritten_question():
 @pytest.mark.unit
 def test_retriever_handles_store_exception_gracefully():
     from specagent.nodes.retriever import retriever_node
+
     state = create_initial_state("test")
 
-    with patch("specagent.nodes.retriever.get_store") as mock_store_fn, \
-         patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn:
+    with (
+        patch("specagent.nodes.retriever.get_store") as mock_store_fn,
+        patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn,
+    ):
         mock_store_fn.side_effect = Exception("LanceDB not found")
         mock_emb_fn.return_value = MagicMock()
 
@@ -82,11 +92,14 @@ def test_retriever_handles_store_exception_gracefully():
 
 @pytest.mark.unit
 def test_retriever_adds_query_prefix_to_embed():
-    from specagent.nodes.retriever import retriever_node, _QUERY_PREFIX
+    from specagent.nodes.retriever import _QUERY_PREFIX, retriever_node
+
     state = create_initial_state("test query")
 
-    with patch("specagent.nodes.retriever.get_store") as mock_store_fn, \
-         patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn:
+    with (
+        patch("specagent.nodes.retriever.get_store") as mock_store_fn,
+        patch("specagent.nodes.retriever.get_embedder") as mock_emb_fn,
+    ):
         mock_store_fn.return_value.search.return_value = []
         mock_emb = MagicMock()
         mock_emb.embed.return_value = iter([[0.1] * 768])
