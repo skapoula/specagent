@@ -4,9 +4,10 @@ Hallucination checker node: Verifies generated answer is grounded in sources.
 Uses LLM-as-judge to compare the generated answer against source chunks
 and identify any claims not supported by the retrieved context.
 
-Hallucination check is optional and only runs when:
-1. average_confidence < 0.7 after generation, OR
-2. generation contains numerical values or tables
+The hallucination check is skipped when average_confidence is at or above the
+content-specific skip threshold; otherwise it runs:
+- Numerical/tabular content: check runs when average_confidence < 0.65
+- Non-numerical content:     check runs when average_confidence < 0.70
 """
 
 import re
@@ -103,9 +104,10 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     """
     Check if generated answer is grounded in source documents.
 
-    Only runs hallucination check when:
-    1. average_confidence < 0.7 after generation, OR
-    2. generation contains numerical values or tables
+    The check is skipped when average_confidence is at or above the
+    content-specific skip threshold:
+    - Numerical/tabular content: skip when average_confidence >= 0.65
+    - Non-numerical content:     skip when average_confidence >= 0.70
 
     Args:
         state: Current graph state with generation and graded_chunks
