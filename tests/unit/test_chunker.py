@@ -11,8 +11,12 @@ def test_chunk_empty_text_returns_empty_list():
     with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok):
         from specagent.retrieval import chunker
 
+        original = chunker._tokenizer
         chunker._tokenizer = None
-        result = chunker.chunk("")
+        try:
+            result = chunker.chunk("")
+        finally:
+            chunker._tokenizer = original
     assert result == []
 
 
@@ -265,7 +269,8 @@ def test_split_recursive_flushes_good_splits_before_oversized_chunk():
     mock_tok = MagicMock()
 
     # Token length depends on content: short splits get small counts, long one gets big.
-    def token_len(t, **kw):
+    def token_len(t: str, **kw: object) -> list[int]:
+        """Return large token list for OVERSIZED text, small otherwise."""
         if "OVERSIZED" in t:
             return list(range(200))  # too big for chunk_size=10
         return list(range(2))  # small
