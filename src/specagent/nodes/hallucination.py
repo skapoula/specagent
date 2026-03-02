@@ -129,10 +129,10 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
 
     # Determine skip threshold based on content type
     # Lower threshold (0.65) for numerical claims, higher (0.7) for non-numerical
-    skip_threshold = 0.65 if has_numerical_content else 0.75
+    skip_threshold = 0.65 if has_numerical_content else 0.70
 
     # Skip hallucination check if confidence is high enough
-    if average_confidence >= skip_threshold and not _contains_numerical_or_tabular_content(generation):
+    if average_confidence >= skip_threshold:
         state["hallucination_check"] = "grounded"
         state["ungrounded_claims"] = []
         return state
