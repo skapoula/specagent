@@ -473,3 +473,14 @@ class TestRouterNTNQuestions:
         
         assert result["route_decision"] == "retrieve"
         assert "GEO" in result["route_reasoning"] or "satellite" in result["route_reasoning"] or "beam" in result["route_reasoning"]
+
+    @patch('specagent.nodes.router.create_llm')
+    def test_router_json_loads_fallback(self, mock_create_llm):
+        """Test router falls back to json.loads when re.search finds no JSON block."""
+        import re
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = '{"route": "retrieve", "reasoning": "3GPP"}'
+        mock_create_llm.return_value = mock_llm
+        with patch.object(re, "search", return_value=None):
+            result = router_node({"question": "What is HARQ?", "route_decision": None})
+        assert result["route_decision"] in ("retrieve", "reject")

@@ -109,3 +109,36 @@ def test_retriever_adds_query_prefix_to_embed():
 
     call_text = list(mock_emb.embed.call_args[0][0])
     assert call_text[0].startswith(_QUERY_PREFIX)
+
+
+@pytest.mark.unit
+def test_retriever_empty_query_sets_error():
+    from specagent.nodes.retriever import retriever_node
+
+    state = {"question": "", "rewritten_question": None}
+    result = retriever_node(state)
+    assert "error" in result
+    assert result["retrieved_chunks"] == []
+
+
+@pytest.mark.unit
+def test_retriever_bad_json_metadata_uses_empty_section():
+    from specagent.nodes.retriever import retriever_node
+
+    rec = MagicMock()
+    rec.id = "c1"
+    rec.doc_id = "d1"
+    rec.source = "TS38.321.docx"
+    rec.title = "T"
+    rec.content = "content"
+    rec.chunk_index = 0
+    rec.file_type = "docx"
+    rec.metadata = "{invalid"
+    emb = MagicMock()
+    emb.embed.return_value = iter([[0.1] * 768])
+    store = MagicMock()
+    store.search.return_value = [(rec, 0.8)]
+    with patch("specagent.nodes.retriever.get_embedder", return_value=emb), \
+         patch("specagent.nodes.retriever.get_store", return_value=store):
+        result = retriever_node({"question": "test?", "rewritten_question": None})
+    assert result["retrieved_chunks"][0].section == ""

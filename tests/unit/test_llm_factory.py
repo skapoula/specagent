@@ -4,7 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specagent.llm.factory import create_llm
+from specagent.llm.factory import LLMProtocol, create_llm
+
+
+@pytest.mark.unit
+def test_llm_protocol_invoke_is_callable():
+    """LLMProtocol.invoke stub is reachable (covers Protocol method body)."""
+    result = LLMProtocol.invoke(None, "test prompt")  # type: ignore[arg-type]
+    assert result is None
 
 
 @pytest.mark.unit

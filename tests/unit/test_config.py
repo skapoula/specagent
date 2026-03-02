@@ -90,3 +90,17 @@ class TestNewPipelineSettings:
         get_settings.cache_clear()
         s = get_settings()
         assert getattr(s, "hybrid_search_enabled", False) is True
+
+    @pytest.mark.unit
+    def test_chunk_overlap_must_be_less_than_chunk_size(self):
+        """chunk_overlap >= chunk_size must raise a validation error."""
+        import os
+        from pydantic import ValidationError
+        with patch.dict(
+            os.environ,
+            {"HF_API_KEY": "test-key", "CHUNK_SIZE": "100", "CHUNK_OVERLAP": "200"},
+            clear=True,
+        ):
+            from specagent.config import Settings
+            with pytest.raises((ValidationError, ValueError)):
+                Settings()
