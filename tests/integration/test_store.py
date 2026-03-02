@@ -81,3 +81,98 @@ def test_find_existing_returns_none_when_missing(store):
     doc_id, content_hash = store.find_existing("/nonexistent.docx", "my-lib")
     assert doc_id is None
     assert content_hash is None
+
+
+@pytest.mark.integration
+def test_get_document_sorted(store, sample_record):
+    from specagent.retrieval.store import ChunkRecord
+
+    rec2 = ChunkRecord(
+        id=str(uuid.uuid4()),
+        doc_id=sample_record.doc_id,
+        library="test-lib",
+        source=sample_record.source,
+        content_hash="def456",
+        title="T",
+        content="Second.",
+        embedding=[0.2] * 768,
+        chunk_index=1,
+        created_at="2026-03-01T00:00:00Z",
+        metadata=json.dumps({}),
+        file_type="docx",
+        last_modified="",
+        page=0,
+    )
+    store.upsert_chunks([sample_record, rec2])
+    docs = store.get_document(sample_record.doc_id)
+    assert len(docs) >= 2
+    indices = [d.chunk_index for d in docs]
+    assert indices == sorted(indices)
+
+
+@pytest.mark.integration
+def test_list_documents_per_doc(store, sample_record):
+    store.upsert_chunks([sample_record])
+    docs = store.list_documents(library=None, limit=10, offset=0)
+    assert any(d["doc_id"] == sample_record.doc_id for d in docs)
+    assert all("chunk_count" in d for d in docs)
+
+
+@pytest.mark.integration
+def test_list_documents_library_filter(store, sample_record):
+    store.upsert_chunks([sample_record])
+    docs = store.list_documents(library="test-lib", limit=10, offset=0)
+    assert all(d["library"] == "test-lib" for d in docs)
+
+
+@pytest.mark.integration
+def test_list_documents_beyond_offset(store, sample_record):
+    store.upsert_chunks([sample_record])
+    assert store.list_documents(library=None, limit=10, offset=9999) == []
+
+
+@pytest.mark.integration
+def test_list_libraries(store, sample_record):
+    store.upsert_chunks([sample_record])
+    libs = store.list_libraries()
+    lib = next(lb for lb in libs if lb["library"] == "test-lib")
+    assert lib["document_count"] >= 1 and lib["chunk_count"] >= 1
+
+
+@pytest.mark.integration
+def test_find_existing_returns_ids(store, sample_record):
+    store.upsert_chunks([sample_record])
+    doc_id, ch = store.find_existing(sample_record.source, "test-lib")
+    assert doc_id == sample_record.doc_id
+
+
+@pytest.mark.unit
+def test_build_where_clause_none_none():
+    from specagent.retrieval.store import _build_where_clause
+
+    assert _build_where_clause(None, None) is None
+
+
+@pytest.mark.unit
+def test_build_where_clause_library_only():
+    from specagent.retrieval.store import _build_where_clause
+
+    result = _build_where_clause("my-lib", None)
+    assert "my-lib" in result
+
+
+@pytest.mark.unit
+def test_build_where_clause_filter_only():
+    from specagent.retrieval.store import _build_where_clause
+
+    result = _build_where_clause(None, {"file_type": "pdf"})
+    assert "pdf" in result
+
+
+@pytest.mark.unit
+def test_build_where_clause_invalid_key_raises():
+    from specagent.retrieval.store import _build_where_clause
+    from specagent.retrieval.exceptions import StoreError
+
+    with pytest.raises(StoreError, match="Invalid filter key"):
+        _build_where_clause(None, {"bad-key!": "val"})
