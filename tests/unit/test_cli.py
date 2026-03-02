@@ -134,7 +134,8 @@ class TestQueryCommand:
         """query exits non-zero or captures exception when run_query raises."""
         with patch("specagent.graph.workflow.run_query", side_effect=RuntimeError("LLM down")):
             result = runner.invoke(app, ["query", "What is HARQ?"])
-        assert result.exit_code != 0 or "error" in result.output.lower() or result.exception is not None
+        assert isinstance(result.exception, RuntimeError)
+        assert "LLM down" in str(result.exception)
 
     def test_query_verbose_shows_metadata_table(self):
         """query --verbose renders a metadata table."""
