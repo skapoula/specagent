@@ -1,5 +1,7 @@
 """Tests for API request/response Pydantic models."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,7 +15,7 @@ from specagent.api.models import (
 )
 
 
-def _make_metadata(**overrides) -> QueryMetadata:
+def _make_metadata(**overrides: Any) -> QueryMetadata:
     """Return a valid QueryMetadata instance with sensible defaults."""
     defaults = {
         "rewrites": 0,
@@ -135,13 +137,10 @@ class TestQueryResponse:
         assert resp.citations == []
         assert resp.confidence == 0.9
 
-    def test_citations_default_is_empty_list(self):
-        resp = QueryResponse(
-            answer="Answer.",
-            confidence=0.5,
-            metadata=_make_metadata(),
-        )
-        assert resp.citations == []
+    def test_citations_default_factory_creates_independent_instances(self):
+        r1 = QueryResponse(answer="A.", confidence=0.5, metadata=_make_metadata())
+        r2 = QueryResponse(answer="B.", confidence=0.5, metadata=_make_metadata())
+        assert r1.citations is not r2.citations
 
     def test_citations_can_be_populated(self):
         citation = CitationSchema(spec_id="TS38.321", section="5.4.1")
