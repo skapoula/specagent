@@ -377,3 +377,85 @@ class TestSaveGraphImage:
 
         # Verify draw_png was called with default path
         mock_graph_obj.draw_png.assert_called_once_with("docs/architecture.png")
+
+
+@pytest.mark.unit
+class TestCreateTimedNode:
+    """Tests for create_timed_node timing wrapper."""
+
+    def test_timed_node_records_timing(self):
+        """create_timed_node wraps a function and records timing in node_timings."""
+        from specagent.graph.workflow import create_timed_node
+
+        timed = create_timed_node(lambda s: s, "n")
+        result = timed({"question": "q"})
+        assert result["node_timings"]["n"] >= 0
+
+    def test_timed_node_accumulates_timing(self):
+        """create_timed_node accumulates timing across multiple calls."""
+        from specagent.graph.workflow import create_timed_node
+
+        timed = create_timed_node(lambda s: s, "n")
+        state = timed({"question": "q"})
+        t1 = state["node_timings"]["n"]
+        state = timed(state)
+        assert state["node_timings"]["n"] >= t1
+
+
+@pytest.mark.unit
+class TestShouldRewriteWithChunks:
+    """Tests for should_rewrite with retrieved_chunks and graded_chunks."""
+
+    def test_high_similarity_skips_rewrite(self):
+        """should_rewrite skips rewrite when top chunks have high similarity."""
+        from specagent.graph.workflow import should_rewrite
+
+        chunk = MagicMock(similarity_score=0.95)
+        state = {
+            "retrieved_chunks": [chunk] * 3,
+            "rewrite_count": 0,
+            "graded_chunks": [],
+            "average_confidence": 0.5,
+        }
+        with patch("specagent.graph.workflow.settings") as ms:
+            ms.high_similarity_threshold = 0.85
+            ms.max_rewrites = 3
+            ms.grader_confidence_threshold = 0.7
+            ms.min_relevant_chunk_percentage = 0.5
+            assert should_rewrite(state) == "generate"
+
+    def test_graded_chunks_trigger_rewrite_on_low_relevant_pct(self):
+        """should_rewrite returns rewrite when graded_chunks shows low relevant pct."""
+        from specagent.graph.workflow import should_rewrite
+
+        chunk = MagicMock(similarity_score=0.3, relevant="no")
+        state = {
+            "retrieved_chunks": [chunk],
+            "rewrite_count": 0,
+            "graded_chunks": [chunk],
+            "average_confidence": 0.8,
+        }
+        with patch("specagent.graph.workflow.settings") as ms:
+            ms.high_similarity_threshold = 0.85
+            ms.max_rewrites = 3
+            ms.grader_confidence_threshold = 0.7
+            ms.min_relevant_chunk_percentage = 0.5
+            assert should_rewrite(state) == "rewrite"
+
+    def test_max_rewrites_exceeded_returns_generate(self):
+        """should_rewrite returns generate when max rewrites exceeded."""
+        from specagent.graph.workflow import should_rewrite
+
+        chunk = MagicMock(similarity_score=0.3, relevant="no")
+        state = {
+            "retrieved_chunks": [chunk],
+            "rewrite_count": 5,
+            "graded_chunks": [chunk],
+            "average_confidence": 0.1,
+        }
+        with patch("specagent.graph.workflow.settings") as ms:
+            ms.high_similarity_threshold = 0.85
+            ms.max_rewrites = 3
+            ms.grader_confidence_threshold = 0.7
+            ms.min_relevant_chunk_percentage = 0.5
+            assert should_rewrite(state) == "generate"
