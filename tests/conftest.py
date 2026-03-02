@@ -30,7 +30,7 @@ def mock_settings():
         "os.environ",
         {
             "HF_API_KEY": "test-api-key",
-            "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+            "EMBEDDING_MODEL": "nomic-ai/nomic-embed-text-v1.5",
             "LLM_MODEL": "mistralai/Mistral-7B-Instruct-v0.3",
             "CHUNK_SIZE": "512",
             "CHUNK_OVERLAP": "64",
@@ -159,7 +159,7 @@ def mock_hf_llm_response():
 
 @pytest.fixture
 def tmp_index_dir(tmp_path: Path) -> Path:
-    """Provide temporary directory for FAISS index."""
+    """Provide temporary directory for vector index artifacts."""
     index_dir = tmp_path / "index"
     index_dir.mkdir()
     return index_dir
