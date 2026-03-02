@@ -10,8 +10,7 @@ Provides common fixtures for:
 
 import json
 from pathlib import Path
-from typing import Generator
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -128,7 +127,7 @@ def mock_hf_embedding_response():
     """Mock HuggingFace embedding API response."""
     def _mock_response(texts: list[str]) -> list[list[float]]:
         rng = np.random.default_rng(hash(tuple(texts)) % 2**32)
-        embeddings = rng.random((len(texts), 384)).astype(np.float32)
+        embeddings = rng.random((len(texts), 768)).astype(np.float32)
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         normalized = embeddings / norms
         return normalized.tolist()

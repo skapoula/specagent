@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Linux",
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": ["src", "tests"],
+  "extraPaths": ["src"]
+}
