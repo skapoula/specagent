@@ -1,7 +1,5 @@
 """Tests for API request/response Pydantic models."""
 
-from typing import Any
-
 import pytest
 from pydantic import ValidationError
 
@@ -15,7 +13,7 @@ from specagent.api.models import (
 )
 
 
-def _make_metadata(**overrides: Any) -> QueryMetadata:
+def _make_metadata(**overrides: object) -> QueryMetadata:
     """Return a valid QueryMetadata instance with sensible defaults."""
     defaults = {
         "rewrites": 0,
