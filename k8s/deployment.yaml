@@ -32,7 +32,7 @@ data:
   API_PORT: "8000"
   ENABLE_TRACING: "true"
   PHOENIX_ENDPOINT: "http://phoenix-service:6006"
-  EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  EMBEDDING_MODEL: "nomic-ai/nomic-embed-text-v1.5"
   LLM_MODEL: "mistralai/Mistral-7B-Instruct-v0.3"
   CHUNK_SIZE: "512"
   CHUNK_OVERLAP: "64"
@@ -55,7 +55,7 @@ stringData:
 
 ---
 # =============================================================================
-# PersistentVolumeClaim - FAISS index storage
+# PersistentVolumeClaim - LanceDB storage
 # =============================================================================
 apiVersion: v1
 kind: PersistentVolumeClaim
