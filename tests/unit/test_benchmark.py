@@ -670,3 +670,206 @@ def test_benchmark_report_markdown_includes_confidence():
     assert "Confidence Distribution" in markdown
     assert "0.8-1.0" in markdown
     assert "Confidence Statistics" in markdown
+
+
+# =============================================================================
+# Additional gap-filling tests
+# =============================================================================
+
+
+def test_load_benchmark_questions_answer_no_colon(tmp_path):
+    """load_benchmark_questions() handles answers without ':' separator."""
+    data = {"q1": {"question": "What is X?", "answer": "42", "difficulty": "Easy"}}
+    path = tmp_path / "bench.json"
+    path.write_text(json.dumps(data))
+    qs = load_benchmark_questions(path)
+    assert qs[0].answer == "42"
+    assert qs[0].correct_option == ""
+
+
+def test_compute_confidence_stats_empty_results():
+    """compute_confidence_stats() returns zeros for empty results list."""
+    from specagent.evaluation.benchmark import compute_confidence_stats
+
+    result = compute_confidence_stats([])
+    assert result == {"mean": 0.0, "median": 0.0, "min": 0.0, "max": 0.0, "std": 0.0}
+
+
+def test_setup_trace_logging_verbose(tmp_path):
+    """setup_trace_logging() adds console handler when verbose=True."""
+    from specagent.evaluation.benchmark import setup_trace_logging
+
+    logger = setup_trace_logging(tmp_path, "2026-03-01T12:00:00", verbose=True)
+    assert len(logger.handlers) == 2  # file + console
+    for h in logger.handlers[:]:
+        h.close()
+        logger.removeHandler(h)
+
+
+def test_run_benchmark_health_check_failure(tmp_path):
+    """run_benchmark raises RuntimeError when health check fails."""
+    with patch("specagent.llm.custom_endpoint.check_llm_endpoint_health", return_value=(False, "endpoint down")):
+        with pytest.raises(RuntimeError, match="LLM endpoint unavailable"):
+            run_benchmark(
+                questions=[BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")],
+                output_dir=tmp_path / "results",
+                skip_health_check=False,
+            )
+
+
+def test_run_benchmark_health_check_success_prints_message(tmp_path):
+    """run_benchmark continues and prints success when health check passes (line 415)."""
+    qs = [BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")]
+    mock_state = {
+        "question": "Q?",
+        "route_decision": "retrieve",
+        "route_reasoning": "",
+        "generation": "A",
+        "citations": [],
+        "retrieved_chunks": [],
+        "graded_chunks": [],
+        "rewrite_count": 0,
+        "processing_time_ms": 100.0,
+        "average_confidence": 0.9,
+        "hallucination_check": "grounded",
+        "ungrounded_claims": [],
+        "error": None,
+        "node_timings": {},
+        "llm_inference_times": [],
+    }
+    with (
+        patch("specagent.llm.custom_endpoint.check_llm_endpoint_health", return_value=(True, "endpoint OK")),
+        patch("specagent.graph.workflow.run_query", return_value=mock_state),
+        patch("specagent.evaluation.benchmark.check_answer_correctness", return_value=True),
+    ):
+        report = run_benchmark(
+            questions=qs,
+            output_dir=tmp_path / "results",
+            skip_health_check=False,
+        )
+    assert report.total_questions == 1
+
+
+def test_run_benchmark_rejected_question(tmp_path):
+    """run_benchmark records rejection when route_decision is 'reject'."""
+    qs = [BenchmarkQuestion(id="q1", question="Who is POTUS?", answer="A", difficulty="Easy")]
+    mock_state = {
+        "question": "Who is POTUS?",
+        "route_decision": "reject",
+        "route_reasoning": "Not a 3GPP question",
+        "generation": "",
+        "citations": [],
+        "retrieved_chunks": [],
+        "graded_chunks": [],
+        "rewrite_count": 0,
+        "processing_time_ms": 50.0,
+        "average_confidence": 0.0,
+        "hallucination_check": "grounded",
+        "ungrounded_claims": [],
+        "error": None,
+        "node_timings": {},
+        "llm_inference_times": [],
+    }
+    with patch("specagent.graph.workflow.run_query", return_value=mock_state):
+        report = run_benchmark(questions=qs, output_dir=tmp_path / "results", skip_health_check=True)
+    assert report.results[0].error == "Question was rejected by router"
+
+
+def test_run_benchmark_verbose_paths(tmp_path):
+    """run_benchmark covers verbose logging for route_reasoning, graded_chunks, rewrites, timings."""
+    qs = [BenchmarkQuestion(id="q1", question="Q?", answer="16", difficulty="Easy")]
+    graded_chunk = MagicMock()
+    graded_chunk.relevant = "yes"
+    mock_state = {
+        "question": "Q?",
+        "route_decision": "retrieve",
+        "route_reasoning": "Relevant 3GPP question",
+        "generation": "",  # empty → covers 516->521 False branch
+        "citations": [],
+        "retrieved_chunks": [],
+        "graded_chunks": [graded_chunk],
+        "rewrite_count": 2,
+        "processing_time_ms": 1000.0,
+        "average_confidence": 0.75,
+        "hallucination_check": "grounded",
+        "ungrounded_claims": [],
+        "error": None,
+        "node_timings": {"router": 50.0, "retriever": 300.0},
+        "llm_inference_times": [{"inference_ms": 400.0}],
+    }
+    with (
+        patch("specagent.graph.workflow.run_query", return_value=mock_state),
+        patch("specagent.evaluation.benchmark.check_answer_correctness", return_value=False),
+    ):
+        report = run_benchmark(
+            questions=qs,
+            output_dir=tmp_path / "results",
+            skip_health_check=True,
+            verbose=True,
+        )
+    assert report.total_questions == 1
+
+
+def test_run_benchmark_exception_in_query(tmp_path):
+    """run_benchmark catches per-question exceptions and records them as errors."""
+    qs = [BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")]
+    with patch("specagent.graph.workflow.run_query", side_effect=RuntimeError("graph exploded")):
+        report = run_benchmark(questions=qs, output_dir=tmp_path / "results", skip_health_check=True)
+    assert report.results[0].error == "graph exploded"
+    assert report.results[0].is_correct is False
+
+
+def test_run_benchmark_empty_questions_skips_difficulty_block(tmp_path):
+    """run_benchmark with limit=0 leaves accuracy_by_difficulty empty (covers 623->632 False branch)."""
+    qs = [BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")]
+    report = run_benchmark(
+        questions=qs,
+        limit=0,
+        output_dir=tmp_path / "results",
+        skip_health_check=True,
+    )
+    assert report.total_questions == 0
+    assert report.accuracy_by_difficulty == {}
+
+
+def test_check_answer_correctness_word_based_match():
+    """check_answer_correctness uses word-set matching for multi-word answers."""
+    result = check_answer_correctness(
+        "The HARQ process uses 16 processes in NR",
+        "HARQ 16",
+        use_llm_judge=False,
+    )
+    assert result is True
+
+
+def test_llm_judge_answer_yes_with_content_attribute():
+    """llm_judge_answer returns True when LLM response has .content='yes'."""
+    from specagent.evaluation.benchmark import llm_judge_answer
+
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = "yes"
+    mock_llm.invoke.return_value = mock_response
+    with patch("specagent.llm.factory.get_llm", return_value=mock_llm):
+        assert llm_judge_answer("16 HARQ processes", "16") is True
+
+
+def test_llm_judge_answer_no_str_response():
+    """llm_judge_answer returns False when LLM returns string 'no'."""
+    from specagent.evaluation.benchmark import llm_judge_answer
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = "no"
+    with patch("specagent.llm.factory.get_llm", return_value=mock_llm):
+        assert llm_judge_answer("completely wrong answer", "16") is False
+
+
+def test_llm_judge_answer_exception_falls_back_to_fuzzy():
+    """llm_judge_answer falls back to substring match when LLM raises."""
+    from specagent.evaluation.benchmark import llm_judge_answer
+
+    with patch("specagent.llm.factory.get_llm", side_effect=RuntimeError("no llm")):
+        # "16" in "16 processes" → True
+        assert llm_judge_answer("16 processes", "16") is True
+        # "16" not in "wrong answer" → False
+        assert llm_judge_answer("wrong answer", "16") is False

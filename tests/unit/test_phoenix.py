@@ -619,3 +619,43 @@ def test_traced_decorator_with_exception(mock_phoenix_modules):
 
         # Span should still be created
         mock_tracer.start_as_current_span.assert_called_once()
+
+
+@pytest.mark.unit
+def test_traced_import_error_at_call_time_fallback():
+    """traced wrapper falls back to func() when opentelemetry raises ImportError at call time (line 103)."""
+    import specagent.tracing.phoenix as phoenix_module
+
+    with patch("specagent.tracing.phoenix.settings") as ms:
+        ms.enable_tracing = True
+
+        @phoenix_module.traced()
+        def fn(x):
+            return x + 1
+
+        # Force ImportError at call time by setting opentelemetry to None in sys.modules
+        with patch.dict(sys.modules, {"opentelemetry": None, "opentelemetry.trace": None}):
+            result = fn(2)
+        assert result == 3
+
+
+@pytest.mark.unit
+def test_add_span_attributes_import_error_at_call_time():
+    """add_span_attributes silently passes when opentelemetry raises ImportError at call time (lines 136-137)."""
+    import specagent.tracing.phoenix as phoenix_module
+
+    with patch("specagent.tracing.phoenix.settings") as ms:
+        ms.enable_tracing = True
+        with patch.dict(sys.modules, {"opentelemetry": None, "opentelemetry.trace": None}):
+            phoenix_module.add_span_attributes(key="value")
+
+
+@pytest.mark.unit
+def test_record_exception_import_error_at_call_time():
+    """record_exception silently passes when opentelemetry raises ImportError at call time (lines 157-158)."""
+    import specagent.tracing.phoenix as phoenix_module
+
+    with patch("specagent.tracing.phoenix.settings") as ms:
+        ms.enable_tracing = True
+        with patch.dict(sys.modules, {"opentelemetry": None, "opentelemetry.trace": None}):
+            phoenix_module.record_exception(ValueError("test"))

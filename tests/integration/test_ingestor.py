@@ -196,3 +196,216 @@ async def test_ingest_folder_bad_path():
 
     with pytest.raises(IngestionError, match="not found"):
         await ingest_folder("/nonexistent/xyz", library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_stat_oserror_sets_empty_last_modified(tmp_path):
+    """When stat() raises OSError, last_modified is set to empty string."""
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nContent.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("content", "")]),
+        patch("pathlib.Path.stat", side_effect=OSError("no access")),
+    ):
+        result = await ingest(md, library="test")
+    assert result.status == "indexed"
+
+
+@pytest.mark.integration
+async def test_ingest_convert_unsupported_format_reraises(tmp_path):
+    """When convert() raises UnsupportedFormatError, it is re-raised unchanged."""
+    from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.xyz"
+    md.write_text("content")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch(
+            "specagent.retrieval.ingestor.convert",
+            side_effect=UnsupportedFormatError(".xyz"),
+        ),
+    ):
+        with pytest.raises(UnsupportedFormatError):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_convert_exception_raises_ingestion_error(tmp_path):
+    """When convert() raises a generic exception, IngestionError is raised."""
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("content")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor.convert", side_effect=RuntimeError("parse error")),
+    ):
+        with pytest.raises(IngestionError, match="Conversion failed"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_chunk_exception_raises_ingestion_error(tmp_path):
+    """When chunk_with_metadata() raises, IngestionError is raised."""
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nContent.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor.convert", return_value="some content"),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", side_effect=RuntimeError("chunk fail")),
+    ):
+        with pytest.raises(IngestionError, match="Chunking failed"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_embed_exception_raises_ingestion_error(tmp_path):
+    """When embedding fails, IngestionError is raised."""
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nContent.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    mock_emb = MagicMock()
+    mock_emb.embed.side_effect = RuntimeError("OOM")
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.convert", return_value="content"),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        with pytest.raises(IngestionError, match="Embedding failed"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_store_write_exception_raises_ingestion_error(tmp_path):
+    """When upsert_chunks() raises, IngestionError is raised."""
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nContent.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    mock_store.upsert_chunks.side_effect = RuntimeError("write failed")
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.convert", return_value="content"),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        with pytest.raises(IngestionError, match="Store write failed"):
+            await ingest(md, library="test")
+
+
+@pytest.mark.integration
+async def test_ingest_replaces_existing_document(tmp_path):
+    """ingest() deletes old doc and returns status='replaced' when doc exists."""
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nNew content.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = ("old-doc-id", "old-hash-xyz")
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        result = await ingest(md, library="test")
+    assert result.status == "replaced"
+    mock_store.delete_document.assert_called_once_with("old-doc-id")
+
+
+@pytest.mark.integration
+async def test_ingest_replace_delete_failure_logs_warning(tmp_path):
+    """When delete of old doc fails, a warning is logged but ingest still succeeds."""
+    from specagent.retrieval.ingestor import ingest
+
+    md = tmp_path / "doc.md"
+    md.write_text("# T\n\nNew content.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = ("old-doc-id", "old-hash-xyz")
+    mock_store.delete_document.side_effect = RuntimeError("delete failed")
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        result = await ingest(md, library="test")
+    assert result.status == "replaced"
+
+
+@pytest.mark.integration
+async def test_ingest_folder_with_md_file(tmp_path):
+    """ingest_folder() processes supported files via _ingest_one."""
+    from specagent.retrieval.ingestor import ingest_folder
+
+    md = tmp_path / "spec.md"
+    md.write_text("# Title\n\nContent here.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        result = await ingest_folder(tmp_path, library="test")
+    assert result.total_files == 1
+    assert result.indexed == 1
+    assert result.failed == 0
+
+
+@pytest.mark.integration
+async def test_ingest_folder_empty_logs_warning(tmp_path):
+    """ingest_folder() logs a warning when no supported files are found."""
+    from specagent.retrieval.ingestor import ingest_folder
+
+    (tmp_path / "file.xyz").write_text("unsupported")
+    result = await ingest_folder(tmp_path, library="test")
+    assert result.total_files == 0
+    assert result.indexed == 0
+
+
+@pytest.mark.integration
+async def test_ingest_folder_errors_collected(tmp_path):
+    """ingest_folder() collects per-file errors without raising."""
+    from specagent.retrieval.exceptions import IngestionError
+    from specagent.retrieval.ingestor import ingest_folder
+
+    md = tmp_path / "bad.md"
+    md.write_text("content")
+    with patch("specagent.retrieval.ingestor.ingest", side_effect=IngestionError("boom")):
+        result = await ingest_folder(tmp_path, library="test")
+    assert result.failed == 1
+    assert len(result.errors) == 1

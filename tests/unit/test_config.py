@@ -93,13 +93,14 @@ class TestNewPipelineSettings:
 
     @pytest.mark.unit
     def test_chunk_overlap_must_be_less_than_chunk_size(self):
-        """chunk_overlap >= chunk_size must raise a validation error."""
+        """chunk_overlap >= chunk_size must raise a validation error (line 311)."""
         import os
         from pydantic import ValidationError
+        # chunk_size ge=128, chunk_overlap le=256, so use overlap(200) >= chunk_size(128)
         with patch.dict(
             os.environ,
-            {"HF_API_KEY": "test-key", "CHUNK_SIZE": "100", "CHUNK_OVERLAP": "200"},
-            clear=True,
+            {"CHUNK_SIZE": "128", "CHUNK_OVERLAP": "200"},
+            clear=False,
         ):
             from specagent.config import Settings
             with pytest.raises((ValidationError, ValueError)):

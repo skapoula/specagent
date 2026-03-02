@@ -923,3 +923,37 @@ class TestHallucinationCheckConditional:
         # Should skip check (0.67 >= 0.65 with numerical content)
         mock_llm.invoke.assert_not_called()
         assert result["hallucination_check"] == "grounded"
+
+
+@pytest.mark.unit
+def test_hallucination_no_json_braces_falls_to_json_loads():
+    """Cover line 225: when re.search finds no {..}, falls back to json.loads."""
+    mock_llm = MagicMock()
+    # Response has no '{...}' pattern — re.search returns None → line 225 executes
+    mock_llm.invoke.return_value = "grounded: yes no braces"
+
+    # graded_chunk must have .relevant == "yes" and .chunk with required attrs
+    inner_chunk = MagicMock()
+    inner_chunk.spec_id = "TS38.321"
+    inner_chunk.section = "5.4"
+    inner_chunk.content = "HARQ processes."
+
+    graded = MagicMock()
+    graded.relevant = "yes"
+    graded.chunk = inner_chunk
+
+    state = {
+        "question": "How many HARQ processes?",
+        "generation": "16 HARQ processes",
+        "graded_chunks": [graded],
+        "hallucination_check": None,
+        # Low confidence so the skip-threshold check doesn't short-circuit
+        "average_confidence": 0.0,
+    }
+
+    with patch("specagent.nodes.hallucination.create_llm", return_value=mock_llm):
+        result = hallucination_check_node(state)
+
+    # json.loads("grounded: yes no braces") raises JSONDecodeError
+    # → caught by except at line 237 → error set + fallback to "grounded"
+    assert result.get("hallucination_check") == "grounded"
