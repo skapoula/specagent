@@ -34,7 +34,7 @@ SpecAgent reduces specification lookup time by 80% while providing **traceable c
 │   ┌─────────┐     ┌───────────┐     ┌─────────┐     ┌───────────┐       │
 │   │ ROUTER  │────▶│ RETRIEVER │────▶│ GRADER  │────▶│ GENERATOR │       │
 │   │         │     │           │     │         │     │           │       │
-│   │ Decide: │     │ FAISS     │     │ Score   │     │ Synthesize│       │
+│   │ Decide: │     │ LanceDB   │     │ Score   │     │ Synthesize│       │
 │   │ retrieve│     │ top-k=10  │     │ chunks  │     │ + cite    │       │
 │   │ or IDK  │     │           │     │ 0-1     │     │           │       │
 │   └─────────┘     └───────────┘     └────┬────┘     └─────┬─────┘       │
@@ -85,7 +85,7 @@ cp .env.example .env
 huggingface-cli login
 python scripts/download_data.py
 
-# Build FAISS index
+# Build LanceDB index
 specagent index --data-dir data/raw --output-dir data/index
 ```
 
@@ -187,7 +187,7 @@ specagent/
 ├── src/specagent/
 │   ├── nodes/          # LangGraph nodes (router, grader, etc.)
 │   ├── graph/          # Workflow definition and state
-│   ├── retrieval/      # Chunking, embedding, FAISS indexing
+│   ├── retrieval/      # Chunking, embedding, LanceDB indexing
 │   ├── api/            # FastAPI REST endpoints
 │   ├── evaluation/     # RAGAS metrics, benchmark runner
 │   └── tracing/        # Phoenix observability
