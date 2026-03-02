@@ -8,6 +8,11 @@ from specagent.cli import app
 
 runner = CliRunner()
 
+_DEFAULT_HOST = "0.0.0.0"
+_DEFAULT_PORT = 8000
+_UVICORN_APP = "specagent.api.main:app"
+_DEFAULT_LIBRARY = "3gpp-specs"
+
 
 @pytest.mark.unit
 def test_index_command_has_docs_dir_option():
@@ -53,40 +58,36 @@ class TestServeCommand:
         mock_uvicorn = MagicMock()
         with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
             runner.invoke(app, ["serve", "--port", "9000"])
-        _, kwargs = mock_uvicorn.run.call_args
-        assert kwargs["port"] == 9000
+        assert mock_uvicorn.run.call_args.kwargs["port"] == 9000
 
     def test_serve_default_host_and_port(self):
         """serve uses 0.0.0.0:8000 by default."""
         mock_uvicorn = MagicMock()
         with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
             runner.invoke(app, ["serve"])
-        _, kwargs = mock_uvicorn.run.call_args
-        assert kwargs["host"] == "0.0.0.0"
-        assert kwargs["port"] == 8000
+        assert mock_uvicorn.run.call_args.kwargs["host"] == _DEFAULT_HOST
+        assert mock_uvicorn.run.call_args.kwargs["port"] == _DEFAULT_PORT
 
     def test_serve_reload_flag(self):
         """serve --reload passes reload=True to uvicorn.run."""
         mock_uvicorn = MagicMock()
         with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
             runner.invoke(app, ["serve", "--reload"])
-        _, kwargs = mock_uvicorn.run.call_args
-        assert kwargs["reload"] is True
+        assert mock_uvicorn.run.call_args.kwargs["reload"] is True
 
     def test_serve_app_path(self):
         """serve passes the correct app module path to uvicorn.run."""
         mock_uvicorn = MagicMock()
         with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
             runner.invoke(app, ["serve"])
-        args, _ = mock_uvicorn.run.call_args
-        assert args[0] == "specagent.api.main:app"
+        assert mock_uvicorn.run.call_args.args[0] == _UVICORN_APP
 
 
 # ---------------------------------------------------------------------------
 # query command
 # ---------------------------------------------------------------------------
 
-def _ok_result() -> dict:
+def _ok_result() -> dict[str, object]:
     """Return a typical successful GraphState-like dict."""
     return {
         "route_decision": "retrieve",
@@ -154,6 +155,7 @@ class TestQueryCommand:
         with patch("specagent.graph.workflow.run_query", return_value=r):
             result = runner.invoke(app, ["query", "--verbose", "What is Python?"])
         assert result.exit_code == 0
+        assert "Not 3GPP related." in result.output
 
     def test_query_with_citations(self):
         """query output includes citation lines when citations are returned."""
@@ -179,7 +181,7 @@ class TestIndexCommand:
 
         mock_result = BulkIngestResult(
             folder=str(tmp_path),
-            library="3gpp-specs",
+            library=_DEFAULT_LIBRARY,
             total_files=3,
             indexed=3,
             replaced=0,
@@ -208,7 +210,7 @@ class TestIndexCommand:
 
         mock_result = BulkIngestResult(
             folder=str(tmp_path),
-            library="3gpp-specs",
+            library=_DEFAULT_LIBRARY,
             total_files=0,
             indexed=0,
             replaced=0,
@@ -238,7 +240,7 @@ class TestIndexCommand:
 
         mock_result = BulkIngestResult(
             folder=str(tmp_path),
-            library="3gpp-specs",
+            library=_DEFAULT_LIBRARY,
             total_files=0,
             indexed=0,
             replaced=0,
@@ -264,7 +266,7 @@ class TestIndexCommand:
 
         mock_result = BulkIngestResult(
             folder=str(tmp_path),
-            library="3gpp-specs",
+            library=_DEFAULT_LIBRARY,
             total_files=2,
             indexed=1,
             replaced=0,
@@ -296,12 +298,13 @@ class TestIndexCommand:
             errors=[],
         )
 
-        with patch("asyncio.run", return_value=mock_result):
+        with patch("asyncio.run", return_value=mock_result) as mock_run:
             result = runner.invoke(
                 app,
                 ["index", "--docs-dir", str(tmp_path), "--library", "custom-lib"],
             )
 
+        mock_run.assert_called_once()
         assert result.exit_code == 0
 
 
