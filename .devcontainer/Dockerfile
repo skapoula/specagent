@@ -26,9 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     jq \
-    # For FAISS
-    libopenblas-dev \
-    libomp-dev \
     # For httpx/networking
     ca-certificates \
     # For development
@@ -48,11 +45,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 # These are cached in the Docker layer
 RUN pip install --no-cache-dir \
     numpy>=1.26.0 \
-    faiss-cpu>=1.8.0 \
-    torch --index-url https://download.pytorch.org/whl/cpu
-
-# Install sentence-transformers (large download)
-RUN pip install --no-cache-dir sentence-transformers>=3.0.0
+    lancedb>=0.14.0
 
 # Set up workspace
 WORKDIR /workspaces/specagent

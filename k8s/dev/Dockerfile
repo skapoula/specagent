@@ -45,9 +45,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel --break-system-pac
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install heavy Python dependencies (cached layers)
-RUN pip install --no-cache-dir --break-system-packages numpy>=1.26.0 faiss-cpu>=1.8.0
-RUN pip install --no-cache-dir --break-system-packages torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir --break-system-packages sentence-transformers>=3.0.0
+RUN pip install --no-cache-dir --break-system-packages numpy>=1.26.0 lancedb>=0.14.0
 
 # Install project dependencies
 RUN pip install --no-cache-dir --break-system-packages \
