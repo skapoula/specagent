@@ -210,11 +210,11 @@ def create_custom_llm(
         from specagent.config import settings
 
         # Default to configured endpoint or fallback
-        endpoint_url = getattr(
+        endpoint_url = str(getattr(
             settings,
             "custom_endpoint_url",
             "http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
-        )
+        ))
 
     return CustomEndpointLLM(
         endpoint_url=endpoint_url, temperature=temperature, max_tokens=max_tokens
