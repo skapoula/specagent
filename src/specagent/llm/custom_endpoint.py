@@ -127,7 +127,7 @@ class CustomEndpointLLM:
                 raise
 
         # If we get here, all retries failed
-        if last_exception:
+        if last_exception:  # pragma: no cover
             raise last_exception
         raise RuntimeError("All retry attempts failed")
 
