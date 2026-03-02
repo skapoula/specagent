@@ -46,3 +46,35 @@ def test_clear_resource_cache_resets_singletons():
         clear_resource_cache()
         s2 = get_store()
     assert s1 is not s2
+
+
+@pytest.mark.unit
+def test_initialize_resources_success():
+    """initialize_resources() returns {store: True, embedder: True} on success."""
+    from specagent.retrieval.resources import initialize_resources, clear_resource_cache
+    clear_resource_cache()
+    with patch("specagent.retrieval.resources.Store"), \
+         patch("specagent.retrieval.resources.TextEmbedding"):
+        result = initialize_resources()
+    assert result == {"store": True, "embedder": True}
+
+
+@pytest.mark.unit
+def test_initialize_resources_store_failure_raises_runtime_error():
+    """initialize_resources() raises RuntimeError when Store() fails."""
+    from specagent.retrieval.resources import initialize_resources, clear_resource_cache
+    clear_resource_cache()
+    with patch("specagent.retrieval.resources.Store", side_effect=OSError("db gone")):
+        with pytest.raises(RuntimeError, match="Failed to open LanceDB store"):
+            initialize_resources()
+
+
+@pytest.mark.unit
+def test_initialize_resources_embedder_failure_raises_runtime_error():
+    """initialize_resources() raises RuntimeError when TextEmbedding() fails."""
+    from specagent.retrieval.resources import initialize_resources, clear_resource_cache
+    clear_resource_cache()
+    with patch("specagent.retrieval.resources.Store"), \
+         patch("specagent.retrieval.resources.TextEmbedding", side_effect=OSError("model missing")):
+        with pytest.raises(RuntimeError, match="Failed to load embedding model"):
+            initialize_resources()
