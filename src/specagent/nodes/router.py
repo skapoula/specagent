@@ -85,9 +85,9 @@ def router_node(state: "GraphState") -> "GraphState":
         state["route_reasoning"] = decision.reasoning
 
     except Exception as e:
-        # Handle errors gracefully - default to reject for safety
-        state["route_decision"] = "reject"
-        state["route_reasoning"] = "Error occurred during routing"
-        state["error"] = f"Router error: {str(e)}"
+        # LLM unavailable — default to retrieve so the pipeline can still run
+        state["route_decision"] = "retrieve"
+        state["route_reasoning"] = "LLM unavailable; defaulting to retrieve"
+        state["error"] = f"Router LLM error: {str(e)}"
 
     return state
