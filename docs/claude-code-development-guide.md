@@ -60,9 +60,10 @@ specagent/
 │       │   └── workflow.py
 │       ├── retrieval/          # Phase 1: Core retrieval
 │       │   ├── __init__.py
-│       │   ├── embeddings.py
-│       │   ├── indexer.py
-│       │   └── chunker.py
+│       │   ├── chunker.py
+│       │   ├── embedder.py
+│       │   ├── resources.py
+│       │   └── store.py
 │       ├── evaluation/         # Phase 4: Eval harness
 │       │   ├── __init__.py
 │       │   ├── metrics.py
@@ -80,8 +81,6 @@ specagent/
 │   ├── integration/
 │   └── e2e/
 ├── scripts/
-│   ├── ingest_data.py
-│   ├── build_index.py
 │   └── run_benchmark.py
 ├── data/
 │   └── .gitkeep
@@ -114,8 +113,9 @@ Each Claude Code session should focus on **one module with one responsibility**.
 # Task 1.1: Configuration module
 claude "Create src/specagent/config.py with:
 - Pydantic Settings class loading from environment variables
-- Fields for: HF_API_KEY, EMBEDDING_MODEL (default: sentence-transformers/all-MiniLM-L6-v2), 
-  CHUNK_SIZE (default: 512), CHUNK_OVERLAP (default: 64), FAISS_INDEX_PATH, LLM_MODEL
+- Fields for: GROQ_API_KEY, EMBEDDING_MODEL (default: nomic-ai/nomic-embed-text-v1.5),
+  CHUNK_SIZE (default: 512), CHUNK_OVERLAP (default: 64), LANCEDB_URI, LANCEDB_TABLE_NAME,
+  LLM_PROVIDER (default: groq), GROQ_MODEL (default: meta-llama/llama-4-scout-17b-16e-instruct)
 - Validation for required fields
 - Type hints throughout
 Include a test file tests/unit/test_config.py with pytest"
@@ -130,23 +130,24 @@ claude "Create src/specagent/retrieval/chunker.py with:
 Write tests in tests/unit/test_chunker.py covering: 
 - Basic chunking, overlap behavior, metadata extraction, empty input handling"
 
-# Task 1.3: Embedding client
-claude "Create src/specagent/retrieval/embeddings.py with:
-- Class HuggingFaceEmbedder that wraps the HF Inference API
-- Method embed_texts(texts: list[str]) -> np.ndarray
-- Batch processing with configurable batch_size (default 32)
-- Retry logic with exponential backoff for rate limits (429 errors)
-- Async version aembed_texts for concurrent processing
-Use httpx for HTTP calls. Include type hints and docstrings.
-Write tests using pytest-httpx to mock API responses."
+# Task 1.3: Embedder wrapper
+claude "Create src/specagent/retrieval/embedder.py with:
+- Function get_text_embedding_model() -> TextEmbedding that loads fastembed TextEmbedding
+  with model_name from settings.embedding_model (default: nomic-ai/nomic-embed-text-v1.5)
+- Function embed(texts: list[str]) -> list[list[float]] using the loaded model
+- Embeddings are 768-dimensional; prepend 'search_document: ' for indexing,
+  'search_query: ' for queries (nomic asymmetric search protocol)
+Use fastembed (ONNX, local — no API calls). Include type hints and docstrings.
+Write unit tests that verify output shape and that the query/document prefixes are applied."
 
-# Task 1.4: FAISS indexer
-claude "Create src/specagent/retrieval/indexer.py with:
-- Class FAISSIndex with methods: build(chunks, embeddings), search(query_embedding, k), save(path), load(path)
-- Store chunk metadata alongside vectors
-- Use IndexFlatIP for cosine similarity (normalize vectors before indexing)
-- Memory-efficient: use memory-mapped index for large datasets
-Include tests that create a small index, add vectors, search, and verify results."
+# Task 1.4: LanceDB resources (Store + embedder singletons)
+claude "Create src/specagent/retrieval/resources.py with:
+- get_store() -> Store: @lru_cache singleton; opens LanceDB at settings.lancedb_uri
+- get_embedder() -> TextEmbedding: @lru_cache singleton; loads nomic-ai/nomic-embed-text-v1.5 via fastembed
+- clear_resource_cache(): calls cache_clear() on both singletons (used in test teardown)
+- Store wraps LanceDB with: upsert_chunks(chunks), search(embedding, query_text, top_k, library, filter), delete_document(doc_id)
+- search() uses hybrid BM25+vector via LanceDB's rerank; returns list[tuple[ChunkRecord, float]]
+Include integration tests using a tmp_path LanceDB directory: upsert → search → delete lifecycle."
 ```
 
 #### Phase 2: LangGraph Nodes
@@ -175,7 +176,7 @@ claude "Create src/specagent/nodes/router.py with:
   - Uses the prompt from our PRD (I'll provide it)
   - Updates state['route_decision']
   - Returns updated state
-- Use langchain_community.llms.HuggingFaceHub for LLM calls
+- Use langchain_groq.ChatGroq with model from settings.groq_model for LLM calls
 Include tests with mocked LLM responses for both retrieve and reject cases."
 
 # Task 2.3: Grader node  
@@ -251,7 +252,7 @@ claude "Create a multi-stage Dockerfile for specagent:
 - Stage 1: Build with poetry, export requirements
 - Stage 2: Runtime with python:3.11-slim
 - Install only production dependencies
-- Copy FAISS index from build context
+- Mount LanceDB persistent volume at runtime (do not bake index into image)
 - Run with uvicorn, 1 worker (memory constraint)
 - Expose port 8000
 - Health check using curl to /health
@@ -264,7 +265,7 @@ claude "Create k8s/deployment.yaml with:
 - Liveness probe on /health
 - Readiness probe on /health  
 - Environment variables from ConfigMap and Secret
-- Volume mount for FAISS index (PVC)
+- Volume mount for LanceDB store (PVC at LANCEDB_URI path)
 Create corresponding Service (ClusterIP) and ConfigMap."
 ```
 
@@ -328,23 +329,23 @@ Ask Claude Code to write tests BEFORE implementation:
 
 ```bash
 # Step 1: Generate tests first
-claude "Write pytest tests for a FAISSIndex class that should:
-- Build an index from chunks and embeddings
-- Search by query embedding and return top-k results
-- Save to and load from disk
-- Handle edge cases: empty index, k > num_vectors
-Put tests in tests/unit/test_indexer.py. 
+claude "Write pytest tests for the LanceDB Store class in resources.py that should:
+- Upsert chunks and retrieve them by search
+- Return list[tuple[ChunkRecord, float]] sorted by relevance
+- Return [] when searching an empty table (not an exception)
+- Delete a document and confirm it no longer appears in search results
+Put tests in tests/integration/test_resources.py marked @pytest.mark.integration.
 Don't implement the class yet - just the tests."
 
 # Step 2: Review tests, ensure they match requirements
 
 # Step 3: Generate implementation
-claude "Now implement src/specagent/retrieval/indexer.py 
-to pass all the tests in tests/unit/test_indexer.py.
+claude "Now implement src/specagent/retrieval/resources.py
+to pass all the tests in tests/integration/test_resources.py.
 Here are the test contents: [paste tests]"
 
 # Step 4: Run tests
-pytest tests/unit/test_indexer.py -v
+pytest tests/integration/test_resources.py -v -m integration
 ```
 
 ### 3.3 Isolation Pattern for Risky Operations
@@ -354,7 +355,7 @@ For operations that touch external services or data:
 ```bash
 # Create isolated test environment
 claude "Create a pytest fixture in tests/conftest.py that:
-- Sets up a temporary directory for FAISS index
+- Sets up a temporary directory for the LanceDB store (use tmp_path)
 - Creates a mock HuggingFace API client using pytest-httpx
 - Provides sample 3GPP document chunks for testing
 - Cleans up after tests complete
@@ -389,14 +390,14 @@ Structure prompts with context → task → constraints:
 claude "
 CONTEXT:
 I'm building an agentic RAG system for 3GPP telecom specifications.
-The system uses LangGraph for orchestration and FAISS for vector search.
+The system uses LangGraph for orchestration and LanceDB for hybrid BM25+vector search.
 Here's the current project structure: [paste tree output]
 
 TASK:
 Create the retriever node that:
 1. Takes a query from graph state
-2. Embeds the query using our HuggingFaceEmbedder
-3. Searches the FAISS index for top-10 similar chunks
+2. Embeds the query using get_embedder() from resources.py (prepend "search_query: " prefix)
+3. Searches LanceDB via get_store().search() for top-k similar chunks
 4. Updates state with retrieved chunks
 
 CONSTRAINTS:
@@ -486,7 +487,7 @@ Instead, narrow down the issue first, then ask for specific fixes:
 ### 5.4 Data Pipeline Operations
 
 ❌ "Download and process the TSpec-LLM dataset"
-❌ "Build the FAISS index from the full corpus"
+❌ "Ingest the full corpus into LanceDB"
 
 These involve large data transfers and long-running operations. Write scripts yourself and run them manually.
 
@@ -502,7 +503,7 @@ These involve large data transfers and long-running operations. Write scripts yo
 | 2 | Config & environment | ✅ Generate config.py |
 | 3 | Chunker implementation | ✅ Generate + tests |
 | 4 | Embeddings client | ✅ Generate + tests |
-| 5 | FAISS indexer | ✅ Generate + tests |
+| 5 | LanceDB resources | ✅ Generate + tests |
 | 6-7 | Data ingestion script | ⚠️ Outline only, implement manually |
 
 ### Week 3-4: Agentic Pipeline
@@ -595,8 +596,8 @@ Agentic RAG for 3GPP specifications
 
 ## Constraints
 - 4GB RAM limit
-- HuggingFace free tier API
-- FAISS for vector store
+- Groq free tier API (30K TPM / 500K TPD)
+- LanceDB for vector store (embedded, persistent)
 EOF
 
 # Reference in sessions

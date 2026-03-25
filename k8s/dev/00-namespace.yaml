@@ -75,8 +75,8 @@ metadata:
     app.kubernetes.io/name: specagent-dev
 type: Opaque
 stringData:
-  # Replace with your actual key
-  HF_API_KEY: "your-huggingface-api-key"
+  # Replace with your actual Groq API key (https://console.groq.com/keys)
+  GROQ_API_KEY: "your-groq-api-key"
   # Password for code-server (change this!)
   CODE_SERVER_PASSWORD: "specagent-dev-2024"
   # Note: Claude Code with Pro subscription uses OAuth login (claude login)
@@ -95,12 +95,13 @@ metadata:
     app.kubernetes.io/name: specagent-dev
 data:
   # LLM Configuration
-  USE_LOCAL_LLM: "false"
-  LLM_MODEL: "Qwen/Qwen2.5-3B-Instruct"
-  
-  # Local GGUF Model settings (when USE_LOCAL_LLM=true)
-  LLM_MODEL_PATH: "/models/qwen2.5-3b-instruct-q4_k_m.gguf"
-  LLM_MODEL_NAME: "qwen2.5-3b-instruct"
+  LLM_PROVIDER: "groq"
+  GROQ_MODEL: "meta-llama/llama-4-scout-17b-16e-instruct"
+  GROQ_MAX_TOKENS: "1024"
+
+  # Local GGUF Model settings (when LLM_PROVIDER=local)
+  LLM_MODEL_PATH: "/models/qwen3-4b-instruct.Q4_K_M.gguf"
+  LLM_MODEL_NAME: "qwen3-4b-instruct"
   LLM_N_CTX: "4096"
   LLM_N_GPU_LAYERS: "0"
   LLM_TEMPERATURE: "0.1"

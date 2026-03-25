@@ -498,7 +498,7 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration/ -v --tb=short
         env:
-          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           
   e2e-evaluation:
     runs-on: ubuntu-latest

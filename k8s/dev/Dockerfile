@@ -50,9 +50,9 @@ RUN pip install --no-cache-dir --break-system-packages numpy>=1.26.0 lancedb>=0.
 # Install project dependencies
 RUN pip install --no-cache-dir --break-system-packages \
     langgraph>=0.2.0 langchain>=0.3.0 langchain-community>=0.3.0 \
-    langchain-huggingface>=0.1.0 fastapi>=0.115.0 uvicorn[standard]>=0.32.0 \
+    langchain-openai>=0.2.0 fastapi>=0.115.0 uvicorn[standard]>=0.32.0 \
     httpx>=0.27.0 pydantic>=2.9.0 pydantic-settings>=2.6.0 pandas>=2.2.0 \
-    huggingface-hub>=0.26.0 python-dotenv>=1.0.0 tenacity>=9.0.0 \
+    python-dotenv>=1.0.0 tenacity>=9.0.0 \
     structlog>=24.4.0 rich>=13.9.0 typer>=0.13.0
 
 # Install dev dependencies

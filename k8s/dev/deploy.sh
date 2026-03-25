@@ -16,7 +16,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Defaults
 BUILD_IMAGE=false
 PASSWORD="specagent-dev-2024"
-HF_API_KEY="${HF_API_KEY:-}"
+GROQ_API_KEY="${GROQ_API_KEY:-}"
 NAMESPACE="specagent-dev"
 
 # Parse arguments
@@ -30,8 +30,8 @@ while [[ $# -gt 0 ]]; do
             PASSWORD="$2"
             shift 2
             ;;
-        --hf-key)
-            HF_API_KEY="$2"
+        --groq-key)
+            GROQ_API_KEY="$2"
             shift 2
             ;;
         *)
@@ -62,7 +62,7 @@ echo "🔐 Configuring secrets..."
 kubectl create secret generic dev-secrets \
     --namespace="$NAMESPACE" \
     --from-literal=CODE_SERVER_PASSWORD="$PASSWORD" \
-    --from-literal=HF_API_KEY="$HF_API_KEY" \
+    --from-literal=GROQ_API_KEY="$GROQ_API_KEY" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 # Apply deployment

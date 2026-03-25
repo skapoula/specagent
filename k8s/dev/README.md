@@ -7,8 +7,8 @@ Run your SpecAgent development environment in your home lab k3s cluster with cod
 ## Quick Start
 
 ```bash
-# 1. Set your HuggingFace API key
-export HF_API_KEY="your-huggingface-key"
+# 1. Set your Groq API key
+export GROQ_API_KEY="your-groq-api-key"
 
 # 2. Build image and deploy
 ./k8s/dev/deploy.sh --build --password "your-password"

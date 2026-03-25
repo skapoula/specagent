@@ -39,7 +39,7 @@ def _retry_on_rate_limit(func: Callable[..., T]) -> Callable[..., T]:
     Decorator to retry function calls on API rate limit errors.
 
     Retries up to 3 times with exponential backoff (1s, 2s, 4s).
-    Catches common rate limit exceptions from OpenAI/HuggingFace APIs.
+    Catches common rate limit exceptions from LLM inference APIs.
     """
 
     @retry(
@@ -151,7 +151,7 @@ def evaluate_e2e(
         if missing:
             raise ValueError(f"Sample {i} missing required fields: {missing}")
 
-    # Format dataset for RAGAS (convert to HuggingFace Dataset)
+    # Format dataset for RAGAS (convert to Dataset format)
     # RAGAS expects specific column names
     ragas_data = {
         "question": [s["question"] for s in test_dataset],

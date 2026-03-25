@@ -42,67 +42,22 @@ data/
 │   └── [123 specification files]
 ├── raw_rel_17_38_series/    # Rel-17 38-series (169 files)
 │   └── [169 specification files]
-└── index/                   # FAISS index output
-    ├── faiss.index
-    └── faiss.json
+└── lancedb/                 # LanceDB vector store (persistent, embedded)
 ```
 
 **Total: 297 specification files**
 
 ## Usage
 
-### Manual Download (Python)
-
-```python
-from pathlib import Path
-from specagent.retrieval.data_ingestion import download_all_required_specs
-
-# Download all required specs
-results = download_all_required_specs(
-    base_dir=Path('data'),
-    api_key='your_hf_api_key'  # Optional if HF_API_KEY env var is set
-)
-
-# Results contains:
-# - rel_17_36_series: 123 files
-# - rel_17_38_series: 169 files
-# - rel_15_36_series: 2 files
-# - rel_15_38_series: 1 file
-# - rel_16_38_series: 2 files
-```
-
 ### CLI Download & Index
 
 ```bash
-# Set your HuggingFace API key
-export HF_API_KEY="hf_..."
-
-# Download specs and build index
-specagent index --download --force
-
-# Or just build index from existing downloaded specs
+# Build LanceDB index from all spec files under data/
 specagent index --force
+
+# Ingest from a custom directory
+specagent index --docs-dir PATH --force
 ```
-
-### Discover Files
-
-```python
-from pathlib import Path
-from specagent.retrieval.data_ingestion import discover_markdown_files
-
-# Discover all markdown files recursively
-md_files = discover_markdown_files(Path('data'))
-# Returns: 297 files from all subdirectories
-```
-
-## Backward Compatibility
-
-The updated code maintains backward compatibility with:
-- Legacy flat directory structure (`data/raw/*.md`)
-- Old single-directory downloads
-- Existing indexing workflows
-
-Files in any subdirectory under `data/` will be discovered and indexed.
 
 ## Testing
 
@@ -116,18 +71,9 @@ Verified:
 
 To manually download and index specifications in the future:
 
-1. **Download specs:**
-   ```bash
-   export HF_API_KEY="your_api_key"
-   python3 -c "from pathlib import Path; from specagent.retrieval.data_ingestion import download_all_required_specs; download_all_required_specs(base_dir=Path('data'))"
-   ```
+1. Place spec markdown files under `data/` (any subdirectory structure).
 
-2. **Build index:**
+2. **Build LanceDB index:**
    ```bash
    specagent index --force
    ```
-
-Or use the combined command:
-```bash
-specagent index --download --force
-```

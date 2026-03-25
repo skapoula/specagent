@@ -20,7 +20,6 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "HF_API_KEY": "test-key",
                 "CHUNK_SIZE": "256",
                 "CHUNK_OVERLAP": "300",  # Invalid: > chunk_size
             },
@@ -38,7 +37,7 @@ class TestSettings:
 
     def test_get_settings_is_cached(self):
         """get_settings should return cached instance."""
-        with patch.dict(os.environ, {"HF_API_KEY": "test-key"}):
+        with patch.dict(os.environ, {}):
             from specagent.config import get_settings
 
             # Clear cache first

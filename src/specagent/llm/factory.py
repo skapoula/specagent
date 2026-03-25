@@ -2,10 +2,21 @@
 LLM factory for creating LLM instances based on configuration.
 
 Provides a unified interface for creating LLM clients regardless of backend
-(HuggingFace, custom endpoint, local model, etc.).
+(Groq, custom OpenAI-compatible endpoint, local GGUF).
+
+Backend selection is controlled by the ``llm_provider`` setting:
+
+    "groq"            → Groq cloud inference API (default)
+    "custom_endpoint" → Self-hosted OpenAI-compatible endpoint (CustomEndpointLLM)
+    "local"           → Local GGUF model (not yet implemented)
+
+All returned objects implement :class:`LLMProtocol` — ``invoke(prompt) -> str``.
 """
 
-from typing import Protocol
+import logging
+from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProtocol(Protocol):
@@ -16,55 +27,88 @@ class LLMProtocol(Protocol):
         ...
 
 
-def create_llm(temperature: float | None = None) -> LLMProtocol:
+class _GroqAdapter:
+    """Wraps langchain_openai.ChatOpenAI (pointed at Groq) to satisfy LLMProtocol.
+
+    LangChain's ChatOpenAI returns an AIMessage from .invoke(), not a plain
+    string.  This adapter extracts the text content so callers receive a str,
+    matching the interface expected by all specagent nodes.
     """
-    Create an LLM client based on configuration settings.
+
+    def __init__(self, chat_model: Any) -> None:
+        self._model = chat_model
+
+    def invoke(self, prompt: str) -> str:
+        """Send prompt to Groq and return the response as a plain string."""
+        from langchain_core.messages import HumanMessage  # noqa: PLC0415
+
+        response = self._model.invoke([HumanMessage(content=prompt)])
+        content = response.content
+        return content if isinstance(content, str) else str(content)
+
+
+def create_llm(temperature: float | None = None) -> LLMProtocol:
+    """Create an LLM client based on configuration settings.
 
     Args:
-        temperature: Optional temperature override (0.0-1.0). If None, uses settings.llm_temperature
+        temperature: Optional temperature override (0.0-2.0). If None, uses
+            ``settings.llm_temperature``.
 
     Returns:
-        LLM client that implements the LLMProtocol
+        LLM client that implements :class:`LLMProtocol`.
 
-    The function checks settings in this order:
-        1. use_custom_endpoint → CustomEndpointLLM
-        2. use_local_llm → Local GGUF model (TODO)
-        3. default → HuggingFaceEndpoint
+    Raises:
+        ValueError: If ``llm_provider`` is ``"groq"`` and ``groq_api_key`` is empty.
+        NotImplementedError: If ``llm_provider`` is ``"local"``.
     """
-    from specagent.config import settings
+    from specagent.config import settings  # noqa: PLC0415
 
-    # Use provided temperature or fall back to settings
     temp = temperature if temperature is not None else settings.llm_temperature
+    provider = settings.llm_provider
 
-    if settings.use_custom_endpoint:
-        # Use custom OpenAI-compatible endpoint with retry for serverless cold starts
-        from specagent.llm.custom_endpoint import CustomEndpointLLM
+    if provider == "groq":
+        if not settings.groq_api_key:
+            raise ValueError(
+                "groq_api_key must be set when llm_provider is 'groq'. "
+                "Set the GROQ_API_KEY environment variable to your Groq API key."
+            )
+        from langchain_openai import ChatOpenAI  # noqa: PLC0415
+        from pydantic import SecretStr  # noqa: PLC0415
 
+        model_kwargs: dict[str, Any] = {}
+        if settings.groq_reasoning_effort:
+            model_kwargs["reasoning_effort"] = settings.groq_reasoning_effort
+
+        logger.debug("Creating Groq LLM: model=%s", settings.groq_model)
+        chat_model = ChatOpenAI(  # type: ignore[call-arg]  # max_tokens missing from stubs
+            model=settings.groq_model,
+            api_key=SecretStr(settings.groq_api_key),
+            base_url="https://api.groq.com/openai/v1",
+            temperature=temp,
+            timeout=60,
+            max_tokens=settings.groq_max_tokens,
+            model_kwargs=model_kwargs,
+        )
+        return _GroqAdapter(chat_model)
+
+    elif provider == "custom_endpoint" or settings.use_custom_endpoint:
+        from specagent.llm.custom_endpoint import CustomEndpointLLM  # noqa: PLC0415
+
+        logger.debug("Creating custom-endpoint LLM: url=%s", settings.custom_endpoint_url)
         return CustomEndpointLLM(
             endpoint_url=settings.custom_endpoint_url,
             temperature=temp,
             max_tokens=settings.llm_max_tokens,
-            timeout=120,  # 2 minute timeout for slow inference
-            max_retries=5,  # Retry up to 5 times for serverless cold starts
-            retry_delay=5.0,  # Start with 5s delay (exponential: 5s, 10s, 20s, 40s, 80s)
-        )
-
-    elif settings.use_local_llm:
-        # Use local GGUF model (not yet implemented)
-        raise NotImplementedError(
-            "Local GGUF model support not yet implemented. "
-            "Set use_custom_endpoint=True or use_local_llm=False"
+            timeout=120,
+            max_retries=5,
+            retry_delay=5.0,
         )
 
     else:
-        # Use HuggingFace Inference API
-        from langchain_huggingface import HuggingFaceEndpoint
-
-        return HuggingFaceEndpoint(
-            repo_id=settings.llm_model,
-            huggingfacehub_api_token=settings.hf_api_key_value,
-            temperature=temp,
-            max_new_tokens=settings.llm_max_tokens,
+        # provider == "local"
+        raise NotImplementedError(
+            "Local GGUF model support not yet implemented. "
+            "Set llm_provider='groq' or llm_provider='custom_endpoint'."
         )
 
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specagent.llm.factory import LLMProtocol, create_llm
+from specagent.llm.factory import LLMProtocol, _GroqAdapter, create_llm
 
 
 @pytest.mark.unit
@@ -18,84 +18,145 @@ def test_llm_protocol_invoke_is_callable():
 class TestCreateLLM:
     """Tests for create_llm factory function."""
 
-    @patch('langchain_huggingface.HuggingFaceEndpoint')
+    # ------------------------------------------------------------------
+    # Groq provider
+    # ------------------------------------------------------------------
+
+    @patch('langchain_openai.ChatOpenAI')
     @patch('specagent.config.settings')
-    def test_create_llm_default_temperature(self, mock_settings, mock_hf_endpoint):
-        """Test create_llm uses settings.llm_temperature by default."""
-        # Configure mock settings for HuggingFace backend
-        mock_settings.use_custom_endpoint = False
-        mock_settings.use_local_llm = False
-        mock_settings.llm_model = "Qwen/Qwen2.5-3B-Instruct"
-        mock_settings.hf_api_key_value = "test-key"
-        mock_settings.llm_temperature = 0.7
-        mock_settings.llm_max_tokens = 512
+    def test_create_llm_groq_returns_adapter(self, mock_settings, mock_chat_openai):
+        """create_llm with llm_provider='groq' returns a _GroqAdapter."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = ""
+        mock_settings.llm_temperature = 0.1
+        mock_chat_openai.return_value = MagicMock()
 
-        # Mock HuggingFaceEndpoint constructor
-        mock_hf_endpoint.return_value = MagicMock()
+        llm = create_llm()
 
-        # Call without temperature parameter
-        create_llm()
+        assert isinstance(llm, _GroqAdapter)
 
-        # Verify HuggingFaceEndpoint was called with default temperature
-        mock_hf_endpoint.assert_called_once_with(
-            repo_id="Qwen/Qwen2.5-3B-Instruct",
-            huggingfacehub_api_token="test-key",
-            temperature=0.7,
-            max_new_tokens=512
-        )
-
-    @patch('langchain_huggingface.HuggingFaceEndpoint')
+    @patch('langchain_openai.ChatOpenAI')
     @patch('specagent.config.settings')
-    def test_create_llm_custom_temperature(self, mock_settings, mock_hf_endpoint):
-        """Test create_llm accepts custom temperature parameter."""
-        # Configure mock settings for HuggingFace backend
-        mock_settings.use_custom_endpoint = False
-        mock_settings.use_local_llm = False
-        mock_settings.llm_model = "Qwen/Qwen2.5-3B-Instruct"
-        mock_settings.hf_api_key_value = "test-key"
-        mock_settings.llm_temperature = 0.7
-        mock_settings.llm_max_tokens = 512
+    def test_create_llm_groq_uses_correct_base_url(self, mock_settings, mock_chat_openai):
+        """Groq ChatOpenAI is pointed at the Groq API base URL."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "llama-3.1-8b-instant"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = ""
+        mock_settings.llm_temperature = 0.0
+        mock_chat_openai.return_value = MagicMock()
 
-        # Mock HuggingFaceEndpoint constructor
-        mock_hf_endpoint.return_value = MagicMock()
-
-        # Call with custom temperature
         create_llm(temperature=0.0)
 
-        # Verify HuggingFaceEndpoint was called with custom temperature
-        mock_hf_endpoint.assert_called_once_with(
-            repo_id="Qwen/Qwen2.5-3B-Instruct",
-            huggingfacehub_api_token="test-key",
-            temperature=0.0,  # Override
-            max_new_tokens=512
-        )
+        call_kwargs = mock_chat_openai.call_args.kwargs
+        assert call_kwargs["base_url"] == "https://api.groq.com/openai/v1"
+        assert call_kwargs["model"] == "llama-3.1-8b-instant"
+        assert call_kwargs["temperature"] == 0.0
+        assert call_kwargs["max_tokens"] == 1024
+
+    @patch('langchain_openai.ChatOpenAI')
+    @patch('specagent.config.settings')
+    def test_create_llm_groq_reasoning_effort_included_when_set(
+        self, mock_settings, mock_chat_openai
+    ):
+        """reasoning_effort is passed in model_kwargs when non-empty."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = "medium"
+        mock_settings.llm_temperature = 0.1
+        mock_chat_openai.return_value = MagicMock()
+
+        create_llm()
+
+        call_kwargs = mock_chat_openai.call_args.kwargs
+        assert call_kwargs["model_kwargs"]["reasoning_effort"] == "medium"
+
+    @patch('langchain_openai.ChatOpenAI')
+    @patch('specagent.config.settings')
+    def test_create_llm_groq_no_reasoning_effort_when_empty(
+        self, mock_settings, mock_chat_openai
+    ):
+        """reasoning_effort is omitted from model_kwargs when empty string."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = ""
+        mock_settings.llm_temperature = 0.1
+        mock_chat_openai.return_value = MagicMock()
+
+        create_llm()
+
+        call_kwargs = mock_chat_openai.call_args.kwargs
+        assert "reasoning_effort" not in call_kwargs["model_kwargs"]
+
+    @patch('specagent.config.settings')
+    def test_create_llm_groq_raises_when_no_api_key(self, mock_settings):
+        """create_llm raises ValueError when llm_provider='groq' and no API key."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = ""
+        mock_settings.llm_temperature = 0.1
+
+        with pytest.raises(ValueError, match="GROQ_API_KEY"):
+            create_llm()
+
+    # ------------------------------------------------------------------
+    # _GroqAdapter
+    # ------------------------------------------------------------------
+
+    def test_groq_adapter_invoke_returns_string(self):
+        """_GroqAdapter.invoke() calls the inner model and returns str content."""
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content="hello from groq")
+        adapter = _GroqAdapter(mock_model)
+
+        result = adapter.invoke("test prompt")
+
+        assert result == "hello from groq"
+        assert isinstance(result, str)
+
+    def test_groq_adapter_invoke_converts_non_string_content(self):
+        """_GroqAdapter.invoke() converts list content to str."""
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content=["part1", "part2"])
+        adapter = _GroqAdapter(mock_model)
+
+        result = adapter.invoke("test")
+
+        assert isinstance(result, str)
+
+    # ------------------------------------------------------------------
+    # custom_endpoint provider
+    # ------------------------------------------------------------------
 
     @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
     @patch('specagent.config.settings')
     def test_create_llm_custom_endpoint_default_temperature(
         self, mock_settings, mock_custom_endpoint
     ):
-        """Test create_llm with custom endpoint uses default temperature."""
-        # Configure mock settings for custom endpoint
-        mock_settings.use_custom_endpoint = True
+        """create_llm with llm_provider='custom_endpoint' uses default temperature."""
+        mock_settings.llm_provider = "custom_endpoint"
+        mock_settings.use_custom_endpoint = False
         mock_settings.custom_endpoint_url = "http://localhost:8000"
         mock_settings.llm_temperature = 0.8
         mock_settings.llm_max_tokens = 1024
-
-        # Mock CustomEndpointLLM constructor
         mock_custom_endpoint.return_value = MagicMock()
 
-        # Call without temperature parameter
         create_llm()
 
-        # Verify CustomEndpointLLM was called with default temperature
         mock_custom_endpoint.assert_called_once_with(
             endpoint_url="http://localhost:8000",
             temperature=0.8,
             max_tokens=1024,
             timeout=120,
             max_retries=5,
-            retry_delay=5.0
+            retry_delay=5.0,
         )
 
     @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
@@ -103,88 +164,51 @@ class TestCreateLLM:
     def test_create_llm_custom_endpoint_custom_temperature(
         self, mock_settings, mock_custom_endpoint
     ):
-        """Test create_llm with custom endpoint accepts custom temperature."""
-        # Configure mock settings for custom endpoint
-        mock_settings.use_custom_endpoint = True
+        """create_llm with llm_provider='custom_endpoint' accepts custom temperature."""
+        mock_settings.llm_provider = "custom_endpoint"
+        mock_settings.use_custom_endpoint = False
         mock_settings.custom_endpoint_url = "http://localhost:8000"
         mock_settings.llm_temperature = 0.8
         mock_settings.llm_max_tokens = 1024
-
-        # Mock CustomEndpointLLM constructor
         mock_custom_endpoint.return_value = MagicMock()
 
-        # Call with custom temperature
         create_llm(temperature=0.0)
 
-        # Verify CustomEndpointLLM was called with custom temperature
         mock_custom_endpoint.assert_called_once_with(
             endpoint_url="http://localhost:8000",
-            temperature=0.0,  # Override
+            temperature=0.0,
             max_tokens=1024,
             timeout=120,
             max_retries=5,
-            retry_delay=5.0
+            retry_delay=5.0,
         )
+
+    @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
+    @patch('specagent.config.settings')
+    def test_create_llm_legacy_use_custom_endpoint_bool(
+        self, mock_settings, mock_custom_endpoint
+    ):
+        """Legacy use_custom_endpoint=True still routes to CustomEndpointLLM."""
+        mock_settings.llm_provider = "local"         # provider not groq/custom...
+        mock_settings.use_custom_endpoint = True     # ...but legacy bool overrides
+        mock_settings.custom_endpoint_url = "http://localhost:9000"
+        mock_settings.llm_temperature = 0.5
+        mock_settings.llm_max_tokens = 512
+        mock_custom_endpoint.return_value = MagicMock()
+
+        create_llm()
+
+        mock_custom_endpoint.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # local provider
+    # ------------------------------------------------------------------
 
     @patch('specagent.config.settings')
     def test_create_llm_local_llm_raises_not_implemented(self, mock_settings):
-        """Test create_llm raises NotImplementedError for local LLM."""
-        # Configure mock settings for local LLM (not yet supported)
+        """create_llm raises NotImplementedError for llm_provider='local'."""
+        mock_settings.llm_provider = "local"
         mock_settings.use_custom_endpoint = False
-        mock_settings.use_local_llm = True
 
-        # Should raise NotImplementedError
         with pytest.raises(NotImplementedError, match="Local GGUF model support"):
             create_llm()
-
-    @patch('langchain_huggingface.HuggingFaceEndpoint')
-    @patch('specagent.config.settings')
-    def test_create_llm_temperature_zero(self, mock_settings, mock_hf_endpoint):
-        """Test create_llm handles temperature=0.0 correctly (not None)."""
-        # Configure mock settings
-        mock_settings.use_custom_endpoint = False
-        mock_settings.use_local_llm = False
-        mock_settings.llm_model = "Qwen/Qwen2.5-3B-Instruct"
-        mock_settings.hf_api_key_value = "test-key"
-        mock_settings.llm_temperature = 0.5
-        mock_settings.llm_max_tokens = 512
-
-        # Mock HuggingFaceEndpoint constructor
-        mock_hf_endpoint.return_value = MagicMock()
-
-        # Call with temperature=0.0 (should not fall back to settings)
-        create_llm(temperature=0.0)
-
-        # Verify temperature=0.0 was used (not 0.5 from settings)
-        mock_hf_endpoint.assert_called_once_with(
-            repo_id="Qwen/Qwen2.5-3B-Instruct",
-            huggingfacehub_api_token="test-key",
-            temperature=0.0,  # Should be 0.0, not 0.5
-            max_new_tokens=512
-        )
-
-    @patch('langchain_huggingface.HuggingFaceEndpoint')
-    @patch('specagent.config.settings')
-    def test_create_llm_temperature_none_uses_settings(self, mock_settings, mock_hf_endpoint):
-        """Test create_llm with temperature=None uses settings value."""
-        # Configure mock settings
-        mock_settings.use_custom_endpoint = False
-        mock_settings.use_local_llm = False
-        mock_settings.llm_model = "Qwen/Qwen2.5-3B-Instruct"
-        mock_settings.hf_api_key_value = "test-key"
-        mock_settings.llm_temperature = 0.9
-        mock_settings.llm_max_tokens = 512
-
-        # Mock HuggingFaceEndpoint constructor
-        mock_hf_endpoint.return_value = MagicMock()
-
-        # Call with explicit temperature=None
-        create_llm(temperature=None)
-
-        # Verify settings.llm_temperature was used
-        mock_hf_endpoint.assert_called_once_with(
-            repo_id="Qwen/Qwen2.5-3B-Instruct",
-            huggingfacehub_api_token="test-key",
-            temperature=0.9,  # From settings
-            max_new_tokens=512
-        )

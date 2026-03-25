@@ -53,7 +53,7 @@ fi
 if [ ! -f ".env" ]; then
     echo "📝 Creating .env file from template..."
     cp .env.example .env
-    echo "⚠️  Remember to add your HF_API_KEY to .env"
+    echo "⚠️  Remember to add your GROQ_API_KEY to .env"
 fi
 
 # -----------------------------------------------------------------------------
@@ -89,6 +89,6 @@ echo "  claude                    # Start Claude Code"
 echo "  claude --help             # Claude Code help"
 echo ""
 echo "⚠️  Don't forget to:"
-echo "  1. Add your HF_API_KEY to .env"
-echo "  2. Run 'huggingface-cli login' if downloading datasets"
+echo "  1. Add your GROQ_API_KEY to .env"
+echo "  2. Run 'huggingface-cli login' if downloading the TSpec-LLM dataset"
 echo ""

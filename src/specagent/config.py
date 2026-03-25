@@ -5,9 +5,9 @@ All configuration is loaded from environment variables with sensible defaults.
 Use a .env file for local development.
 
 Environment Variables:
-    HF_API_KEY: HuggingFace API key (optional, for embeddings API)
+    GROQ_API_KEY: Groq cloud API key (required — set llm_provider='groq')
     EMBEDDING_MODEL: fastembed model ID for embeddings (e.g. nomic-ai/nomic-embed-text-v1.5)
-    LLM_MODEL_PATH: Path to local GGUF model file
+    LLM_MODEL_PATH: Path to local GGUF model file (used when llm_provider='local')
     CHUNK_SIZE: Token size for document chunks
     CHUNK_OVERLAP: Overlap between chunks
     LANCEDB_URI: Path to LanceDB storage directory
@@ -16,10 +16,13 @@ Environment Variables:
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Recognised LLM backend identifiers (mirrors net-rca TriageAgentConfig).
+LLMProvider = Literal["custom_endpoint", "local", "groq"]
 
 
 class Settings(BaseSettings):
@@ -30,14 +33,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-    )
-
-    # ==========================================================================
-    # API Keys (optional - only needed for HF API embeddings)
-    # ==========================================================================
-    hf_api_key: Optional[SecretStr] = Field(
-        default=None,
-        description="HuggingFace API key (optional, for API-based embeddings)",
     )
 
     # ==========================================================================
@@ -53,26 +48,63 @@ class Settings(BaseSettings):
     )
 
     # LLM Configuration
-    use_local_llm: bool = Field(
-        default=False,
-        description="Use local GGUF model instead of HF Inference API",
+    # Env var: LLM_PROVIDER — selects LLM backend.
+    # "groq":           Groq cloud inference API (default).
+    # "custom_endpoint": OpenAI-compatible self-hosted endpoint.
+    # "local":          Local GGUF model (not yet implemented).
+    llm_provider: LLMProvider = Field(
+        default="groq",
+        description="LLM backend to use: groq | custom_endpoint | local",
     )
     use_custom_endpoint: bool = Field(
-        default=True,
-        description="Use custom OpenAI-compatible endpoint instead of HuggingFace",
+        default=False,
+        description="Legacy: set llm_provider='custom_endpoint' instead.",
     )
     custom_endpoint_url: str = Field(
         default="http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
         description="Custom inference endpoint URL (OpenAI-compatible)",
     )
-    
-    # HuggingFace Inference API (when use_local_llm=False)
-    llm_model: str = Field(
-        default="Qwen/Qwen2.5-3B-Instruct",
-        description="HuggingFace model ID for Inference API",
+
+    # ---- Groq-specific (only used when llm_provider == "groq") ----
+    # API key for the Groq inference API.  Required when llm_provider is "groq".
+    # Env var: GROQ_API_KEY
+    groq_api_key: str = Field(
+        default="",
+        description="Groq cloud API key. Required when llm_provider='groq'.",
     )
-    
-    # Local GGUF model (when use_local_llm=True)
+    # Model served by Groq.
+    # Free-tier limits (RPM / TPM / TPD) as of 2025-03:
+    #   llama-4-scout-17b-16e-instruct : 30 / 30K / 500K  ← default (best free-tier budget)
+    #   llama-3.3-70b-versatile        : 30 / 12K / 100K  (higher quality, tighter limits)
+    #   llama-3.1-8b-instant           : 30 /  6K / 500K  (fastest, lowest per-minute budget)
+    # specagent makes up to 5 LLM calls per query (~6K tokens total), so 30K TPM
+    # allows ~4 concurrent queries/min vs ~1 for llama-3.3-70b-versatile.
+    # Override via GROQ_MODEL env var.
+    groq_model: str = Field(
+        default="meta-llama/llama-4-scout-17b-16e-instruct",
+        description=(
+            "Groq model name. Default is llama-4-scout for best free-tier TPM/TPD. "
+            "Use llama-3.3-70b-versatile for higher quality at the cost of tighter limits."
+        ),
+    )
+    # Groq reasoning effort level.  Maps to Groq's reasoning_effort parameter;
+    # only supported by reasoning models (e.g. qwq-32b).  Empty string disables it.
+    # Env var: GROQ_REASONING_EFFORT
+    groq_reasoning_effort: Literal["", "low", "medium", "high"] = Field(
+        default="",
+        description="Groq reasoning effort (low/medium/high). Leave empty for non-reasoning models.",
+    )
+    # Max completion tokens for Groq calls.  1024 is sufficient for all specagent
+    # nodes (generator answers with citations, grader/router/hallucination return
+    # small JSON).  Keeping this low conserves the free-tier TPM budget.
+    groq_max_tokens: int = Field(
+        default=1024,
+        ge=1,
+        le=32768,
+        description="Maximum output tokens per Groq call. Keep low to stay within free-tier TPM limits.",
+    )
+
+    # Local GGUF model (when llm_provider='local')
     llm_model_path: Path = Field(
         default=Path("/models/qwen3-4b-instruct.Q4_K_M.gguf"),
         description="Path to local GGUF model file",

@@ -33,7 +33,9 @@ data:
   ENABLE_TRACING: "true"
   PHOENIX_ENDPOINT: "http://phoenix-service:6006"
   EMBEDDING_MODEL: "nomic-ai/nomic-embed-text-v1.5"
-  LLM_MODEL: "mistralai/Mistral-7B-Instruct-v0.3"
+  LLM_PROVIDER: "groq"
+  GROQ_MODEL: "meta-llama/llama-4-scout-17b-16e-instruct"
+  GROQ_MAX_TOKENS: "1024"
   CHUNK_SIZE: "512"
   CHUNK_OVERLAP: "64"
   RETRIEVAL_TOP_K: "10"
@@ -51,7 +53,7 @@ metadata:
     app.kubernetes.io/name: specagent
 type: Opaque
 stringData:
-  HF_API_KEY: "your-huggingface-api-key"  # Replace with actual key or use sealed secrets
+  GROQ_API_KEY: "your-groq-api-key"  # Replace with actual key or use sealed secrets
 
 ---
 # =============================================================================

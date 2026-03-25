@@ -79,11 +79,11 @@ spec:
                   key: CODE_SERVER_PASSWORD
             
             # API Keys
-            - name: HF_API_KEY
+            - name: GROQ_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: dev-secrets
-                  key: HF_API_KEY
+                  key: GROQ_API_KEY
             # Note: Claude Code with Pro uses OAuth - run 'claude login' after deployment
           
           envFrom:

@@ -3,7 +3,7 @@ Pytest configuration and shared fixtures.
 
 Provides common fixtures for:
     - Configuration with test values
-    - Mock HuggingFace API responses
+    - Mock LLM API responses
     - Sample document chunks
     - Temporary directories for indexes
 """
@@ -28,9 +28,7 @@ def mock_settings():
     with patch.dict(
         "os.environ",
         {
-            "HF_API_KEY": "test-api-key",
             "EMBEDDING_MODEL": "nomic-ai/nomic-embed-text-v1.5",
-            "LLM_MODEL": "mistralai/Mistral-7B-Instruct-v0.3",
             "CHUNK_SIZE": "512",
             "CHUNK_OVERLAP": "64",
             "ENABLE_TRACING": "false",
@@ -123,8 +121,8 @@ def sample_off_topic_question():
 # =============================================================================
 
 @pytest.fixture
-def mock_hf_embedding_response():
-    """Mock HuggingFace embedding API response."""
+def mock_embedding_response():
+    """Mock embedding API response."""
     def _mock_response(texts: list[str]) -> list[list[float]]:
         rng = np.random.default_rng(hash(tuple(texts)) % 2**32)
         embeddings = rng.random((len(texts), 768)).astype(np.float32)
@@ -135,8 +133,8 @@ def mock_hf_embedding_response():
 
 
 @pytest.fixture
-def mock_hf_llm_response():
-    """Mock HuggingFace LLM API response."""
+def mock_llm_response():
+    """Mock LLM API response."""
     def _mock_response(prompt: str) -> str:
         # Return structured responses based on prompt content
         if "router" in prompt.lower():

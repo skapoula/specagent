@@ -20,10 +20,10 @@ When implementing new functionality:
 - `@pytest.mark.skip(reason="...")` - For unimplemented features
 
 ## Mocking External Services
-Always mock HuggingFace API calls:
+Always mock LLM/embedding API calls (Groq, custom endpoint):
 ```python
 @pytest.fixture
-def mock_hf_response(mock_hf_embedding_response):
+def mock_llm(mock_llm_response):
     # Use fixtures from conftest.py
     pass
 ```

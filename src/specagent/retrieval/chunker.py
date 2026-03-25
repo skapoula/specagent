@@ -23,8 +23,8 @@ _HEADER_RE = _re.compile(r"^#{1,6}\s+(.+)$", _re.MULTILINE)
 def _get_tokenizer() -> "PreTrainedTokenizerBase":
     """Return the tokenizer singleton, loading it on first call.
 
-    Uses settings.embedding_model as the HuggingFace Hub model ID so the
-    tokenizer always matches the configured embedding model.
+    Uses settings.embedding_model as the model ID so the tokenizer always
+    matches the configured embedding model.
 
     Raises:
         RuntimeError: If the tokenizer is not cached locally. Run

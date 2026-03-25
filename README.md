@@ -56,7 +56,7 @@ SpecAgent reduces specification lookup time by 80% while providing **traceable c
 ### Prerequisites
 
 - Python 3.11+
-- [HuggingFace API key](https://huggingface.co/settings/tokens) (free tier works)
+- [Groq API key](https://console.groq.com/keys) (free tier works)
 - 4GB RAM minimum
 
 ### Installation
@@ -75,14 +75,13 @@ pip install -e ".[dev,eval]"
 
 # Copy environment template
 cp .env.example .env
-# Edit .env and add your HF_API_KEY
+# Edit .env and add your GROQ_API_KEY
 ```
 
 ### Build the Index
 
 ```bash
-# Download TSpec-LLM dataset (requires HuggingFace login)
-huggingface-cli login
+# Download TSpec-LLM dataset (requires HuggingFace account)
 python scripts/download_data.py
 
 # Build LanceDB index

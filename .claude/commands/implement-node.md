@@ -9,7 +9,7 @@ Implement a LangGraph node following the project patterns.
 3. **Check existing patterns** in other implemented nodes
 4. **Write tests first** in `tests/unit/test_{node_name}.py`:
    - Use fixtures from `tests/conftest.py`
-   - Mock LLM responses with `mock_hf_llm_response` fixture
+   - Mock LLM responses with `mock_llm_response` fixture
    - Test both success and failure cases
 5. **Implement the node** to pass tests
 6. **Run verification**:

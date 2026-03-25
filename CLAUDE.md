@@ -23,7 +23,7 @@ Build a question-answering system that:
 - **Framework**: LangGraph for agentic orchestration
 - **Vector Store**: LanceDB (embedded, persistent, hybrid BM25+vector)
 - **Embeddings**: `nomic-ai/nomic-embed-text-v1.5` via fastembed (ONNX, 768d, local)
-- **LLM**: `Qwen/Qwen2.5-3B-Instruct` via HuggingFace Inference API (or local GGUF)
+- **LLM**: `meta-llama/llama-4-scout-17b-16e-instruct` via Groq cloud API (or local GGUF)
 - **API**: FastAPI
 - **Observability**: Arize Phoenix with OpenTelemetry
 - **Evaluation**: RAGAS metrics
@@ -79,7 +79,7 @@ Implemented (ready to use):
 
 Needs implementation (placeholders exist):
 - `retrieval/chunker.py` - Document chunking
-- `retrieval/embeddings.py` - HuggingFace embeddings client
+- `retrieval/embedder.py` - fastembed embeddings client
 - `retrieval/resources.py` - LanceDB Store + fastembed singletons
 - `nodes/*.py` - All LangGraph nodes
 
@@ -108,7 +108,7 @@ model = settings.embedding_model
 ## Constraints
 
 - **Memory**: 4GB RAM limit (k8s pod constraint)
-- **API**: HuggingFace free tier (rate limited)
+- **API**: Groq free tier (rate limited — 30K TPM / 500K TPD)
 - **Index**: Must fit in memory (~1.5GB for 500K vectors)
 
 ## Testing

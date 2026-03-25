@@ -35,7 +35,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "langchain>=0.3.0",
     "langchain-community>=0.3.0",
-    "langchain-huggingface>=0.1.0",
+    "langchain-openai>=0.2.0",
     
     # Vector Store & Embeddings
     "lancedb>=0.13.0",
@@ -53,7 +53,6 @@ dependencies = [
     # Data Processing
     "numpy>=1.26.0",
     "pandas>=2.2.0",
-    "huggingface-hub>=0.26.0",
     "markitdown[pdf,docx,pptx,xlsx,html]>=0.1.0",
     
     # Utilities
@@ -89,9 +88,12 @@ eval = [
     "ragas>=0.2.0",
     "arize-phoenix>=5.0.0",
     "openinference-instrumentation-langchain>=0.1.0",
-    
+
     # LangChain Evaluation
     "langsmith>=0.1.0",
+
+    # Dataset access (scripts/download_data.py — downloads TSpec-LLM from HuggingFace Hub)
+    "huggingface-hub>=0.26.0",
 ]
 
 ui = [
@@ -234,7 +236,6 @@ module = [
     "langgraph.*",
     "langchain.*",
     "langchain_community.*",
-    "langchain_huggingface.*",
     "ragas.*",
     "phoenix.*",
     "gradio.*",

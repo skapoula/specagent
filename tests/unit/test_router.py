@@ -171,7 +171,7 @@ class TestRouterNode:
 
     @patch('specagent.nodes.router.create_llm')
     def test_router_uses_hf_hub_settings(self, mock_create_llm):
-        """Test that router uses HuggingFaceEndpoint with correct settings."""
+        """Test that router calls create_llm and uses the returned LLM."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = '{"route": "retrieve", "reasoning": "Test"}'
         mock_create_llm.return_value = mock_llm

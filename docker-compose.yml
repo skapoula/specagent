@@ -22,7 +22,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - HF_API_KEY=${HF_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
       - LOG_LEVEL=DEBUG
       - ENABLE_TRACING=true
       - PHOENIX_ENDPOINT=http://phoenix:6006
@@ -81,7 +81,7 @@ services:
     ports:
       - "7860:7860"
     environment:
-      - HF_API_KEY=${HF_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
       - API_ENDPOINT=http://api:8000
     depends_on:
       - api
