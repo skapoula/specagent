@@ -62,7 +62,7 @@ dependencies = [
     "rich>=13.9.0",
     "typer>=0.13.0",
     # Tracing
-    "langsmith>=0.1.0",
+    "langsmith>=0.6.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
