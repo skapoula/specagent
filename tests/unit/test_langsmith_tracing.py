@@ -161,5 +161,46 @@ def test_setup_langsmith_missing_package_warns():
 @pytest.mark.unit
 def test_setup_langsmith_tracing_exported_from_tracing_package():
     """setup_langsmith_tracing is importable from specagent.tracing."""
-    from specagent.tracing import setup_langsmith_tracing  # noqa: PLC0415 — intentional late import for test isolation
+    from specagent.tracing import (  # noqa: PLC0415 — intentional late import for test isolation
+        setup_langsmith_tracing,
+    )
     assert callable(setup_langsmith_tracing)
+
+
+@pytest.mark.unit
+def test_api_lifespan_calls_setup_langsmith_tracing():
+    """FastAPI lifespan calls setup_langsmith_tracing() when settings.enable_langsmith is True."""
+    from unittest.mock import (  # noqa: PLC0415 — reload pattern requires in-function import
+        MagicMock,
+        patch,
+    )
+
+    from fastapi.testclient import (  # noqa: PLC0415 — reload pattern requires in-function import
+        TestClient,
+    )
+
+    mock_langsmith = MagicMock()
+    mock_init = MagicMock(return_value={"store": "ok", "embedder": "ok"})
+
+    with (
+        patch("specagent.api.main.initialize_resources", mock_init),
+        patch("specagent.api.main.settings") as mock_cfg,
+        patch("specagent.tracing.langsmith.setup_langsmith_tracing", mock_langsmith),
+    ):
+        mock_cfg.enable_tracing = False
+        mock_cfg.enable_langsmith = True
+        mock_cfg.cors_allow_origins = ["http://localhost:3000"]
+        mock_cfg.api_host = "0.0.0.0"
+        mock_cfg.api_port = 8000
+
+        from importlib import reload  # noqa: PLC0415 — reload pattern requires in-function import
+
+        from specagent.api import (  # noqa: PLC0415 — reload pattern requires in-function import
+            main as api_module,
+        )
+        reload(api_module)
+
+        with TestClient(api_module.app):
+            pass
+
+    mock_langsmith.assert_called_once()

@@ -204,6 +204,11 @@ async def lifespan(app: FastAPI):
 
         setup_tracing()
 
+    if settings.enable_langsmith:
+        from specagent.tracing.langsmith import setup_langsmith_tracing  # noqa: PLC0415
+
+        setup_langsmith_tracing()
+
     yield
 
     logger.info("Shutting down SpecAgent...")
