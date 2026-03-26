@@ -11,6 +11,7 @@ Usage:
     setup_langsmith_tracing()  # Call once at application startup
 """
 
+import importlib.util
 import logging
 import os
 import warnings
@@ -37,9 +38,7 @@ def setup_langsmith_tracing() -> None:
         logger.debug("LangSmith tracing disabled (ENABLE_LANGSMITH=false)")
         return
 
-    try:
-        import langsmith  # noqa: F401, PLC0415 — import check only; graceful fallback if not installed
-    except ImportError:
+    if importlib.util.find_spec("langsmith") is None:
         warnings.warn(
             "LangSmith not installed. Install with: pip install langsmith",
             stacklevel=2,
