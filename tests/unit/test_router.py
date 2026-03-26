@@ -348,20 +348,21 @@ class TestRouterNode:
         # Verify create_llm was called
         mock_create_llm.assert_called_once()
 
-    @pytest.mark.skip(reason="Test needs update for JSON parsing mode")
     @patch("specagent.nodes.router.create_llm")
     def test_router_prompt_contains_question(self, mock_create_llm):
-        """Test that router prompt includes the user's question."""
+        """Router prompt passed to the LLM includes the user's question."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = '{"route": "retrieve", "reasoning": "Test"}'
+        mock_create_llm.return_value = mock_llm
 
         test_question = "What is the maximum bandwidth for 5G NR?"
         state = create_initial_state(test_question)
         result = router_node(state)
 
-        # Simply verify the router processed the question
         assert result["route_decision"] == "retrieve"
         assert result["question"] == test_question
+        prompt_used = mock_llm.invoke.call_args[0][0]
+        assert test_question in prompt_used
 
     @patch("specagent.nodes.router.create_llm")
     def test_router_state_not_modified_on_error(self, mock_create_llm):

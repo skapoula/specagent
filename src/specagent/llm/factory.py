@@ -2,13 +2,12 @@
 LLM factory for creating LLM instances based on configuration.
 
 Provides a unified interface for creating LLM clients regardless of backend
-(Groq, custom OpenAI-compatible endpoint, local GGUF).
+(Groq, custom OpenAI-compatible endpoint).
 
 Backend selection is controlled by the ``llm_provider`` setting:
 
     "groq"            → Groq cloud inference API (default)
     "custom_endpoint" → Self-hosted OpenAI-compatible endpoint (CustomEndpointLLM)
-    "local"           → Local GGUF model (not yet implemented)
 
 All returned objects implement :class:`LLMProtocol` — ``invoke(prompt) -> str``.
 """
@@ -58,8 +57,8 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
         LLM client that implements :class:`LLMProtocol`.
 
     Raises:
-        ValueError: If ``llm_provider`` is ``"groq"`` and ``groq_api_key`` is empty.
-        NotImplementedError: If ``llm_provider`` is ``"local"``.
+        ValueError: If ``llm_provider`` is ``"groq"`` and ``groq_api_key`` is empty,
+            or if an unrecognised provider is configured.
     """
     from specagent.config import settings  # noqa: PLC0415
 
@@ -105,11 +104,34 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
         )
 
     else:
-        # provider == "local"
-        raise NotImplementedError(
-            "Local GGUF model support not yet implemented. "
+        raise ValueError(
+            f"Unknown llm_provider {provider!r}. "
             "Set llm_provider='groq' or llm_provider='custom_endpoint'."
         )
+
+
+def check_llm_health(timeout: int = 30) -> tuple[bool, str]:
+    """Check LLM backend health based on the configured provider.
+
+    For Groq: verifies the API key is present (no network call).
+    For custom_endpoint: performs an HTTP health check against the endpoint.
+
+    Args:
+        timeout: Timeout in seconds for the HTTP check (custom_endpoint only).
+
+    Returns:
+        Tuple of (is_healthy: bool, message: str).
+    """
+    from specagent.config import settings  # noqa: PLC0415
+
+    if settings.llm_provider == "groq":
+        if settings.groq_api_key:
+            return True, "Groq API key present"
+        return False, "GROQ_API_KEY is not set"
+
+    from specagent.llm.custom_endpoint import check_llm_endpoint_health  # noqa: PLC0415
+
+    return check_llm_endpoint_health(timeout=timeout)
 
 
 # Alias for backwards compatibility

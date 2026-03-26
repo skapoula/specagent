@@ -8,28 +8,14 @@ from specagent.retrieval.exceptions import EmbeddingError
 
 
 @pytest.mark.unit
-def test_get_embedder_returns_singleton():
-    """get_embedder() returns the same instance on repeated calls."""
-    mock_te = MagicMock()
-    with patch("specagent.retrieval.embedder.TextEmbedding", return_value=mock_te):
-        from specagent.retrieval import embedder as emb_mod
-
-        emb_mod._embedder = None  # reset singleton
-        r1 = emb_mod.get_embedder()
-        r2 = emb_mod.get_embedder()
-    assert r1 is r2
-
-
-@pytest.mark.unit
 def test_embed_documents_prepends_document_prefix():
     """embed_documents() prepends 'search_document: ' to each text."""
     mock_te = MagicMock()
     mock_te.embed.return_value = iter([[0.1] * 768])
 
-    with patch("specagent.retrieval.embedder.TextEmbedding", return_value=mock_te):
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
         from specagent.retrieval import embedder as emb_mod
 
-        emb_mod._embedder = None
         emb_mod.embed_documents(["hello"])
 
     call_args = list(mock_te.embed.call_args[0][0])
@@ -42,10 +28,9 @@ def test_embed_query_prepends_query_prefix():
     mock_te = MagicMock()
     mock_te.embed.return_value = iter([[0.1] * 768])
 
-    with patch("specagent.retrieval.embedder.TextEmbedding", return_value=mock_te):
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
         from specagent.retrieval import embedder as emb_mod
 
-        emb_mod._embedder = None
         emb_mod.embed_query("hello")
 
     call_args = list(mock_te.embed.call_args[0][0])
@@ -58,8 +43,8 @@ def test_embed_documents_empty_list_returns_empty_array():
     from specagent.retrieval import embedder as emb_mod
 
     mock_te = MagicMock()
-    emb_mod._embedder = mock_te
-    result = emb_mod.embed_documents([])
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        result = emb_mod.embed_documents([])
     assert result.shape[0] == 0
     mock_te.embed.assert_not_called()
 
@@ -71,9 +56,9 @@ def test_embed_documents_vector_count_mismatch_raises_embedding_error():
 
     mock_te = MagicMock()
     mock_te.embed.return_value = iter([[0.1] * 768, [0.2] * 768])  # 2 vecs for 1 text
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="returned 2 vectors"):
-        emb_mod.embed_documents(["only one text"])
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="returned 2 vectors"):
+            emb_mod.embed_documents(["only one text"])
 
 
 @pytest.mark.unit
@@ -83,9 +68,9 @@ def test_embed_documents_reraises_embedding_error():
 
     mock_te = MagicMock()
     mock_te.embed.side_effect = EmbeddingError("inner error")
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="inner error"):
-        emb_mod.embed_documents(["text"])
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="inner error"):
+            emb_mod.embed_documents(["text"])
 
 
 @pytest.mark.unit
@@ -95,9 +80,9 @@ def test_embed_documents_wraps_generic_exception():
 
     mock_te = MagicMock()
     mock_te.embed.side_effect = RuntimeError("model crashed")
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="Failed to embed"):
-        emb_mod.embed_documents(["text"])
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="Failed to embed"):
+            emb_mod.embed_documents(["text"])
 
 
 @pytest.mark.unit
@@ -106,9 +91,9 @@ def test_embed_query_empty_string_raises_embedding_error():
     from specagent.retrieval import embedder as emb_mod
 
     mock_te = MagicMock()
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="must not be empty"):
-        emb_mod.embed_query("")
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="must not be empty"):
+            emb_mod.embed_query("")
     mock_te.embed.assert_not_called()
 
 
@@ -118,9 +103,9 @@ def test_embed_query_whitespace_only_raises_embedding_error():
     from specagent.retrieval import embedder as emb_mod
 
     mock_te = MagicMock()
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="must not be empty"):
-        emb_mod.embed_query("   ")
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="must not be empty"):
+            emb_mod.embed_query("   ")
 
 
 @pytest.mark.unit
@@ -130,9 +115,9 @@ def test_embed_query_reraises_embedding_error():
 
     mock_te = MagicMock()
     mock_te.embed.side_effect = EmbeddingError("inner query error")
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="inner query error"):
-        emb_mod.embed_query("what is HARQ?")
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="inner query error"):
+            emb_mod.embed_query("what is HARQ?")
 
 
 @pytest.mark.unit
@@ -142,6 +127,6 @@ def test_embed_query_wraps_generic_exception():
 
     mock_te = MagicMock()
     mock_te.embed.side_effect = RuntimeError("model dead")
-    emb_mod._embedder = mock_te
-    with pytest.raises(EmbeddingError, match="Failed to embed query"):
-        emb_mod.embed_query("what is HARQ?")
+    with patch("specagent.retrieval.embedder.get_embedder", return_value=mock_te):
+        with pytest.raises(EmbeddingError, match="Failed to embed query"):
+            emb_mod.embed_query("what is HARQ?")

@@ -153,6 +153,12 @@ class GraphState(TypedDict, total=False):
     """Number of times the generator has been re-run after a failed hallucination check."""
 
     # ==========================================================================
+    # Per-request overrides
+    # ==========================================================================
+    max_rewrites_override: int | None
+    """Per-request max rewrites override; if None, falls back to settings.max_rewrites."""
+
+    # ==========================================================================
     # Metadata
     # ==========================================================================
     error: str | None
@@ -189,6 +195,7 @@ def create_initial_state(question: str) -> GraphState:
         citations=[],
         rewrite_count=0,
         regeneration_count=0,
+        max_rewrites_override=None,
         generation=None,
         error=None,
         ungrounded_claims=[],

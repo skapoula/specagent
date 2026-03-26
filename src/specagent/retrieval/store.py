@@ -338,29 +338,6 @@ class Store:
         except Exception as fts_err:
             logger.warning("FTS index rebuild failed (hybrid search may be degraded): %s", fts_err)
 
-    def _vector_search(
-        self,
-        table: lancedb.table.Table,
-        embedding: list[float],
-        where: str | None,
-        top_k: int,
-    ) -> list[dict]:
-        """Run a pure vector (ANN) search against an open table.
-
-        Args:
-            table: Open LanceDB table.
-            embedding: Query vector.
-            where: Optional SQL WHERE clause string.
-            top_k: Maximum number of results to return.
-
-        Returns:
-            Raw row dicts from LanceDB.
-        """
-        q = table.search(np.array(embedding, dtype=np.float32))
-        if where is not None:
-            q = q.where(where)
-        return q.refine_factor(settings.search_refine_factor).limit(top_k).to_list()
-
     def search(
         self,
         embedding: list[float],
@@ -371,8 +348,8 @@ class Store:
     ) -> list[tuple["ChunkRecord", float]]:
         """Hybrid (BM25 + vector) search over stored chunks.
 
-        Attempts hybrid search when hybrid_search_enabled is True; falls back to
-        vector-only search if the FTS index is absent or the hybrid query fails.
+        Requires a valid FTS index on the content column — call rebuild_fts_index()
+        or upsert_chunks() to ensure the index is current before searching.
 
         Args:
             embedding: Query vector of shape (embedding_dimension,).
@@ -391,22 +368,19 @@ class Store:
         """
         try:
             table = self._table()
+            if table.count_rows() == 0:
+                return []
+
             where = _build_where_clause(library, filter)
 
-            rows: list[dict] = []
-            if settings.hybrid_search_enabled:
-                try:
-                    query = table.search(query_text, query_type="hybrid").vector(
-                        np.array(embedding, dtype=np.float32)
-                    )
-                    if where is not None:
-                        query = query.where(where)
-                    rows = query.refine_factor(settings.search_refine_factor).limit(top_k).to_list()
-                except Exception as hybrid_err:
-                    logger.warning("Hybrid search fell back to vector-only: %s", hybrid_err)
-                    rows = self._vector_search(table, embedding, where, top_k)
-            else:
-                rows = self._vector_search(table, embedding, where, top_k)
+            query = (
+                table.search(query_type="hybrid")
+                .vector(np.array(embedding, dtype=np.float32))
+                .text(query_text)
+            )
+            if where is not None:
+                query = query.where(where)
+            rows = query.refine_factor(settings.search_refine_factor).limit(top_k).to_list()
 
             results = []
             for row in rows:

@@ -385,26 +385,18 @@ def test_delete_exception_raises_store_error():
 
 
 @pytest.mark.unit
-def test_search_hybrid_falls_back_to_vector():
+def test_search_hybrid_raises_store_error_on_fts_failure():
+    from specagent.retrieval.exceptions import StoreError
     from specagent.retrieval.store import Store
 
     store_obj = Store(uri="/tmp/test_store_unit", table_name="docs")
     mock_table = MagicMock()
-
-    def _mock_search(*args, **kwargs):
-        if kwargs.get("query_type") == "hybrid":
-            raise RuntimeError("no fts index")
-        q = MagicMock()
-        q.refine_factor.return_value.limit.return_value.to_list.return_value = []
-        return q
-
-    mock_table.search.side_effect = _mock_search
+    mock_table.search.side_effect = RuntimeError("no fts index")
     with patch("specagent.retrieval.store._open_table", return_value=mock_table):
         with patch("specagent.retrieval.store.settings") as ms:
-            ms.hybrid_search_enabled = True
             ms.search_refine_factor = 2
-            results = store_obj.search([0.1] * 768, "query", 5, None, None)
-    assert results == []
+            with pytest.raises(StoreError, match="Search failed"):
+                store_obj.search([0.1] * 768, "query", 5, None, None)
 
 
 @pytest.mark.unit
@@ -417,10 +409,30 @@ def test_search_exception_raises_store_error():
     mock_table.search.side_effect = RuntimeError("unexpected db failure")
     with patch("specagent.retrieval.store._open_table", return_value=mock_table):
         with patch("specagent.retrieval.store.settings") as ms:
-            ms.hybrid_search_enabled = False
             ms.search_refine_factor = 2
             with pytest.raises(StoreError, match="Search failed"):
                 store_obj.search([0.1] * 768, "query", 5, None, None)
+
+
+@pytest.mark.unit
+def test_search_without_library_filter_skips_where_clause():
+    """search() with library=None and filter=None sets no WHERE clause."""
+    from specagent.retrieval.store import Store
+
+    store_obj = Store(uri="/tmp/test_store_unit", table_name="docs")
+    mock_table = MagicMock()
+    mock_table.count_rows.return_value = 1
+    mock_query = MagicMock()
+    mock_query.vector.return_value.text.return_value = mock_query
+    mock_query.refine_factor.return_value.limit.return_value.to_list.return_value = []
+    mock_table.search.return_value = mock_query
+    with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+        with patch("specagent.retrieval.store.settings") as ms:
+            ms.search_refine_factor = 2
+            results = store_obj.search([0.1] * 768, "query", 5, None, None)
+    # where is None — query.where() must NOT have been called
+    mock_query.where.assert_not_called()
+    assert results == []
 
 
 @pytest.mark.unit

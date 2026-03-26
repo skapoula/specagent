@@ -778,7 +778,7 @@ def test_run_benchmark_health_check_failure(tmp_path):
     """run_benchmark raises RuntimeError when health check fails."""
     with (
         patch(
-            "specagent.llm.custom_endpoint.check_llm_endpoint_health",
+            "specagent.llm.factory.check_llm_health",
             return_value=(False, "endpoint down"),
         ),
         pytest.raises(RuntimeError, match="LLM endpoint unavailable"),
@@ -812,7 +812,7 @@ def test_run_benchmark_health_check_success_prints_message(tmp_path):
     }
     with (
         patch(
-            "specagent.llm.custom_endpoint.check_llm_endpoint_health",
+            "specagent.llm.factory.check_llm_health",
             return_value=(True, "endpoint OK"),
         ),
         patch("specagent.graph.workflow.run_query", return_value=mock_state),

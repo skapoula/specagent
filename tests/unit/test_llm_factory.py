@@ -197,14 +197,61 @@ class TestCreateLLM:
         mock_custom_endpoint.assert_called_once()
 
     # ------------------------------------------------------------------
-    # local provider
+    # unknown provider
     # ------------------------------------------------------------------
 
     @patch("specagent.config.settings")
-    def test_create_llm_local_llm_raises_not_implemented(self, mock_settings):
-        """create_llm raises NotImplementedError for llm_provider='local'."""
-        mock_settings.llm_provider = "local"
+    def test_create_llm_unknown_provider_raises_value_error(self, mock_settings):
+        """create_llm raises ValueError for an unrecognised llm_provider."""
+        mock_settings.llm_provider = "unknown_provider"
         mock_settings.use_custom_endpoint = False
 
-        with pytest.raises(NotImplementedError, match="Local GGUF model support"):
+        with pytest.raises(ValueError, match="Unknown llm_provider"):
             create_llm()
+
+
+@pytest.mark.unit
+class TestCheckLlmHealth:
+    """Tests for check_llm_health provider-aware dispatcher."""
+
+    @patch("specagent.config.settings")
+    def test_groq_with_api_key_returns_healthy(self, mock_settings):
+        """Groq provider with API key set → healthy, no network call."""
+        from specagent.llm.factory import check_llm_health
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test_key"
+        is_healthy, message = check_llm_health()
+        assert is_healthy is True
+        assert "Groq" in message
+
+    @patch("specagent.config.settings")
+    def test_groq_without_api_key_returns_unhealthy(self, mock_settings):
+        """Groq provider with no API key → unhealthy."""
+        from specagent.llm.factory import check_llm_health
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = ""
+        is_healthy, message = check_llm_health()
+        assert is_healthy is False
+        assert "GROQ_API_KEY" in message
+
+    @patch("specagent.config.settings")
+    @patch("specagent.llm.custom_endpoint.check_llm_endpoint_health")
+    def test_custom_endpoint_delegates_to_endpoint_health(self, mock_health, mock_settings):
+        """custom_endpoint provider delegates to check_llm_endpoint_health."""
+        from specagent.llm.factory import check_llm_health
+        mock_settings.llm_provider = "custom_endpoint"
+        mock_health.return_value = (True, "Endpoint healthy (responded in 0.12s)")
+        is_healthy, message = check_llm_health(timeout=5)
+        mock_health.assert_called_once_with(timeout=5)
+        assert is_healthy is True
+
+    @patch("specagent.config.settings")
+    @patch("specagent.llm.custom_endpoint.check_llm_endpoint_health")
+    def test_custom_endpoint_unhealthy_propagates(self, mock_health, mock_settings):
+        """Unhealthy custom_endpoint result propagates correctly."""
+        from specagent.llm.factory import check_llm_health
+        mock_settings.llm_provider = "custom_endpoint"
+        mock_health.return_value = (False, "Connection failed: timeout")
+        is_healthy, message = check_llm_health()
+        assert is_healthy is False
+        assert "Connection failed" in message

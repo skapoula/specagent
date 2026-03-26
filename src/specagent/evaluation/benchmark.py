@@ -45,6 +45,7 @@ class BenchmarkResult:
     difficulty: str
     rewrites: int = 0
     error: str | None = None
+    node_timings: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -61,6 +62,7 @@ class BenchmarkReport:
     results: list[BenchmarkResult]
     confidence_distribution: dict[str, int] = field(default_factory=dict)
     confidence_stats: dict[str, float] = field(default_factory=dict)
+    average_node_timings: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -74,6 +76,7 @@ class BenchmarkReport:
             "average_confidence": self.average_confidence,
             "confidence_distribution": self.confidence_distribution,
             "confidence_stats": self.confidence_stats,
+            "average_node_timings": self.average_node_timings,
             "results": [
                 {
                     "question_id": r.question_id,
@@ -152,6 +155,21 @@ class BenchmarkReport:
             for range_label, count in self.confidence_distribution.items():
                 percentage = (count / self.total_questions * 100) if self.total_questions > 0 else 0
                 lines.append(f"| {range_label} | {count} | {percentage:.1f}% |")
+
+        if self.average_node_timings:
+            lines.extend(
+                [
+                    "",
+                    "## Node Timing Breakdown",
+                    "",
+                    "Average time spent per node across all questions:",
+                    "",
+                    "| Node | Average (ms) |",
+                    "|------|-------------|",
+                ]
+            )
+            for node, avg_ms in sorted(self.average_node_timings.items()):
+                lines.append(f"| {node} | {avg_ms:.0f} |")
 
         lines.extend(
             [
@@ -402,24 +420,23 @@ def run_benchmark(
         RuntimeError: If LLM endpoint health check fails
     """
     from specagent.graph.workflow import run_query
-    from specagent.llm.custom_endpoint import check_llm_endpoint_health
+    from specagent.llm.factory import check_llm_health
 
     # Perform health check before starting benchmark
     if not skip_health_check:
-        print("\nPerforming LLM endpoint health check...")
-        is_healthy, message = check_llm_endpoint_health(timeout=30)
+        logger.info("Performing LLM endpoint health check...")
+        is_healthy, message = check_llm_health(timeout=30)
 
         if not is_healthy:
-            error_msg = (
-                f"\n✗ LLM endpoint health check failed: {message}\n"
-                f"  The benchmark cannot proceed with an unavailable endpoint.\n"
-                f"  Please check the endpoint status and try again.\n"
-                f"  To skip this check (not recommended), use --skip-health-check flag."
+            logger.error(
+                "LLM endpoint health check failed: %s. "
+                "The benchmark cannot proceed with an unavailable endpoint. "
+                "To skip this check (not recommended), use --skip-health-check flag.",
+                message,
             )
-            print(error_msg)
             raise RuntimeError(f"LLM endpoint unavailable: {message}")
 
-        print(f"✓ {message}\n")
+        logger.info("LLM endpoint healthy: %s", message)
 
     # Apply limit if specified
     if limit is not None:
@@ -484,6 +501,7 @@ def run_benchmark(
                         difficulty=question.difficulty,
                         rewrites=state.get("rewrite_count", 0),
                         error=error_msg,
+                        node_timings=state.get("node_timings", {}),
                     )
                 )
                 continue
@@ -503,6 +521,7 @@ def run_benchmark(
                         difficulty=question.difficulty,
                         rewrites=state.get("rewrite_count", 0),
                         error="Question was rejected by router",
+                        node_timings=state.get("node_timings", {}),
                     )
                 )
                 continue
@@ -575,6 +594,7 @@ def run_benchmark(
                     difficulty=question.difficulty,
                     rewrites=rewrite_count,
                     error=None,
+                    node_timings=node_timings,
                 )
             )
 
@@ -644,11 +664,18 @@ def run_benchmark(
 
     # Compute aggregate node timing statistics
     all_node_timings: dict[str, list[float]] = {}
-    for result in results:
-        # Note: We don't have direct access to node_timings from results
-        # This would require storing node_timings in BenchmarkResult
-        # For now, skip aggregate timing in summary
-        pass
+    for r in results:
+        for node, ms in r.node_timings.items():
+            all_node_timings.setdefault(node, []).append(ms)
+    average_node_timings = {
+        node: sum(times) / len(times) for node, times in all_node_timings.items()
+    }
+
+    if average_node_timings:
+        trace.info("Node Timing Breakdown (averages):")
+        for node, avg_ms in sorted(average_node_timings.items()):
+            trace.info(f"  {node}: {avg_ms:.0f}ms")
+        trace.info("")
 
     trace.info("")
 
@@ -664,6 +691,7 @@ def run_benchmark(
         results=results,
         confidence_distribution=confidence_distribution,
         confidence_stats=confidence_stats,
+        average_node_timings=average_node_timings,
     )
 
     # Save results (output_path already created earlier)

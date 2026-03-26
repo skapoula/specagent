@@ -5,11 +5,8 @@ All configuration is loaded from environment variables with sensible defaults.
 Use a .env file for local development.
 
 Environment Variables:
-    GROQ_API_KEY: Groq cloud API key (required — set llm_provider='groq')
+    GROQ_API_KEY: Groq cloud API key (required when llm_provider='groq')
     EMBEDDING_MODEL: fastembed model ID for embeddings (e.g. nomic-ai/nomic-embed-text-v1.5)
-    LLM_MODEL_PATH: Path to local GGUF model file (used when llm_provider='local')
-    CHUNK_SIZE: Token size for document chunks
-    CHUNK_OVERLAP: Overlap between chunks
     LANCEDB_URI: Path to LanceDB storage directory
     LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
 """
@@ -21,8 +18,8 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Recognised LLM backend identifiers (mirrors net-rca TriageAgentConfig).
-LLMProvider = Literal["custom_endpoint", "local", "groq"]
+# Recognised LLM backend identifiers.
+LLMProvider = Literal["custom_endpoint", "groq"]
 
 
 class Settings(BaseSettings):
@@ -67,7 +64,7 @@ class Settings(BaseSettings):
 
     # ---- Groq-specific (only used when llm_provider == "groq") ----
     # API key for the Groq inference API.  Required when llm_provider is "groq".
-    # Env var: GROQ_API_KEY
+    # Env var: GROQ_API_KEY.
     groq_api_key: str = Field(
         default="",
         description="Groq cloud API key. Required when llm_provider='groq'.",
@@ -104,26 +101,6 @@ class Settings(BaseSettings):
         description="Maximum output tokens per Groq call. Keep low to stay within free-tier TPM limits.",
     )
 
-    # Local GGUF model (when llm_provider='local')
-    llm_model_path: Path = Field(
-        default=Path("/models/qwen3-4b-instruct.Q4_K_M.gguf"),
-        description="Path to local GGUF model file",
-    )
-    llm_model_name: str = Field(
-        default="qwen3-4b-instruct",
-        description="Model name for logging/identification",
-    )
-    llm_n_ctx: int = Field(
-        default=4096,
-        ge=512,
-        le=32768,
-        description="Context window size for LLM",
-    )
-    llm_n_gpu_layers: int = Field(
-        default=0,
-        ge=0,
-        description="Number of layers to offload to GPU (0 for CPU only)",
-    )
     llm_temperature: float = Field(
         default=0.1,
         ge=0.0,
@@ -135,22 +112,6 @@ class Settings(BaseSettings):
         ge=1,
         le=4096,
         description="Maximum tokens for LLM response",
-    )
-
-    # ==========================================================================
-    # Chunking Configuration
-    # ==========================================================================
-    chunk_size: int = Field(
-        default=512,
-        ge=128,
-        le=2048,
-        description="Target size in tokens for document chunks",
-    )
-    chunk_overlap: int = Field(
-        default=64,
-        ge=0,
-        le=256,
-        description="Overlap between consecutive chunks",
     )
 
     # ==========================================================================
@@ -210,10 +171,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Search Configuration
     # ==========================================================================
-    hybrid_search_enabled: bool = Field(
-        default=True,
-        description="Enable BM25 full-text + vector hybrid search",
-    )
     search_refine_factor: int = Field(
         default=10,
         ge=1,
@@ -342,15 +299,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Validators
     # ==========================================================================
-    @field_validator("chunk_overlap")
-    @classmethod
-    def validate_chunk_overlap(cls, v: int, info) -> int:
-        """Ensure overlap is less than chunk size."""
-        chunk_size = info.data.get("chunk_size", 512)
-        if v >= chunk_size:
-            raise ValueError(f"chunk_overlap ({v}) must be less than chunk_size ({chunk_size})")
-        return v
-
     @field_validator("chunk_overlap_tokens")
     @classmethod
     def validate_chunk_overlap_tokens(cls, v: int, info) -> int:

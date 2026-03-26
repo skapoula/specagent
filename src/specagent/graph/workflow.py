@@ -86,6 +86,7 @@ def should_rewrite(state: GraphState) -> Literal["rewrite", "generate"]:
         "rewrite" to reformulate query, "generate" to proceed
     """
     rewrite_count = state.get("rewrite_count", 0)
+    max_rewrites = state.get("max_rewrites_override") or settings.max_rewrites
     retrieved_chunks = state.get("retrieved_chunks", [])
 
     # Fast heuristic: Skip rewriting if top-3 chunks have high similarity
@@ -115,7 +116,7 @@ def should_rewrite(state: GraphState) -> Literal["rewrite", "generate"]:
         # No graded chunks yet - fall back to confidence-only check
         quality_is_poor = avg_confidence < settings.grader_confidence_threshold
 
-    if quality_is_poor and rewrite_count < settings.max_rewrites:
+    if quality_is_poor and rewrite_count < max_rewrites:
         return "rewrite"
 
     return "generate"
@@ -133,7 +134,7 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
         "regenerate" to try again, "finish" to complete
     """
     hallucination_result = state.get("hallucination_check", "grounded")
-    regeneration_count = state.get("regeneration_count", 1)
+    regeneration_count = state.get("regeneration_count", 0)
 
     # Allow exactly one regeneration attempt (count is already incremented by the node)
     if hallucination_result == "not_grounded" and regeneration_count <= 1:
@@ -249,18 +250,21 @@ def _get_compiled_graph() -> CompiledStateGraph:
     return _compiled_graph
 
 
-def run_query(question: str) -> GraphState:
+def run_query(question: str, max_rewrites: int | None = None) -> GraphState:
     """
     Execute a query through the agentic RAG pipeline.
 
     Args:
         question: User's natural language question
+        max_rewrites: Per-request override for max rewrites. Defaults to settings value.
 
     Returns:
         Final graph state with answer, citations, and metadata
     """
     # Create initial state
     state = create_initial_state(question)
+    if max_rewrites is not None:
+        state["max_rewrites_override"] = max_rewrites
 
     # Use cached compiled graph (compiled once per process)
     graph = _get_compiled_graph()

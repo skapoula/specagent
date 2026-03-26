@@ -201,8 +201,53 @@ def benchmark(
 
     console.print(f"[blue]Running {len(questions)} questions...[/blue]")
 
-    # TODO: Implement benchmark execution
-    console.print("[red]Benchmark runner not yet implemented.[/red]")
+    from specagent.evaluation.benchmark import run_benchmark  # noqa: PLC0415
+
+    report = run_benchmark(
+        questions=questions,
+        limit=limit,
+        output_dir=Path(output_dir),
+        skip_health_check=True,
+    )
+
+    table = Table(title="Benchmark Results")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Total Questions", str(report.total_questions))
+    table.add_row("Correct Answers", str(report.correct_answers))
+    table.add_row("Accuracy", f"{report.accuracy:.1%}")
+    for difficulty, acc in sorted(report.accuracy_by_difficulty.items()):
+        table.add_row(f"  {difficulty}", f"{acc:.1%}")
+    console.print(table)
+
+
+@app.command(name="download-model")
+def download_model() -> None:
+    """Download the tokenizer and embedding model to the local cache."""
+    from transformers import AutoTokenizer
+
+    from specagent.config import settings
+    from specagent.retrieval.resources import get_embedder
+
+    model_id = settings.embedding_model
+
+    console.print(f"[blue]Downloading tokenizer: {model_id}[/blue]")
+    try:
+        AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)  # nosec B615
+        console.print("[green]Tokenizer downloaded.[/green]")
+    except Exception as e:
+        console.print(f"[red]Tokenizer download failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[blue]Downloading embedding model (ONNX): {model_id}[/blue]")
+    try:
+        get_embedder()
+        console.print("[green]Embedding model downloaded.[/green]")
+    except Exception as e:
+        console.print(f"[red]Embedding model download failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[green]All models ready.[/green]")
 
 
 @app.command()

@@ -37,8 +37,6 @@ def mock_settings():
         "os.environ",
         {
             "EMBEDDING_MODEL": "nomic-ai/nomic-embed-text-v1.5",
-            "CHUNK_SIZE": "512",
-            "CHUNK_OVERLAP": "64",
             "ENABLE_TRACING": "false",
         },
     ):

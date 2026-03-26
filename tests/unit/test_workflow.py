@@ -300,6 +300,18 @@ class TestRunQuery:
         assert result["question"] == sample_question
         assert result["generation"] == "Test answer"
 
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_run_query_sets_max_rewrites_override(self, mock_get_graph, sample_question):
+        """run_query with max_rewrites sets max_rewrites_override in initial state."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = create_initial_state(sample_question)
+        mock_get_graph.return_value = mock_graph
+
+        run_query(sample_question, max_rewrites=3)
+
+        invoked_state = mock_graph.invoke.call_args[0][0]
+        assert invoked_state["max_rewrites_override"] == 3
+
 
 @pytest.mark.unit
 class TestGetGraphVisualization:
