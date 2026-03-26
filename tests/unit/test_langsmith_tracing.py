@@ -204,3 +204,56 @@ def test_api_lifespan_calls_setup_langsmith_tracing():
             pass
 
     mock_langsmith.assert_called_once()
+
+
+@pytest.mark.unit
+def test_cli_query_calls_setup_langsmith_tracing():
+    """CLI query command calls setup_langsmith_tracing() before run_query()."""
+    from unittest.mock import (  # noqa: PLC0415 — in-function import for test isolation
+        MagicMock,
+        patch,
+    )
+
+    from typer.testing import CliRunner  # noqa: PLC0415 — in-function import for test isolation
+
+    runner = CliRunner()
+    mock_setup = MagicMock()
+    mock_run_query = MagicMock(return_value={
+        "route_decision": "reject",
+        "route_reasoning": "off-topic",
+    })
+
+    with (
+        patch("specagent.cli.setup_langsmith_tracing", mock_setup),
+        patch("specagent.graph.workflow.run_query", mock_run_query),
+    ):
+        from specagent.cli import app  # noqa: PLC0415 — in-function import for test isolation
+        result = runner.invoke(app, ["query", "What is NR?"])
+
+    assert result.exit_code == 0
+    mock_setup.assert_called_once()
+
+
+@pytest.mark.unit
+def test_cli_benchmark_calls_setup_langsmith_tracing(tmp_path):
+    """CLI benchmark command calls setup_langsmith_tracing()."""
+    import json  # noqa: PLC0415 — in-function import for test isolation
+    from unittest.mock import (  # noqa: PLC0415 — in-function import for test isolation
+        MagicMock,
+        patch,
+    )
+
+    from typer.testing import CliRunner  # noqa: PLC0415 — in-function import for test isolation
+
+    runner = CliRunner()
+    mock_setup = MagicMock()
+
+    # Create a minimal valid benchmark dataset file
+    dataset_file = tmp_path / "bench.json"
+    dataset_file.write_text(json.dumps([]))
+
+    with patch("specagent.cli.setup_langsmith_tracing", mock_setup):
+        from specagent.cli import app  # noqa: PLC0415 — in-function import for test isolation
+        runner.invoke(app, ["benchmark", "--dataset", str(dataset_file)])
+
+    mock_setup.assert_called_once()

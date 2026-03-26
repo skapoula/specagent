@@ -12,6 +12,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from specagent.tracing.langsmith import setup_langsmith_tracing
+
 app = typer.Typer(
     name="specagent",
     help="Agentic RAG for 3GPP specifications",
@@ -46,6 +48,7 @@ def query(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
     """Run a single query through the pipeline."""
+    setup_langsmith_tracing()
     from specagent.graph.workflow import run_query
 
     console.print(f"[blue]Question:[/blue] {question}\n")
@@ -181,6 +184,7 @@ def benchmark(
     limit: int = typer.Option(None, help="Limit number of questions"),
 ) -> None:
     """Run evaluation benchmark."""
+    setup_langsmith_tracing()
     from pathlib import Path
 
     from specagent.evaluation.benchmark import (
