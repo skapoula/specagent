@@ -61,6 +61,8 @@ dependencies = [
     "structlog>=24.4.0",
     "rich>=13.9.0",
     "typer>=0.13.0",
+    # Tracing
+    "langsmith>=0.1.0",
 ]
 
 [project.optional-dependencies]
