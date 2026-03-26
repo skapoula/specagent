@@ -404,6 +404,53 @@ class TestBenchmarkCommand:
 
 
 @pytest.mark.unit
+class TestDownloadModelCommand:
+    """Tests for the download-model command."""
+
+    @patch("specagent.retrieval.resources.get_embedder")
+    @patch("transformers.AutoTokenizer")
+    @patch("specagent.config.settings")
+    def test_download_model_success(self, mock_settings, mock_tokenizer_cls, mock_get_embedder):
+        """download-model downloads tokenizer and embedder successfully."""
+        mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
+        mock_tokenizer_cls.from_pretrained.return_value = MagicMock()
+        mock_get_embedder.return_value = MagicMock()
+
+        result = runner.invoke(app, ["download-model"])
+
+        assert result.exit_code == 0
+        assert "ready" in result.output.lower()
+
+    @patch("transformers.AutoTokenizer")
+    @patch("specagent.config.settings")
+    def test_download_model_tokenizer_failure_exits_1(self, mock_settings, mock_tokenizer_cls):
+        """download-model exits with code 1 when tokenizer download fails."""
+        mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
+        mock_tokenizer_cls.from_pretrained.side_effect = OSError("network error")
+
+        result = runner.invoke(app, ["download-model"])
+
+        assert result.exit_code == 1
+        assert "failed" in result.output.lower()
+
+    @patch("specagent.retrieval.resources.get_embedder")
+    @patch("transformers.AutoTokenizer")
+    @patch("specagent.config.settings")
+    def test_download_model_embedder_failure_exits_1(
+        self, mock_settings, mock_tokenizer_cls, mock_get_embedder
+    ):
+        """download-model exits with code 1 when embedder download fails."""
+        mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
+        mock_tokenizer_cls.from_pretrained.return_value = MagicMock()
+        mock_get_embedder.side_effect = RuntimeError("ONNX download failed")
+
+        result = runner.invoke(app, ["download-model"])
+
+        assert result.exit_code == 1
+        assert "failed" in result.output.lower()
+
+
+@pytest.mark.unit
 class TestVersionCommand:
     def test_version_shows_version_string(self):
         """version command prints the package version."""

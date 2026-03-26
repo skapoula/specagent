@@ -221,6 +221,35 @@ def benchmark(
     console.print(table)
 
 
+@app.command(name="download-model")
+def download_model() -> None:
+    """Download the tokenizer and embedding model to the local cache."""
+    from transformers import AutoTokenizer
+
+    from specagent.config import settings
+    from specagent.retrieval.resources import get_embedder
+
+    model_id = settings.embedding_model
+
+    console.print(f"[blue]Downloading tokenizer: {model_id}[/blue]")
+    try:
+        AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)  # nosec B615
+        console.print("[green]Tokenizer downloaded.[/green]")
+    except Exception as e:
+        console.print(f"[red]Tokenizer download failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[blue]Downloading embedding model (ONNX): {model_id}[/blue]")
+    try:
+        get_embedder()
+        console.print("[green]Embedding model downloaded.[/green]")
+    except Exception as e:
+        console.print(f"[red]Embedding model download failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[green]All models ready.[/green]")
+
+
 @app.command()
 def version() -> None:
     """Show version information."""
