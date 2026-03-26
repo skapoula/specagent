@@ -254,7 +254,7 @@ def test_check_llm_endpoint_health():
     ):
         ms.custom_endpoint_url = "http://test"
         mock_cls.return_value.health_check.return_value = (True, "ok")
-        ok, msg = check_llm_endpoint_health()
+        ok, _ = check_llm_endpoint_health()
     assert ok is True
 
 
@@ -268,7 +268,7 @@ def test_check_llm_endpoint_health_with_timeout():
     ):
         ms.custom_endpoint_url = "http://test"
         mock_cls.return_value.health_check.return_value = (False, "timed out after 10s")
-        ok, msg = check_llm_endpoint_health(timeout=10)
+        ok, _ = check_llm_endpoint_health(timeout=10)
     assert ok is False
     mock_cls.return_value.health_check.assert_called_once_with(timeout=10)
 
