@@ -197,14 +197,14 @@ class TestCreateLLM:
         mock_custom_endpoint.assert_called_once()
 
     # ------------------------------------------------------------------
-    # local provider
+    # unknown provider
     # ------------------------------------------------------------------
 
     @patch("specagent.config.settings")
-    def test_create_llm_local_llm_raises_not_implemented(self, mock_settings):
-        """create_llm raises NotImplementedError for llm_provider='local'."""
-        mock_settings.llm_provider = "local"
+    def test_create_llm_unknown_provider_raises_value_error(self, mock_settings):
+        """create_llm raises ValueError for an unrecognised llm_provider."""
+        mock_settings.llm_provider = "unknown_provider"
         mock_settings.use_custom_endpoint = False
 
-        with pytest.raises(NotImplementedError, match="Local GGUF model support"):
+        with pytest.raises(ValueError, match="Unknown llm_provider"):
             create_llm()

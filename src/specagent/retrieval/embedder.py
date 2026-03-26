@@ -3,28 +3,17 @@
 import logging
 
 import numpy as np
-from fastembed import TextEmbedding
 from numpy.typing import NDArray
 
 from specagent.config import settings
 from specagent.retrieval.exceptions import EmbeddingError
+from specagent.retrieval.resources import get_embedder
 
 logger = logging.getLogger(__name__)
 
 # nomic-embed-text-v1.5 uses task prefixes for asymmetric search.
 _DOC_PREFIX = "search_document: "
 _QUERY_PREFIX = "search_query: "
-
-_embedder: "TextEmbedding | None" = None
-
-
-def get_embedder() -> "TextEmbedding":
-    """Return the TextEmbedding singleton, initialising on first call."""
-    global _embedder  # noqa: PLW0603
-    if _embedder is None:
-        logger.info("Loading embedding model %s", settings.embedding_model)
-        _embedder = TextEmbedding(model_name=settings.embedding_model)
-    return _embedder
 
 
 def embed_documents(texts: list[str]) -> NDArray[np.float32]:

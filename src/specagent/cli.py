@@ -201,8 +201,24 @@ def benchmark(
 
     console.print(f"[blue]Running {len(questions)} questions...[/blue]")
 
-    # TODO: Implement benchmark execution
-    console.print("[red]Benchmark runner not yet implemented.[/red]")
+    from specagent.evaluation.benchmark import run_benchmark  # noqa: PLC0415
+
+    report = run_benchmark(
+        questions=questions,
+        limit=limit,
+        output_dir=Path(output_dir),
+        skip_health_check=True,
+    )
+
+    table = Table(title="Benchmark Results")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Total Questions", str(report.total_questions))
+    table.add_row("Correct Answers", str(report.correct_answers))
+    table.add_row("Accuracy", f"{report.accuracy:.1%}")
+    for difficulty, acc in sorted(report.accuracy_by_difficulty.items()):
+        table.add_row(f"  {difficulty}", f"{acc:.1%}")
+    console.print(table)
 
 
 @app.command()

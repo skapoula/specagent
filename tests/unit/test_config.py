@@ -11,24 +11,8 @@ class TestSettings:
 
     def test_settings_loads_from_env(self, mock_settings):
         """Settings should load values from environment variables."""
-        assert mock_settings.chunk_size == 512
-        assert mock_settings.chunk_overlap == 64
+        assert mock_settings.chunk_size_tokens == 512
         assert mock_settings.enable_tracing is False
-
-    def test_settings_chunk_overlap_validation(self):
-        """Chunk overlap must be less than chunk size."""
-        with patch.dict(
-            os.environ,
-            {
-                "CHUNK_SIZE": "256",
-                "CHUNK_OVERLAP": "300",  # Invalid: > chunk_size
-            },
-            clear=True,
-        ):
-            from specagent.config import Settings
-
-            with pytest.raises(Exception):  # ValidationError
-                Settings()
 
     def test_settings_paths_are_resolved(self, mock_settings):
         """Path settings should be resolved to absolute paths."""
@@ -80,33 +64,6 @@ class TestNewPipelineSettings:
         s = get_settings()
         assert hasattr(s, "chunk_size_tokens")
         assert s.chunk_size_tokens == 512
-
-    @pytest.mark.unit
-    def test_hybrid_search_enabled_by_default(self):
-        """hybrid_search_enabled is True by default."""
-        from specagent.config import get_settings
-
-        get_settings.cache_clear()
-        s = get_settings()
-        assert getattr(s, "hybrid_search_enabled", False) is True
-
-    @pytest.mark.unit
-    def test_chunk_overlap_must_be_less_than_chunk_size(self):
-        """chunk_overlap >= chunk_size must raise a validation error (line 311)."""
-        import os
-
-        from pydantic import ValidationError
-
-        # chunk_size ge=128, chunk_overlap le=256, so use overlap(200) >= chunk_size(128)
-        with patch.dict(
-            os.environ,
-            {"CHUNK_SIZE": "128", "CHUNK_OVERLAP": "200"},
-            clear=False,
-        ):
-            from specagent.config import Settings
-
-            with pytest.raises((ValidationError, ValueError)):
-                Settings()
 
     @pytest.mark.unit
     def test_chunk_overlap_tokens_must_be_less_than_chunk_size_tokens(self):

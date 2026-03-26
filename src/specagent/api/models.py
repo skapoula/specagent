@@ -64,6 +64,14 @@ class QueryMetadata(BaseModel):
     hallucination_check: str = Field(
         description="Result of hallucination verification",
     )
+    rewritten_question: str | None = Field(
+        default=None,
+        description="Final rewritten query (present when query was rewritten)",
+    )
+    node_timings: dict | None = Field(
+        default=None,
+        description="Per-node execution times in milliseconds (verbose mode only)",
+    )
 
 
 class QueryResponse(BaseModel):

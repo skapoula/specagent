@@ -317,6 +317,15 @@ class TestIndexCommand:
 
 @pytest.mark.unit
 class TestBenchmarkCommand:
+    def _make_mock_report(self):
+        """Return a MagicMock that satisfies BenchmarkReport attribute access."""
+        report = MagicMock()
+        report.total_questions = 3
+        report.correct_answers = 2
+        report.accuracy = 2 / 3
+        report.accuracy_by_difficulty = {"easy": 1.0, "hard": 0.5}
+        return report
+
     def test_benchmark_missing_dataset_exits_with_error(self, tmp_path):
         """benchmark exits with code 1 when the dataset file does not exist."""
         nonexistent = str(tmp_path / "no_such_benchmark.json")
@@ -328,41 +337,65 @@ class TestBenchmarkCommand:
         dataset_file = tmp_path / "bench.json"
         dataset_file.write_text("[]")
 
-        mock_questions = []
+        mock_report = self._make_mock_report()
 
-        with patch(
-            "specagent.evaluation.benchmark.load_benchmark_questions",
-            return_value=mock_questions,
+        with (
+            patch(
+                "specagent.evaluation.benchmark.load_benchmark_questions",
+                return_value=[],
+            ),
+            patch("specagent.evaluation.benchmark.run_benchmark", return_value=mock_report),
         ):
             result = runner.invoke(app, ["benchmark", "--dataset", str(dataset_file)])
 
-        # Command runs to completion (not-yet-implemented message is expected)
         assert result.exit_code == 0
 
     def test_benchmark_limit_option(self, tmp_path):
-        """benchmark --limit message appears in output when limit is applied."""
+        """benchmark --limit slices questions and prints the limit in output."""
         dataset_file = tmp_path / "bench.json"
         dataset_file.write_text("[]")
 
         mock_questions = [MagicMock() for _ in range(5)]
+        mock_report = self._make_mock_report()
 
-        with patch(
-            "specagent.evaluation.benchmark.load_benchmark_questions",
-            return_value=mock_questions,
+        with (
+            patch(
+                "specagent.evaluation.benchmark.load_benchmark_questions",
+                return_value=mock_questions,
+            ),
+            patch(
+                "specagent.evaluation.benchmark.run_benchmark", return_value=mock_report
+            ) as mock_rb,
         ):
             result = runner.invoke(
                 app,
-                [
-                    "benchmark",
-                    "--dataset",
-                    str(dataset_file),
-                    "--limit",
-                    "3",
-                ],
+                ["benchmark", "--dataset", str(dataset_file), "--limit", "3"],
             )
 
         assert result.exit_code == 0
         assert "3" in result.output
+        # Verify run_benchmark was called with the sliced list (3 items)
+        call_kwargs = mock_rb.call_args.kwargs
+        assert len(call_kwargs["questions"]) == 3
+
+    def test_benchmark_shows_accuracy_table(self, tmp_path):
+        """benchmark output includes an accuracy table with results."""
+        dataset_file = tmp_path / "bench.json"
+        dataset_file.write_text("[]")
+
+        mock_report = self._make_mock_report()
+
+        with (
+            patch(
+                "specagent.evaluation.benchmark.load_benchmark_questions",
+                return_value=[],
+            ),
+            patch("specagent.evaluation.benchmark.run_benchmark", return_value=mock_report),
+        ):
+            result = runner.invoke(app, ["benchmark", "--dataset", str(dataset_file)])
+
+        assert result.exit_code == 0
+        assert "Accuracy" in result.output
 
 
 # ---------------------------------------------------------------------------

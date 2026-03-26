@@ -12,7 +12,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import APIRouter, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from specagent.api.models import (
@@ -27,75 +27,9 @@ from specagent.retrieval.resources import initialize_resources
 
 logger = logging.getLogger(__name__)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan handler.
-
-    Startup:
-        - Open LanceDB store (cached)
-        - Initialize embedder model (cached)
-        - Initialize tracing if enabled
-
-    Shutdown:
-        - Resources cleaned up on process exit
-    """
-    # Startup
-    logger.info("Initializing SpecAgent resources...")
-
-    try:
-        init_status = initialize_resources()
-        logger.info("Resource initialization status: %s", init_status)
-        logger.info("LanceDB store opened successfully")
-        logger.info("Embedder initialized successfully")
-    except Exception as e:
-        logger.error("Failed to initialize resources: %s", e)
-        raise RuntimeError(f"Startup failed: {e}") from e
-
-    # TODO: Initialize Phoenix tracing if enabled
-    if settings.enable_tracing:
-        logger.info("Tracing enabled but not yet implemented")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down SpecAgent...")
-    # Resources persist until process exit (@lru_cache lifetime)
-
-
-def create_app() -> FastAPI:
-    """
-    Create and configure the FastAPI application.
-
-    Returns:
-        Configured FastAPI app instance
-    """
-    app = FastAPI(
-        title="3GPP SpecAgent",
-        description="Agentic RAG system for 3GPP telecommunications specifications",
-        version="0.1.0",
-        lifespan=lifespan,
-        docs_url="/docs",
-        redoc_url="/redoc",
-    )
-
-    # CORS middleware — origins configured via CORS_ALLOW_ORIGINS env var
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_allow_origins,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "Authorization"],
-    )
-
-    # Register routes
-    app.include_router(router)
-
-    return app
-
-
-# Router for API endpoints
-from fastapi import APIRouter
+# =============================================================================
+# Router and route definitions
+# =============================================================================
 
 router = APIRouter()
 
@@ -119,7 +53,7 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy",
         version="0.1.0",
-        index_loaded=index_loaded,  # Real status
+        index_loaded=index_loaded,
     )
 
 
@@ -156,8 +90,7 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         HTTPException: 500 if pipeline fails
     """
     try:
-        # Run the query through the pipeline
-        result = run_query(request.question)
+        result = run_query(request.question, max_rewrites=request.max_rewrites)
 
         # Check if query was rejected
         if result.get("route_decision") == "reject":
@@ -198,6 +131,8 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
                 ),
                 "latency_ms": result.get("processing_time_ms", 0),
                 "hallucination_check": result.get("hallucination_check", "unknown"),
+                "rewritten_question": result.get("rewritten_question"),
+                "node_timings": result.get("node_timings") if request.verbose else None,
             },
         )
 
@@ -233,6 +168,73 @@ def _calculate_confidence(result: dict[str, Any]) -> float:
     base_confidence *= 1.0 - (rewrite_count * 0.05)
 
     return max(0.0, min(1.0, base_confidence))
+
+
+# =============================================================================
+# Application factory
+# =============================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan handler.
+
+    Startup:
+        - Open LanceDB store (cached)
+        - Initialize embedder model (cached)
+        - Initialize tracing if enabled
+
+    Shutdown:
+        - Resources cleaned up on process exit
+    """
+    logger.info("Initializing SpecAgent resources...")
+
+    try:
+        init_status = initialize_resources()
+        logger.info("Resource initialization status: %s", init_status)
+        logger.info("LanceDB store opened successfully")
+        logger.info("Embedder initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize resources: %s", e)
+        raise RuntimeError(f"Startup failed: {e}") from e
+
+    if settings.enable_tracing:
+        from specagent.tracing.phoenix import setup_tracing  # noqa: PLC0415
+
+        setup_tracing()
+
+    yield
+
+    logger.info("Shutting down SpecAgent...")
+
+
+def create_app() -> FastAPI:
+    """
+    Create and configure the FastAPI application.
+
+    Returns:
+        Configured FastAPI app instance
+    """
+    app = FastAPI(
+        title="3GPP SpecAgent",
+        description="Agentic RAG system for 3GPP telecommunications specifications",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "Authorization"],
+    )
+
+    app.include_router(router)
+
+    return app
 
 
 # Create app instance
