@@ -280,6 +280,21 @@ class Settings(BaseSettings):
         description="Enable OpenTelemetry tracing to Phoenix",
     )
 
+    # LangSmith tracing (https://smith.langchain.com)
+    # Set LANGCHAIN_API_KEY to activate. setup_langsmith_tracing() reads these.
+    enable_langsmith: bool = Field(
+        default=True,
+        description="Enable LangSmith tracing. Requires LANGCHAIN_API_KEY to be set.",
+    )
+    langchain_api_key: str = Field(
+        default="",
+        description="LangSmith API key (env var: LANGCHAIN_API_KEY).",
+    )
+    langchain_project: str = Field(
+        default="3gpp-specagent",
+        description="LangSmith project name (env var: LANGCHAIN_PROJECT).",
+    )
+
     # ==========================================================================
     # Data Paths
     # ==========================================================================
