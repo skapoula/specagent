@@ -13,22 +13,12 @@ from pydantic import BaseModel
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
-from specagent.retrieval.resources import get_embedder
-from specagent.retrieval.store import ChunkRecord, Store
+from specagent.retrieval.resources import get_embedder, get_store
+from specagent.retrieval.store import ChunkRecord
 
 logger = logging.getLogger(__name__)
 
 _DOC_PREFIX = "search_document: "
-
-_store: "Store | None" = None
-
-
-def _get_store() -> Store:
-    """Return the Store singleton, creating it on first call."""
-    global _store  # noqa: PLW0603
-    if _store is None:
-        _store = Store()
-    return _store
 
 
 class IngestResult(BaseModel):
@@ -74,7 +64,7 @@ async def ingest(
         IngestionError: If reading, converting, chunking, or storing fails.
         UnsupportedFormatError: If the file format is not supported.
     """
-    store = _get_store()
+    store = get_store()
     path = Path(source) if not isinstance(source, Path) else source
     source_str = str(path)
 
@@ -283,7 +273,7 @@ async def ingest_folder(
     # (avoids O(N²) rebuilds for bulk ingest)
     if results:
         try:
-            await asyncio.to_thread(_get_store().rebuild_fts_index)
+            await asyncio.to_thread(get_store().rebuild_fts_index)
         except Exception as fts_err:
             logger.warning("FTS index rebuild after ingest_folder failed: %s", fts_err)
 

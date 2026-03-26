@@ -155,8 +155,11 @@ def grader_node(state: "GraphState") -> "GraphState":
                 graded_chunks[idx] = graded_chunk
                 total_confidence += grade.confidence
 
+        # Remove any None placeholders left if LLM grading was skipped unexpectedly
+        graded_chunks = [gc for gc in graded_chunks if gc is not None]
+
         # Calculate average confidence
-        average_confidence = total_confidence / len(graded_chunks)
+        average_confidence = total_confidence / len(graded_chunks) if graded_chunks else 0.0
 
         # Update state
         state["graded_chunks"] = graded_chunks

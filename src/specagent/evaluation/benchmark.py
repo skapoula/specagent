@@ -406,20 +406,19 @@ def run_benchmark(
 
     # Perform health check before starting benchmark
     if not skip_health_check:
-        print("\nPerforming LLM endpoint health check...")
+        logger.info("Performing LLM endpoint health check...")
         is_healthy, message = check_llm_endpoint_health(timeout=30)
 
         if not is_healthy:
-            error_msg = (
-                f"\n✗ LLM endpoint health check failed: {message}\n"
-                f"  The benchmark cannot proceed with an unavailable endpoint.\n"
-                f"  Please check the endpoint status and try again.\n"
-                f"  To skip this check (not recommended), use --skip-health-check flag."
+            logger.error(
+                "LLM endpoint health check failed: %s. "
+                "The benchmark cannot proceed with an unavailable endpoint. "
+                "To skip this check (not recommended), use --skip-health-check flag.",
+                message,
             )
-            print(error_msg)
             raise RuntimeError(f"LLM endpoint unavailable: {message}")
 
-        print(f"✓ {message}\n")
+        logger.info("LLM endpoint healthy: %s", message)
 
     # Apply limit if specified
     if limit is not None:
