@@ -6,6 +6,7 @@ generates a more specific query using 3GPP terminology to improve
 subsequent retrieval.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
 from specagent.config import settings
@@ -13,6 +14,8 @@ from specagent.llm import create_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
+
+logger = logging.getLogger(__name__)
 
 
 REWRITER_PROMPT = """You are a query rewriter for a 3GPP specification search system.
@@ -67,10 +70,14 @@ def rewriter_node(state: "GraphState") -> "GraphState":
     try:
         # Build summary of retrieved chunks
         if retrieved_chunks:
-            chunks_summary = "\n".join([
-                f"- {chunk.content[:200]}..." if len(chunk.content) > 200 else f"- {chunk.content}"
-                for chunk in retrieved_chunks[:5]  # Limit to first 5 chunks
-            ])
+            chunks_summary = "\n".join(
+                [
+                    f"- {chunk.content[:200]}..."
+                    if len(chunk.content) > 200
+                    else f"- {chunk.content}"
+                    for chunk in retrieved_chunks[:5]  # Limit to first 5 chunks
+                ]
+            )
         else:
             chunks_summary = "(No chunks retrieved)"
 
@@ -78,10 +85,7 @@ def rewriter_node(state: "GraphState") -> "GraphState":
         llm = create_llm()
 
         # Format prompt with question and chunk summary
-        prompt = REWRITER_PROMPT.format(
-            question=question,
-            retrieved_chunks_summary=chunks_summary
-        )
+        prompt = REWRITER_PROMPT.format(question=question, retrieved_chunks_summary=chunks_summary)
 
         # Call LLM to rewrite the question
         rewritten_question = llm.invoke(prompt)
@@ -97,7 +101,7 @@ def rewriter_node(state: "GraphState") -> "GraphState":
         state["rewrite_count"] = rewrite_count + 1
 
     except Exception as e:
-        # Handle errors gracefully
+        logger.error("Rewriter error: %s", e)
         state["error"] = f"Rewriter error: {e!s}"
 
     return state

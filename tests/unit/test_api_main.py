@@ -1,18 +1,23 @@
 """Tests for FastAPI application endpoints."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
 def client():
     """Provide a TestClient with mocked resource initialization."""
-    with patch(
-        "specagent.api.main.initialize_resources",
-        return_value={"store": True, "embedder": True},
-    ), patch("specagent.api.main.settings") as mock_settings:
+    with (
+        patch(
+            "specagent.api.main.initialize_resources",
+            return_value={"store": True, "embedder": True},
+        ),
+        patch("specagent.api.main.settings") as mock_settings,
+    ):
         mock_settings.enable_tracing = False
         from fastapi.testclient import TestClient
+
         from specagent.api.main import app
 
         with TestClient(app) as c:
@@ -22,25 +27,26 @@ def client():
 @pytest.fixture
 def client_with_tracing():
     """Provide a TestClient with tracing enabled."""
-    with patch(
-        "specagent.api.main.initialize_resources",
-        return_value={"store": True, "embedder": True},
-    ), patch("specagent.api.main.settings") as mock_settings:
+    with (
+        patch(
+            "specagent.api.main.initialize_resources",
+            return_value={"store": True, "embedder": True},
+        ),
+        patch("specagent.api.main.settings") as mock_settings,
+    ):
         mock_settings.enable_tracing = True
         from fastapi.testclient import TestClient
+
         from specagent.api.main import app
 
         with TestClient(app) as c:
             yield c
 
 
-
 @pytest.mark.unit
 class TestHealthEndpoint:
     def test_healthy_with_store(self, client):
-        with patch(
-            "specagent.retrieval.resources.get_store", return_value=MagicMock()
-        ):
+        with patch("specagent.retrieval.resources.get_store", return_value=MagicMock()):
             resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
@@ -63,9 +69,7 @@ class TestHealthEndpoint:
         assert resp.json()["index_loaded"] is False
 
     def test_health_response_fields(self, client):
-        with patch(
-            "specagent.retrieval.resources.get_store", return_value=MagicMock()
-        ):
+        with patch("specagent.retrieval.resources.get_store", return_value=MagicMock()):
             resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
@@ -145,9 +149,7 @@ class TestQueryEndpoint:
         assert "hallucination_check" in meta
 
     def test_off_topic_route_returns_422(self, client):
-        result = self._make_result(
-            route="reject", generation=None
-        )
+        result = self._make_result(route="reject", generation=None)
         result["route_reasoning"] = "Not a 3GPP question."
         with patch("specagent.api.main.run_query", return_value=result):
             resp = client.post("/query", json={"question": "What is Python?"})
@@ -357,11 +359,13 @@ class TestLifespan:
             call_count["n"] += 1
             return {"store": True, "embedder": True}
 
-        with patch(
-            "specagent.api.main.initialize_resources", side_effect=_fake_init
-        ), patch("specagent.api.main.settings") as ms:
+        with (
+            patch("specagent.api.main.initialize_resources", side_effect=_fake_init),
+            patch("specagent.api.main.settings") as ms,
+        ):
             ms.enable_tracing = False
             from fastapi.testclient import TestClient
+
             from specagent.api.main import app
 
             with TestClient(app):
@@ -370,12 +374,16 @@ class TestLifespan:
         assert call_count["n"] == 1
 
     def test_startup_with_tracing_enabled(self):
-        with patch(
-            "specagent.api.main.initialize_resources",
-            return_value={"store": True, "embedder": True},
-        ), patch("specagent.api.main.settings") as ms:
+        with (
+            patch(
+                "specagent.api.main.initialize_resources",
+                return_value={"store": True, "embedder": True},
+            ),
+            patch("specagent.api.main.settings") as ms,
+        ):
             ms.enable_tracing = True
             from fastapi.testclient import TestClient
+
             from specagent.api.main import app
 
             # Should not raise even with tracing enabled
@@ -390,6 +398,7 @@ class TestLifespan:
             side_effect=RuntimeError("DB unavailable"),
         ):
             from fastapi.testclient import TestClient
+
             from specagent.api.main import app
 
             with pytest.raises(RuntimeError, match="Startup failed"):

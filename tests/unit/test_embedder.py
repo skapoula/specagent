@@ -1,7 +1,8 @@
 """Tests for the fastembed embedder wrapper."""
-import numpy as np
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from specagent.retrieval.exceptions import EmbeddingError
 

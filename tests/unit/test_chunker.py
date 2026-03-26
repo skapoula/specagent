@@ -1,6 +1,8 @@
 """Tests for token-aware chunker with section header extraction."""
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.mark.unit
@@ -128,9 +130,7 @@ def test_token_length_uses_tokenizer():
         result = chunker._token_length("five tokens here right now")
 
     assert result == 5
-    mock_tok.encode.assert_called_once_with(
-        "five tokens here right now", add_special_tokens=False
-    )
+    mock_tok.encode.assert_called_once_with("five tokens here right now", add_special_tokens=False)
 
 
 # ---------------------------------------------------------------------------
@@ -149,9 +149,7 @@ def test_merge_splits_creates_multiple_chunks():
         from specagent.retrieval import chunker
 
         # 10 splits of 1 token each, chunk_size=3 tokens → must produce >1 chunk
-        result = chunker._merge_splits(
-            ["word"] * 10, " ", chunk_size=3, overlap=1
-        )
+        result = chunker._merge_splits(["word"] * 10, " ", chunk_size=3, overlap=1)
 
     assert len(result) > 1
 
@@ -173,9 +171,7 @@ def test_split_recursive_char_fallback_splits_oversized_text():
     with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok):
         from specagent.retrieval import chunker
 
-        result = chunker._split_recursive(
-            "some long text", [""], chunk_size=5, overlap=1
-        )
+        result = chunker._split_recursive("some long text", [""], chunk_size=5, overlap=1)
 
     # With 20 tokens, chunk_size=5, step=4 → ceil(20/4)=5 windows
     assert len(result) > 1
@@ -208,8 +204,10 @@ def test_chunk_min_token_fallback_preserves_raw_chunks():
     mock_tok.encode.return_value = [1]
     mock_tok.decode.side_effect = lambda ids: " ".join(str(i) for i in ids)
 
-    with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok), \
-         patch("specagent.retrieval.chunker.settings") as mock_settings:
+    with (
+        patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok),
+        patch("specagent.retrieval.chunker.settings") as mock_settings,
+    ):
         mock_settings.chunk_size_tokens = 512
         mock_settings.chunk_overlap_tokens = 64
         mock_settings.chunk_min_tokens = 100  # higher than any produced chunk
@@ -230,8 +228,10 @@ def test_chunk_normal_path_filters_chunks_above_min_tokens():
     mock_tok.encode.return_value = list(range(50))  # 50 tokens
     mock_tok.decode.side_effect = lambda ids: " ".join(str(i) for i in ids)
 
-    with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok), \
-         patch("specagent.retrieval.chunker.settings") as mock_settings:
+    with (
+        patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok),
+        patch("specagent.retrieval.chunker.settings") as mock_settings,
+    ):
         mock_settings.chunk_size_tokens = 512
         mock_settings.chunk_overlap_tokens = 64
         mock_settings.chunk_min_tokens = 10  # lower than produced chunks
@@ -282,9 +282,7 @@ def test_split_recursive_flushes_good_splits_before_oversized_chunk():
 
         # Text split by "\n\n": two small pieces then one oversized
         text = "small one\n\nsmall two\n\nOVERSIZED " + "x " * 200
-        result = chunker._split_recursive(
-            text, ["\n\n", "\n", " ", ""], chunk_size=10, overlap=2
-        )
+        result = chunker._split_recursive(text, ["\n\n", "\n", " ", ""], chunk_size=10, overlap=2)
 
     assert isinstance(result, list)
     assert len(result) >= 1

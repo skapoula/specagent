@@ -217,12 +217,11 @@ def evaluate_retrieval(
     # Validate inputs
     if len(retrieved_docs) != len(ground_truth_docs):
         raise ValueError(
-            f"Mismatch: {len(retrieved_docs)} retrieved vs "
-            f"{len(ground_truth_docs)} ground_truth"
+            f"Mismatch: {len(retrieved_docs)} retrieved vs {len(ground_truth_docs)} ground_truth"
         )
     if len(queries) != len(retrieved_docs):
         raise ValueError(
-            f"Mismatch: {len(queries)} queries vs " f"{len(retrieved_docs)} retrieved_docs"
+            f"Mismatch: {len(queries)} queries vs {len(retrieved_docs)} retrieved_docs"
         )
 
     if not queries:
@@ -245,9 +244,7 @@ def evaluate_retrieval(
     # Return aggregated metrics (mean across all queries)
     return RetrievalMetrics(
         recall_at_5=sum(recall_scores[5]) / len(recall_scores[5]) if 5 in k_values else 0.0,
-        recall_at_10=sum(recall_scores[10]) / len(recall_scores[10])
-        if 10 in k_values
-        else 0.0,
+        recall_at_10=sum(recall_scores[10]) / len(recall_scores[10]) if 10 in k_values else 0.0,
         mrr=sum(mrr_scores) / len(mrr_scores) if mrr_scores else 0.0,
     )
 

@@ -8,6 +8,9 @@ For each retrieved chunk, determines:
 If average confidence is below threshold, triggers query rewriting.
 """
 
+import json
+import logging
+import re
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -17,6 +20,8 @@ from specagent.llm import create_llm
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
 
+logger = logging.getLogger(__name__)
+
 
 class GradeResult(BaseModel):
     """Structured output for document grading."""
@@ -25,9 +30,7 @@ class GradeResult(BaseModel):
         description="Whether the document is relevant to answering the question"
     )
     confidence: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Confidence score for the relevance assessment"
+        ge=0.0, le=1.0, description="Confidence score for the relevance assessment"
     )
 
 
@@ -56,9 +59,9 @@ def grader_node(state: "GraphState") -> "GraphState":
 
     Grades only the top-3 chunks (by similarity score) for latency optimization.
     Uses similarity-based auto-grading to skip LLM calls when possible:
-    - similarity > 0.85: auto "yes" with high confidence
-    - similarity < 0.5: auto "no" with high confidence
-    - similarity 0.5-0.85: use LLM for accurate assessment
+    - similarity > 0.82: auto "yes" with high confidence
+    - similarity < 0.55: auto "no" with high confidence
+    - similarity 0.55–0.82: use LLM for accurate assessment
 
     Args:
         state: Current graph state with retrieved_chunks populated
@@ -91,27 +94,17 @@ def grader_node(state: "GraphState") -> "GraphState":
         for i, chunk in enumerate(chunks_to_grade):
             if chunk.similarity_score > 0.82:
                 # Auto-grade as relevant with high confidence
-                grade = GradeResult(
-                    relevant="yes",
-                    confidence=chunk.similarity_score
-                )
+                grade = GradeResult(relevant="yes", confidence=chunk.similarity_score)
                 graded_chunk = GradedChunk(
-                    chunk=chunk,
-                    relevant=grade.relevant,
-                    confidence=grade.confidence
+                    chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
                 )
                 graded_chunks.append(graded_chunk)
                 total_confidence += grade.confidence
             elif chunk.similarity_score < 0.55:
                 # Auto-grade as not relevant with high confidence
-                grade = GradeResult(
-                    relevant="no",
-                    confidence=1.0 - chunk.similarity_score
-                )
+                grade = GradeResult(relevant="no", confidence=1.0 - chunk.similarity_score)
                 graded_chunk = GradedChunk(
-                    chunk=chunk,
-                    relevant=grade.relevant,
-                    confidence=grade.confidence
+                    chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
                 )
                 graded_chunks.append(graded_chunk)
                 total_confidence += grade.confidence
@@ -124,9 +117,6 @@ def grader_node(state: "GraphState") -> "GraphState":
 
         # If there are chunks requiring LLM grading, process them in batch
         if llm_chunks:
-            import json
-            import re
-
             llm = create_llm()
 
             # Format chunks for LLM grading
@@ -136,16 +126,14 @@ def grader_node(state: "GraphState") -> "GraphState":
 
             # Create batch grading prompt
             prompt = BATCH_GRADER_PROMPT.format(
-                question=question,
-                num_chunks=len(llm_chunks),
-                documents=documents_text
+                question=question, num_chunks=len(llm_chunks), documents=documents_text
             )
 
             # Single LLM call to grade uncertain chunks
             response = llm.invoke(prompt)
 
             # Parse batch JSON response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
                 parsed = json.loads(json_str)
@@ -162,9 +150,7 @@ def grader_node(state: "GraphState") -> "GraphState":
             # Insert LLM-graded chunks into their original positions
             for chunk, grade, idx in zip(llm_chunks, batch_result.grades, llm_chunk_indices):
                 graded_chunk = GradedChunk(
-                    chunk=chunk,
-                    relevant=grade.relevant,
-                    confidence=grade.confidence
+                    chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
                 )
                 graded_chunks[idx] = graded_chunk
                 total_confidence += grade.confidence
@@ -177,7 +163,7 @@ def grader_node(state: "GraphState") -> "GraphState":
         state["average_confidence"] = average_confidence
 
     except Exception as e:
-        # Handle errors gracefully
+        logger.error("Grader error: %s", e)
         state["error"] = f"Grader error: {e!s}"
         state["graded_chunks"] = []
         state["average_confidence"] = 0.0

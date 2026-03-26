@@ -10,10 +10,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from specagent.config import settings
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
+from specagent.retrieval.resources import get_embedder
 from specagent.retrieval.store import ChunkRecord, Store
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 _DOC_PREFIX = "search_document: "
 
 _store: "Store | None" = None
-_embedder = None
 
 
 def _get_store() -> Store:
@@ -30,16 +29,6 @@ def _get_store() -> Store:
     if _store is None:
         _store = Store()
     return _store
-
-
-def _get_embedder():
-    """Return the fastembed TextEmbedding singleton, loading it on first call."""
-    global _embedder  # noqa: PLW0603
-    if _embedder is None:
-        from fastembed import TextEmbedding
-
-        _embedder = TextEmbedding(model_name=settings.embedding_model)
-    return _embedder
 
 
 class IngestResult(BaseModel):
@@ -109,9 +98,7 @@ async def ingest(
     )
 
     if existing_hash == new_hash:
-        logger.info(
-            "Skipping %s — content unchanged (hash=%s)", source_str, new_hash[:8]
-        )
+        logger.info("Skipping %s — content unchanged (hash=%s)", source_str, new_hash[:8])
         return IngestResult(
             status="skipped",
             doc_id=existing_doc_id or "",
@@ -149,7 +136,7 @@ async def ingest(
 
     # ── 5. Embed ───────────────────────────────────────────────────────────────
     try:
-        embedder = _get_embedder()
+        embedder = get_embedder()
         prefixed = [_DOC_PREFIX + ct for ct in chunk_texts]
         embeddings = list(await asyncio.to_thread(embedder.embed, prefixed))
     except Exception as e:
@@ -260,9 +247,7 @@ async def ingest_folder(
     """
     folder_path = Path(folder).expanduser().resolve()
     if not folder_path.exists() or not folder_path.is_dir():
-        raise IngestionError(
-            f"Folder not found or not a directory: {str(folder)!r}"
-        )
+        raise IngestionError(f"Folder not found or not a directory: {str(folder)!r}")
 
     pattern = "**/*" if recursive else "*"
     candidates = sorted(
@@ -293,6 +278,14 @@ async def ingest_folder(
             errors.append({"file": str(file_path), "error": str(outcome)})
         else:
             results.append(outcome)
+
+    # Rebuild FTS index once after all writes/deletes are complete
+    # (avoids O(N²) rebuilds for bulk ingest)
+    if results:
+        try:
+            await asyncio.to_thread(_get_store().rebuild_fts_index)
+        except Exception as fts_err:
+            logger.warning("FTS index rebuild after ingest_folder failed: %s", fts_err)
 
     return BulkIngestResult(
         folder=str(folder_path),

@@ -56,9 +56,7 @@ def _token_length(text: str) -> int:
     return len(tok.encode(text, add_special_tokens=False))
 
 
-def _merge_splits(
-    splits: list[str], separator: str, chunk_size: int, overlap: int
-) -> list[str]:
+def _merge_splits(splits: list[str], separator: str, chunk_size: int, overlap: int) -> list[str]:
     """Merge small splits into chunks respecting chunk_size and overlap.
 
     Token lengths for each split are cached to avoid redundant tokenizer calls
@@ -98,9 +96,7 @@ def _merge_splits(
     return chunks
 
 
-def _split_recursive(
-    text: str, separators: list[str], chunk_size: int, overlap: int
-) -> list[str]:
+def _split_recursive(text: str, separators: list[str], chunk_size: int, overlap: int) -> list[str]:
     """Recursively split text using the first separator that produces usable pieces.
 
     Sub-pieces that required recursion are not re-joined with the parent separator;
@@ -124,10 +120,7 @@ def _split_recursive(
         if len(token_ids) <= chunk_size:
             return [text]
         step = max(1, chunk_size - overlap)
-        return [
-            tok.decode(token_ids[i : i + chunk_size])
-            for i in range(0, len(token_ids), step)
-        ]
+        return [tok.decode(token_ids[i : i + chunk_size]) for i in range(0, len(token_ids), step)]
 
     splits = text.split(sep)
 
@@ -142,9 +135,7 @@ def _split_recursive(
             continue
         if _token_length(s) > chunk_size:
             if good_splits:
-                final_chunks.extend(
-                    _merge_splits(good_splits, sep, chunk_size, overlap)
-                )
+                final_chunks.extend(_merge_splits(good_splits, sep, chunk_size, overlap))
                 good_splits = []
             final_chunks.extend(_split_recursive(s, remaining, chunk_size, overlap))
         else:

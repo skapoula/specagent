@@ -207,46 +207,50 @@ class TestEvaluateE2E:
     def test_import_error(self):
         from specagent.evaluation.metrics import evaluate_e2e
 
-        with patch.dict(
-            sys.modules,
-            {"ragas": None, "datasets": None, "ragas.metrics": None},
+        with (
+            patch.dict(
+                sys.modules,
+                {"ragas": None, "datasets": None, "ragas.metrics": None},
+            ),
+            pytest.raises(ImportError, match="RAGAS"),
         ):
-            with pytest.raises(ImportError, match="RAGAS"):
-                evaluate_e2e(
-                    [{"question": "q", "answer": "a", "contexts": ["c"]}]
-                )
+            evaluate_e2e([{"question": "q", "answer": "a", "contexts": ["c"]}])
 
     def test_empty_dataset_raises(self):
         from specagent.evaluation.metrics import evaluate_e2e
 
         mock_ragas = MagicMock()
         mock_datasets = MagicMock()
-        with patch.dict(
-            sys.modules,
-            {
-                "ragas": mock_ragas,
-                "datasets": mock_datasets,
-                "ragas.metrics": MagicMock(),
-            },
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "ragas": mock_ragas,
+                    "datasets": mock_datasets,
+                    "ragas.metrics": MagicMock(),
+                },
+            ),
+            pytest.raises(ValueError, match="empty"),
         ):
-            with pytest.raises(ValueError, match="empty"):
-                evaluate_e2e([])
+            evaluate_e2e([])
 
     def test_missing_fields_raises(self):
         from specagent.evaluation.metrics import evaluate_e2e
 
         mock_ragas = MagicMock()
         mock_datasets = MagicMock()
-        with patch.dict(
-            sys.modules,
-            {
-                "ragas": mock_ragas,
-                "datasets": mock_datasets,
-                "ragas.metrics": MagicMock(),
-            },
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "ragas": mock_ragas,
+                    "datasets": mock_datasets,
+                    "ragas.metrics": MagicMock(),
+                },
+            ),
+            pytest.raises(ValueError, match="missing required fields"),
         ):
-            with pytest.raises(ValueError, match="missing required fields"):
-                evaluate_e2e([{"question": "q"}])
+            evaluate_e2e([{"question": "q"}])
 
     def test_success_without_ground_truth(self):
         from specagent.evaluation.metrics import evaluate_e2e
@@ -272,9 +276,7 @@ class TestEvaluateE2E:
                 "ragas.metrics": mock_ragas_metrics,
             },
         ):
-            result = evaluate_e2e(
-                [{"question": "q", "answer": "a", "contexts": ["c"]}]
-            )
+            result = evaluate_e2e([{"question": "q", "answer": "a", "contexts": ["c"]}])
 
         assert result.faithfulness == pytest.approx(0.9)
         assert result.answer_relevancy == pytest.approx(0.8)

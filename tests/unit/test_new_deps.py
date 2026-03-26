@@ -1,4 +1,5 @@
 """Verify new pipeline dependencies are importable after pyproject.toml update."""
+
 import pytest
 
 

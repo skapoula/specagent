@@ -1,8 +1,10 @@
 """Integration tests for the ingestion pipeline."""
+
 import hashlib
 import json
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -19,10 +21,12 @@ async def test_ingest_returns_indexed_status(md_file):
 
     with (
         patch("specagent.retrieval.ingestor._get_store") as mock_store_fn,
-        patch("specagent.retrieval.ingestor._get_embedder") as mock_emb_fn,
+        patch("specagent.retrieval.ingestor.get_embedder") as mock_emb_fn,
         patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
     ):
-        mock_chunk.return_value = [("# Section 5.4\n\nContent about HARQ processes.", "Section 5.4")]
+        mock_chunk.return_value = [
+            ("# Section 5.4\n\nContent about HARQ processes.", "Section 5.4")
+        ]
         mock_store = MagicMock()
         mock_store.find_existing.return_value = (None, None)
         mock_store_fn.return_value = mock_store
@@ -45,7 +49,7 @@ async def test_ingest_skips_unchanged_file(md_file):
 
     with (
         patch("specagent.retrieval.ingestor._get_store") as mock_store_fn,
-        patch("specagent.retrieval.ingestor._get_embedder") as mock_emb_fn,
+        patch("specagent.retrieval.ingestor.get_embedder") as mock_emb_fn,
     ):
         mock_store = MagicMock()
         mock_store.find_existing.return_value = ("existing-doc-id", content_hash)
@@ -69,7 +73,7 @@ async def test_ingest_records_include_section_header(md_file):
 
     with (
         patch("specagent.retrieval.ingestor._get_store") as mock_store_fn,
-        patch("specagent.retrieval.ingestor._get_embedder") as mock_emb_fn,
+        patch("specagent.retrieval.ingestor.get_embedder") as mock_emb_fn,
         patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
     ):
         mock_chunk.return_value = [
@@ -103,19 +107,6 @@ def test_get_store_singleton():
     assert s1 is s2
     mock_cls.assert_called_once()
     ingestor._store = None
-
-
-@pytest.mark.unit
-def test_get_embedder_singleton():
-    from specagent.retrieval import ingestor
-
-    ingestor._embedder = None
-    with patch("fastembed.TextEmbedding") as mock_cls:
-        mock_cls.return_value = MagicMock()
-        e1 = ingestor._get_embedder()
-        e2 = ingestor._get_embedder()
-    assert e1 is e2
-    ingestor._embedder = None
 
 
 @pytest.mark.unit
@@ -167,8 +158,10 @@ async def test_ingest_empty_text_raises(tmp_path):
     md.write_text("   ")
     mock_store = MagicMock()
     mock_store.find_existing.return_value = (None, None)
-    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store), \
-         patch("specagent.retrieval.ingestor.convert", return_value=""):
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor.convert", return_value=""),
+    ):
         with pytest.raises(IngestionError, match="No text"):
             await ingest(md, library="test")
 
@@ -182,9 +175,11 @@ async def test_ingest_no_chunks_raises(tmp_path):
     md.write_text("# T\n\nText.")
     mock_store = MagicMock()
     mock_store.find_existing.return_value = (None, None)
-    with patch("specagent.retrieval.ingestor._get_store", return_value=mock_store), \
-         patch("specagent.retrieval.ingestor.convert", return_value="text"), \
-         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[]):
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor.convert", return_value="text"),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[]),
+    ):
         with pytest.raises(IngestionError, match="No usable chunks"):
             await ingest(md, library="test")
 
@@ -211,7 +206,7 @@ async def test_ingest_stat_oserror_sets_empty_last_modified(tmp_path):
     mock_emb.embed.return_value = iter([[0.1] * 768])
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("content", "")]),
         patch("pathlib.Path.stat", side_effect=OSError("no access")),
     ):
@@ -222,7 +217,7 @@ async def test_ingest_stat_oserror_sets_empty_last_modified(tmp_path):
 @pytest.mark.integration
 async def test_ingest_convert_unsupported_format_reraises(tmp_path):
     """When convert() raises UnsupportedFormatError, it is re-raised unchanged."""
-    from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
+    from specagent.retrieval.exceptions import UnsupportedFormatError
     from specagent.retrieval.ingestor import ingest
 
     md = tmp_path / "doc.xyz"
@@ -235,9 +230,9 @@ async def test_ingest_convert_unsupported_format_reraises(tmp_path):
             "specagent.retrieval.ingestor.convert",
             side_effect=UnsupportedFormatError(".xyz"),
         ),
+        pytest.raises(UnsupportedFormatError),
     ):
-        with pytest.raises(UnsupportedFormatError):
-            await ingest(md, library="test")
+        await ingest(md, library="test")
 
 
 @pytest.mark.integration
@@ -271,10 +266,13 @@ async def test_ingest_chunk_exception_raises_ingestion_error(tmp_path):
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
         patch("specagent.retrieval.ingestor.convert", return_value="some content"),
-        patch("specagent.retrieval.ingestor.chunk_with_metadata", side_effect=RuntimeError("chunk fail")),
+        patch(
+            "specagent.retrieval.ingestor.chunk_with_metadata",
+            side_effect=RuntimeError("chunk fail"),
+        ),
+        pytest.raises(IngestionError, match="Chunking failed"),
     ):
-        with pytest.raises(IngestionError, match="Chunking failed"):
-            await ingest(md, library="test")
+        await ingest(md, library="test")
 
 
 @pytest.mark.integration
@@ -291,7 +289,7 @@ async def test_ingest_embed_exception_raises_ingestion_error(tmp_path):
     mock_emb.embed.side_effect = RuntimeError("OOM")
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.convert", return_value="content"),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
     ):
@@ -314,7 +312,7 @@ async def test_ingest_store_write_exception_raises_ingestion_error(tmp_path):
     mock_emb.embed.return_value = iter([[0.1] * 768])
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.convert", return_value="content"),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
     ):
@@ -335,7 +333,7 @@ async def test_ingest_replaces_existing_document(tmp_path):
     mock_emb.embed.return_value = iter([[0.1] * 768])
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
     ):
         result = await ingest(md, library="test")
@@ -357,7 +355,7 @@ async def test_ingest_replace_delete_failure_logs_warning(tmp_path):
     mock_emb.embed.return_value = iter([[0.1] * 768])
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
     ):
         result = await ingest(md, library="test")
@@ -377,7 +375,7 @@ async def test_ingest_folder_with_md_file(tmp_path):
     mock_emb.embed.return_value = iter([[0.1] * 768])
     with (
         patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
-        patch("specagent.retrieval.ingestor._get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
         patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
     ):
         result = await ingest_folder(tmp_path, library="test")
@@ -409,3 +407,26 @@ async def test_ingest_folder_errors_collected(tmp_path):
         result = await ingest_folder(tmp_path, library="test")
     assert result.failed == 1
     assert len(result.errors) == 1
+
+
+@pytest.mark.integration
+async def test_ingest_folder_fts_rebuild_failure_logs_warning(tmp_path):
+    """ingest_folder() logs a warning when FTS rebuild fails after successful ingests."""
+    from specagent.retrieval.ingestor import ingest_folder
+
+    md = tmp_path / "spec.md"
+    md.write_text("# Title\n\nContent here.")
+    mock_store = MagicMock()
+    mock_store.find_existing.return_value = (None, None)
+    mock_store.rebuild_fts_index.side_effect = RuntimeError("fts failed")
+    mock_emb = MagicMock()
+    mock_emb.embed.return_value = iter([[0.1] * 768])
+    with (
+        patch("specagent.retrieval.ingestor._get_store", return_value=mock_store),
+        patch("specagent.retrieval.ingestor.get_embedder", return_value=mock_emb),
+        patch("specagent.retrieval.ingestor.chunk_with_metadata", return_value=[("chunk", "")]),
+    ):
+        result = await ingest_folder(tmp_path, library="test")
+    # Ingest should still succeed even if FTS rebuild fails
+    assert result.indexed == 1
+    assert result.failed == 0

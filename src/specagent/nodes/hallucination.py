@@ -10,6 +10,8 @@ content-specific skip threshold; otherwise it runs:
 - Non-numerical content:     check runs when average_confidence < 0.70
 """
 
+import json
+import logging
 import re
 from typing import TYPE_CHECKING, Literal
 
@@ -20,6 +22,8 @@ from specagent.llm import create_llm
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
 
+logger = logging.getLogger(__name__)
+
 
 class HallucinationResult(BaseModel):
     """Structured output for hallucination checking."""
@@ -28,8 +32,7 @@ class HallucinationResult(BaseModel):
         description="Whether all claims in the answer are supported by sources"
     )
     ungrounded_claims: list[str] = Field(
-        default_factory=list,
-        description="List of claims not found in the source documents"
+        default_factory=list, description="List of claims not found in the source documents"
     )
 
 
@@ -56,6 +59,13 @@ Respond with ONLY a JSON object:
 Use "yes" if fully supported, "partial" if mostly supported, or "no" if significantly unsupported."""
 
 
+def _parse_hallucination_json(response: str) -> "HallucinationResult":
+    """Extract and parse a HallucinationResult from an LLM response string."""
+    json_match = re.search(r"\{.*\}", response, re.DOTALL)
+    raw = json_match.group(0) if json_match else response
+    return HallucinationResult(**json.loads(raw))
+
+
 def _contains_numerical_or_tabular_content(text: str) -> bool:
     """
     Detect if text contains numerical values or table-like structures.
@@ -71,23 +81,23 @@ def _contains_numerical_or_tabular_content(text: str) -> bool:
     """
     # Pattern for spec citations to ignore: [TS 38.XXX], [TS XX.XXX], etc.
     # Examples: [TS 38.321], [TS 23.501 §5.4]
-    citation_pattern = re.compile(r'\[TS\s+\d+\.\d+[^\]]*\]', re.IGNORECASE)
+    citation_pattern = re.compile(r"\[TS\s+\d+\.\d+[^\]]*\]", re.IGNORECASE)
 
     # Remove citations from text before checking for numerical content
-    text_without_citations = citation_pattern.sub('', text)
+    text_without_citations = citation_pattern.sub("", text)
 
     # Pattern for numerical values (integers, floats, percentages, ranges)
     # Examples: 5, 3.14, 50%, 5-10, 1..10, 100ms, 2.4GHz
     number_pattern = re.compile(
-        r'\b\d+\.?\d*\s*(%|ms|MHz|GHz|kHz|dB|dBm|km|m|cm|mm|Hz|bits?|bytes?|KB|MB|GB)\b'  # with units
-        r'|\b\d+\.?\d*%\b'  # percentages
-        r'|\b\d+-\d+\b'  # ranges with dash
-        r'|\b\d+\.\.\d+\b'  # ranges with dots
-        r'|\b\d+(?:\.\d+)?\b'  # standalone numbers (integers or floats)
+        r"\b\d+\.?\d*\s*(%|ms|MHz|GHz|kHz|dB|dBm|km|m|cm|mm|Hz|bits?|bytes?|KB|MB|GB)\b"  # with units
+        r"|\b\d+\.?\d*%\b"  # percentages
+        r"|\b\d+-\d+\b"  # ranges with dash
+        r"|\b\d+\.\.\d+\b"  # ranges with dots
+        r"|\b\d+(?:\.\d+)?\b"  # standalone numbers (integers or floats)
     )
 
     # Pattern for markdown tables (lines with multiple | characters)
-    table_pattern = re.compile(r'^[\s]*\|[^|]*\|[^|]*\|', re.MULTILINE)
+    table_pattern = re.compile(r"^[\s]*\|[^|]*\|[^|]*\|", re.MULTILINE)
 
     # Check for numerical content (after removing citations)
     if number_pattern.search(text_without_citations):
@@ -140,9 +150,7 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         return state
 
     # Get relevant chunks only
-    relevant_chunks = [
-        gc.chunk for gc in graded_chunks if gc.relevant == "yes"
-    ]
+    relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
 
     # Handle case where no relevant chunks are available
     # If there's a generation but no sources, it's likely ungrounded
@@ -153,24 +161,12 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
 
             # Format prompt with empty sources
             prompt = HALLUCINATION_PROMPT.format(
-                sources="(No source documents provided)",
-                answer=generation
+                sources="(No source documents provided)", answer=generation
             )
 
             # Call LLM to check for hallucinations
             response = llm.invoke(prompt)
-
-            # Parse JSON response
-            import json
-            import re
-
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-                parsed = json.loads(json_str)
-                check_result = HallucinationResult(**parsed)
-            else:
-                check_result = HallucinationResult(**json.loads(response))
+            check_result = _parse_hallucination_json(response)
 
             # Map HallucinationResult.grounded to state hallucination_check values
             if check_result.grounded == "yes":
@@ -183,11 +179,12 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
             state["ungrounded_claims"] = check_result.ungrounded_claims
 
         except Exception as e:
-            # Handle errors gracefully
+            logger.error("Hallucination check error (no sources path): %s", e)
             state["error"] = f"Hallucination check error: {e!s}"
             state["hallucination_check"] = "grounded"
             state["ungrounded_claims"] = []
 
+        state["regeneration_count"] = state.get("regeneration_count", 0) + 1
         return state
 
     try:
@@ -195,7 +192,7 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         source_parts = []
         for chunk in relevant_chunks:
             # Format: [TS XX.XXX §Y.Z]: content
-            source_ref = f"[TS {chunk.spec_id.replace('TS', '').replace('.', '.', 1)} §{chunk.section}]"
+            source_ref = f"[TS {chunk.spec_id.replace('TS', '', 1)} §{chunk.section}]"
             source_parts.append(f"{source_ref}: {chunk.content}")
 
         sources = "\n\n".join(source_parts)
@@ -204,25 +201,11 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         llm = create_llm()
 
         # Format prompt with sources and answer
-        prompt = HALLUCINATION_PROMPT.format(
-            sources=sources,
-            answer=generation
-        )
+        prompt = HALLUCINATION_PROMPT.format(sources=sources, answer=generation)
 
         # Call LLM to check for hallucinations
         response = llm.invoke(prompt)
-
-        # Parse JSON response
-        import json
-        import re
-
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            parsed = json.loads(json_str)
-            result = HallucinationResult(**parsed)
-        else:
-            result = HallucinationResult(**json.loads(response))
+        result = _parse_hallucination_json(response)
 
         # Map HallucinationResult.grounded to state hallucination_check values
         if result.grounded == "yes":
@@ -235,9 +218,10 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         state["ungrounded_claims"] = result.ungrounded_claims
 
     except Exception as e:
-        # Handle errors gracefully
+        logger.error("Hallucination check error: %s", e)
         state["error"] = f"Hallucination check error: {e!s}"
         state["hallucination_check"] = "grounded"
         state["ungrounded_claims"] = []
 
+    state["regeneration_count"] = state.get("regeneration_count", 0) + 1
     return state

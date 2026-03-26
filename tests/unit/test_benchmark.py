@@ -25,7 +25,6 @@ from specagent.evaluation.benchmark import (
 )
 from specagent.graph.state import GraphState
 
-
 # =============================================================================
 # Test Data Fixtures
 # =============================================================================
@@ -44,7 +43,7 @@ def sample_tspec_dataset(tmp_path: Path) -> Path:
             "answer": "option_2: 16",
             "explanation": "The maximum number of HARQ processes is 16 for both FDD and TDD.",
             "category": "3GPP TR 38.321",
-            "difficulty": "Easy"
+            "difficulty": "Easy",
         },
         "question_2": {
             "question": "What timer is started upon detection of radio link failure?",
@@ -55,7 +54,7 @@ def sample_tspec_dataset(tmp_path: Path) -> Path:
             "answer": "option_4: T311",
             "explanation": "Timer T311 is started upon detection of radio link failure.",
             "category": "3GPP TR 38.331",
-            "difficulty": "Intermediate"
+            "difficulty": "Intermediate",
         },
         "question_3": {
             "question": "What is the frequency range for FR1 in 5G NR?",
@@ -66,8 +65,8 @@ def sample_tspec_dataset(tmp_path: Path) -> Path:
             "answer": "option_1: 410-7125 MHz",
             "explanation": "FR1 covers frequencies from 410 MHz to 7125 MHz.",
             "category": "3GPP TR 38.101-1",
-            "difficulty": "Hard"
-        }
+            "difficulty": "Hard",
+        },
     }
 
     dataset_path = tmp_path / "benchmark.json"
@@ -80,6 +79,7 @@ def sample_tspec_dataset(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_graph_response():
     """Mock graph state response for benchmarking."""
+
     def _create_response(question: str, answer: str, latency: float = 1500.0) -> GraphState:
         return GraphState(
             question=question,
@@ -96,6 +96,7 @@ def mock_graph_response():
             ungrounded_claims=[],
             error=None,
         )
+
     return _create_response
 
 
@@ -177,17 +178,11 @@ def test_check_answer_correctness_whitespace():
 def test_check_answer_correctness_fuzzy_match():
     """Test fuzzy matching for similar strings."""
     # Should match "16 processes" with "16"
-    assert check_answer_correctness(
-        "The answer is 16 HARQ processes",
-        "16",
-        use_llm_judge=False
-    )
+    assert check_answer_correctness("The answer is 16 HARQ processes", "16", use_llm_judge=False)
 
     # Should match when answer is embedded in response
     assert check_answer_correctness(
-        "Timer T311 is used for this purpose",
-        "T311",
-        use_llm_judge=False
+        "Timer T311 is used for this purpose", "T311", use_llm_judge=False
     )
 
 
@@ -205,9 +200,7 @@ def test_check_answer_correctness_with_llm_judge():
 
         # Use an answer that won't match fuzzy matching to force LLM judge
         result = check_answer_correctness(
-            "The system uses a different approach",
-            "16",
-            use_llm_judge=True
+            "The system uses a different approach", "16", use_llm_judge=True
         )
 
         assert result is True
@@ -271,9 +264,9 @@ def test_run_benchmark_accuracy_by_difficulty(sample_tspec_dataset, mock_graph_r
         with patch("specagent.evaluation.benchmark.llm_judge_answer", return_value=False):
             # Return correct for Easy, incorrect for Intermediate and Hard
             mock_run_query.side_effect = [
-                mock_graph_response("Q1", "16", 1000.0),      # Easy - correct
-                mock_graph_response("Q2", "T310", 1000.0),    # Intermediate - wrong
-                mock_graph_response("Q3", "Wrong", 1000.0),   # Hard - wrong
+                mock_graph_response("Q1", "16", 1000.0),  # Easy - correct
+                mock_graph_response("Q2", "T310", 1000.0),  # Intermediate - wrong
+                mock_graph_response("Q3", "Wrong", 1000.0),  # Hard - wrong
             ]
 
             report = run_benchmark(
@@ -499,29 +492,54 @@ def test_compute_confidence_distribution():
 
     results = [
         BenchmarkResult(
-            question_id="q1", question="Q1", expected_answer="A1",
-            generated_answer="A1", is_correct=True, confidence=0.95,
-            latency_ms=1000, difficulty="Easy"
+            question_id="q1",
+            question="Q1",
+            expected_answer="A1",
+            generated_answer="A1",
+            is_correct=True,
+            confidence=0.95,
+            latency_ms=1000,
+            difficulty="Easy",
         ),
         BenchmarkResult(
-            question_id="q2", question="Q2", expected_answer="A2",
-            generated_answer="A2", is_correct=True, confidence=0.85,
-            latency_ms=1000, difficulty="Easy"
+            question_id="q2",
+            question="Q2",
+            expected_answer="A2",
+            generated_answer="A2",
+            is_correct=True,
+            confidence=0.85,
+            latency_ms=1000,
+            difficulty="Easy",
         ),
         BenchmarkResult(
-            question_id="q3", question="Q3", expected_answer="A3",
-            generated_answer="A3", is_correct=True, confidence=0.75,
-            latency_ms=1000, difficulty="Medium"
+            question_id="q3",
+            question="Q3",
+            expected_answer="A3",
+            generated_answer="A3",
+            is_correct=True,
+            confidence=0.75,
+            latency_ms=1000,
+            difficulty="Medium",
         ),
         BenchmarkResult(
-            question_id="q4", question="Q4", expected_answer="A4",
-            generated_answer="A4", is_correct=False, confidence=0.45,
-            latency_ms=1000, difficulty="Hard"
+            question_id="q4",
+            question="Q4",
+            expected_answer="A4",
+            generated_answer="A4",
+            is_correct=False,
+            confidence=0.45,
+            latency_ms=1000,
+            difficulty="Hard",
         ),
         BenchmarkResult(
-            question_id="q5", question="Q5", expected_answer="A5",
-            generated_answer="A5", is_correct=False, confidence=0.25,
-            latency_ms=1000, difficulty="Hard"
+            question_id="q5",
+            question="Q5",
+            expected_answer="A5",
+            generated_answer="A5",
+            is_correct=False,
+            confidence=0.25,
+            latency_ms=1000,
+            difficulty="Hard",
         ),
     ]
 
@@ -554,19 +572,34 @@ def test_confidence_statistics():
 
     results = [
         BenchmarkResult(
-            question_id="q1", question="Q1", expected_answer="A1",
-            generated_answer="A1", is_correct=True, confidence=0.9,
-            latency_ms=1000, difficulty="Easy"
+            question_id="q1",
+            question="Q1",
+            expected_answer="A1",
+            generated_answer="A1",
+            is_correct=True,
+            confidence=0.9,
+            latency_ms=1000,
+            difficulty="Easy",
         ),
         BenchmarkResult(
-            question_id="q2", question="Q2", expected_answer="A2",
-            generated_answer="A2", is_correct=True, confidence=0.8,
-            latency_ms=1000, difficulty="Medium"
+            question_id="q2",
+            question="Q2",
+            expected_answer="A2",
+            generated_answer="A2",
+            is_correct=True,
+            confidence=0.8,
+            latency_ms=1000,
+            difficulty="Medium",
         ),
         BenchmarkResult(
-            question_id="q3", question="Q3", expected_answer="A3",
-            generated_answer="A3", is_correct=False, confidence=0.5,
-            latency_ms=1000, difficulty="Hard"
+            question_id="q3",
+            question="Q3",
+            expected_answer="A3",
+            generated_answer="A3",
+            is_correct=False,
+            confidence=0.5,
+            latency_ms=1000,
+            difficulty="Hard",
         ),
     ]
 
@@ -585,24 +618,44 @@ def test_confidence_by_correctness():
 
     results = [
         BenchmarkResult(
-            question_id="q1", question="Q1", expected_answer="A1",
-            generated_answer="A1", is_correct=True, confidence=0.9,
-            latency_ms=1000, difficulty="Easy"
+            question_id="q1",
+            question="Q1",
+            expected_answer="A1",
+            generated_answer="A1",
+            is_correct=True,
+            confidence=0.9,
+            latency_ms=1000,
+            difficulty="Easy",
         ),
         BenchmarkResult(
-            question_id="q2", question="Q2", expected_answer="A2",
-            generated_answer="A2", is_correct=True, confidence=0.85,
-            latency_ms=1000, difficulty="Medium"
+            question_id="q2",
+            question="Q2",
+            expected_answer="A2",
+            generated_answer="A2",
+            is_correct=True,
+            confidence=0.85,
+            latency_ms=1000,
+            difficulty="Medium",
         ),
         BenchmarkResult(
-            question_id="q3", question="Q3", expected_answer="A3",
-            generated_answer="Wrong", is_correct=False, confidence=0.6,
-            latency_ms=1000, difficulty="Hard"
+            question_id="q3",
+            question="Q3",
+            expected_answer="A3",
+            generated_answer="Wrong",
+            is_correct=False,
+            confidence=0.6,
+            latency_ms=1000,
+            difficulty="Hard",
         ),
         BenchmarkResult(
-            question_id="q4", question="Q4", expected_answer="A4",
-            generated_answer="Wrong", is_correct=False, confidence=0.4,
-            latency_ms=1000, difficulty="Hard"
+            question_id="q4",
+            question="Q4",
+            expected_answer="A4",
+            generated_answer="Wrong",
+            is_correct=False,
+            confidence=0.4,
+            latency_ms=1000,
+            difficulty="Hard",
         ),
     ]
 
@@ -617,14 +670,24 @@ def test_confidence_by_correctness():
 def test_benchmark_report_includes_confidence_distribution():
     """Test that BenchmarkReport includes confidence distribution."""
     result1 = BenchmarkResult(
-        question_id="q1", question="Q1", expected_answer="A1",
-        generated_answer="A1", is_correct=True, confidence=0.9,
-        latency_ms=1000, difficulty="Easy"
+        question_id="q1",
+        question="Q1",
+        expected_answer="A1",
+        generated_answer="A1",
+        is_correct=True,
+        confidence=0.9,
+        latency_ms=1000,
+        difficulty="Easy",
     )
     result2 = BenchmarkResult(
-        question_id="q2", question="Q2", expected_answer="A2",
-        generated_answer="A2", is_correct=False, confidence=0.5,
-        latency_ms=1000, difficulty="Hard"
+        question_id="q2",
+        question="Q2",
+        expected_answer="A2",
+        generated_answer="A2",
+        is_correct=False,
+        confidence=0.5,
+        latency_ms=1000,
+        difficulty="Hard",
     )
 
     report = BenchmarkReport(
@@ -647,9 +710,14 @@ def test_benchmark_report_includes_confidence_distribution():
 def test_benchmark_report_markdown_includes_confidence():
     """Test that markdown report includes confidence analysis."""
     result = BenchmarkResult(
-        question_id="q1", question="Q1", expected_answer="A1",
-        generated_answer="A1", is_correct=True, confidence=0.9,
-        latency_ms=1000, difficulty="Easy"
+        question_id="q1",
+        question="Q1",
+        expected_answer="A1",
+        generated_answer="A1",
+        is_correct=True,
+        confidence=0.9,
+        latency_ms=1000,
+        difficulty="Easy",
     )
 
     report = BenchmarkReport(
@@ -708,13 +776,18 @@ def test_setup_trace_logging_verbose(tmp_path):
 
 def test_run_benchmark_health_check_failure(tmp_path):
     """run_benchmark raises RuntimeError when health check fails."""
-    with patch("specagent.llm.custom_endpoint.check_llm_endpoint_health", return_value=(False, "endpoint down")):
-        with pytest.raises(RuntimeError, match="LLM endpoint unavailable"):
-            run_benchmark(
-                questions=[BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")],
-                output_dir=tmp_path / "results",
-                skip_health_check=False,
-            )
+    with (
+        patch(
+            "specagent.llm.custom_endpoint.check_llm_endpoint_health",
+            return_value=(False, "endpoint down"),
+        ),
+        pytest.raises(RuntimeError, match="LLM endpoint unavailable"),
+    ):
+        run_benchmark(
+            questions=[BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")],
+            output_dir=tmp_path / "results",
+            skip_health_check=False,
+        )
 
 
 def test_run_benchmark_health_check_success_prints_message(tmp_path):
@@ -738,7 +811,10 @@ def test_run_benchmark_health_check_success_prints_message(tmp_path):
         "llm_inference_times": [],
     }
     with (
-        patch("specagent.llm.custom_endpoint.check_llm_endpoint_health", return_value=(True, "endpoint OK")),
+        patch(
+            "specagent.llm.custom_endpoint.check_llm_endpoint_health",
+            return_value=(True, "endpoint OK"),
+        ),
         patch("specagent.graph.workflow.run_query", return_value=mock_state),
         patch("specagent.evaluation.benchmark.check_answer_correctness", return_value=True),
     ):
@@ -771,7 +847,9 @@ def test_run_benchmark_rejected_question(tmp_path):
         "llm_inference_times": [],
     }
     with patch("specagent.graph.workflow.run_query", return_value=mock_state):
-        report = run_benchmark(questions=qs, output_dir=tmp_path / "results", skip_health_check=True)
+        report = run_benchmark(
+            questions=qs, output_dir=tmp_path / "results", skip_health_check=True
+        )
     assert report.results[0].error == "Question was rejected by router"
 
 
@@ -814,7 +892,9 @@ def test_run_benchmark_exception_in_query(tmp_path):
     """run_benchmark catches per-question exceptions and records them as errors."""
     qs = [BenchmarkQuestion(id="q1", question="Q?", answer="A", difficulty="Easy")]
     with patch("specagent.graph.workflow.run_query", side_effect=RuntimeError("graph exploded")):
-        report = run_benchmark(questions=qs, output_dir=tmp_path / "results", skip_health_check=True)
+        report = run_benchmark(
+            questions=qs, output_dir=tmp_path / "results", skip_health_check=True
+        )
     assert report.results[0].error == "graph exploded"
     assert report.results[0].is_correct is False
 

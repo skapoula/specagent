@@ -10,7 +10,8 @@ Graph visualization can be exported via get_graph_visualization().
 """
 
 import time
-from typing import Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -27,7 +28,9 @@ from specagent.nodes import (
 )
 
 
-def create_timed_node(node_func: Callable[[GraphState], GraphState], node_name: str) -> Callable[[GraphState], GraphState]:
+def create_timed_node(
+    node_func: Callable[[GraphState], GraphState], node_name: str
+) -> Callable[[GraphState], GraphState]:
     """
     Wrap a node function with timing instrumentation.
 
@@ -40,6 +43,7 @@ def create_timed_node(node_func: Callable[[GraphState], GraphState], node_name: 
     Returns:
         Wrapped node function with timing
     """
+
     def timed_node(state: GraphState) -> GraphState:
         start_time = time.perf_counter()
         result_state = node_func(state)
@@ -121,17 +125,18 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
     """
     Conditional edge: Decide if answer needs regeneration.
 
-    Triggers regeneration if hallucination check failed.
-    Only allows one regeneration attempt.
+    Triggers at most one regeneration when the hallucination check fails.
+    Uses regeneration_count (incremented by hallucination_check_node) to
+    prevent the generator → hallucination_check loop from running forever.
 
     Returns:
         "regenerate" to try again, "finish" to complete
     """
     hallucination_result = state.get("hallucination_check", "grounded")
+    regeneration_count = state.get("regeneration_count", 1)
 
-    # Only regenerate once to avoid infinite loops
-    # TODO: Track regeneration attempts in state
-    if hallucination_result == "not_grounded":
+    # Allow exactly one regeneration attempt (count is already incremented by the node)
+    if hallucination_result == "not_grounded" and regeneration_count <= 1:
         return "regenerate"
 
     return "finish"
@@ -183,7 +188,9 @@ def build_graph() -> CompiledStateGraph:
     workflow.add_node("grader", create_timed_node(grader_node, "grader"))
     workflow.add_node("rewriter", create_timed_node(rewriter_node, "rewriter"))
     workflow.add_node("generator", create_timed_node(generator_node, "generator"))
-    workflow.add_node("hallucination_check", create_timed_node(hallucination_check_node, "hallucination_check"))
+    workflow.add_node(
+        "hallucination_check", create_timed_node(hallucination_check_node, "hallucination_check")
+    )
 
     # Add edges from START
     workflow.add_edge(START, "router")
@@ -231,6 +238,17 @@ def build_graph() -> CompiledStateGraph:
     return workflow.compile()
 
 
+_compiled_graph: CompiledStateGraph | None = None
+
+
+def _get_compiled_graph() -> CompiledStateGraph:
+    """Return the compiled graph, building it once and caching it."""
+    global _compiled_graph  # noqa: PLW0603
+    if _compiled_graph is None:
+        _compiled_graph = build_graph()
+    return _compiled_graph
+
+
 def run_query(question: str) -> GraphState:
     """
     Execute a query through the agentic RAG pipeline.
@@ -244,8 +262,8 @@ def run_query(question: str) -> GraphState:
     # Create initial state
     state = create_initial_state(question)
 
-    # Build and run graph
-    graph = build_graph()
+    # Use cached compiled graph (compiled once per process)
+    graph = _get_compiled_graph()
 
     start_time = time.perf_counter()
     final_state = graph.invoke(state)

@@ -18,9 +18,7 @@ class TestGeneratorNode:
     """Tests for generator_node function."""
 
     def _create_state_with_graded_chunks(
-        self,
-        question: str,
-        graded_chunks_data: list[dict]
+        self, question: str, graded_chunks_data: list[dict]
     ) -> GraphState:
         """Helper to create state with graded chunks."""
         state = create_initial_state(question)
@@ -40,13 +38,13 @@ class TestGeneratorNode:
                     similarity_score=chunk.get("similarity_score", 0.8),
                 ),
                 relevant=chunk.get("relevant", "yes"),
-                confidence=chunk.get("confidence", 0.85)
+                confidence=chunk.get("confidence", 0.85),
             )
             for i, chunk in enumerate(graded_chunks_data)
         ]
         return state
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_with_relevant_chunks(self, mock_create_llm):
         """Test generator creates answer from relevant chunks."""
         # Mock LLM to return answer with citations
@@ -63,12 +61,11 @@ class TestGeneratorNode:
                 "content": "The maximum number of HARQ processes for NR is 16 for both FDD and TDD.",
                 "spec_id": "TS38.321",
                 "section": "5.4",
-                "relevant": "yes"
+                "relevant": "yes",
             }
         ]
         state = self._create_state_with_graded_chunks(
-            "What is the maximum number of HARQ processes in NR?",
-            chunks
+            "What is the maximum number of HARQ processes in NR?", chunks
         )
 
         # Call generator node
@@ -84,7 +81,7 @@ class TestGeneratorNode:
         assert result["citations"][0].spec_id == "TS38.321"
         assert result["citations"][0].section == "5.4"
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_filters_irrelevant_chunks(self, mock_create_llm):
         """Test generator only uses relevant chunks."""
         mock_llm = MagicMock()
@@ -97,24 +94,23 @@ class TestGeneratorNode:
                 "content": "The maximum number of HARQ processes for NR is 16.",
                 "spec_id": "TS38.321",
                 "section": "5.4",
-                "relevant": "yes"
+                "relevant": "yes",
             },
             {
                 "content": "The PDCCH carries downlink control information.",
                 "spec_id": "TS38.211",
                 "section": "7.3",
-                "relevant": "no"  # Irrelevant
+                "relevant": "no",  # Irrelevant
             },
             {
                 "content": "HARQ processes are used for retransmission.",
                 "spec_id": "TS38.321",
                 "section": "5.4.1",
-                "relevant": "yes"
-            }
+                "relevant": "yes",
+            },
         ]
         state = self._create_state_with_graded_chunks(
-            "What is the maximum number of HARQ processes?",
-            chunks
+            "What is the maximum number of HARQ processes?", chunks
         )
 
         generator_node(state)
@@ -130,7 +126,7 @@ class TestGeneratorNode:
         # Irrelevant chunk should NOT be in prompt
         assert "PDCCH" not in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_multiple_citations(self, mock_create_llm):
         """Test generator extracts multiple citations."""
         mock_llm = MagicMock()
@@ -142,12 +138,7 @@ class TestGeneratorNode:
         mock_create_llm.return_value = mock_llm
 
         chunks = [
-            {
-                "content": "HARQ info",
-                "spec_id": "TS38.321",
-                "section": "5.4",
-                "relevant": "yes"
-            }
+            {"content": "HARQ info", "spec_id": "TS38.321", "section": "5.4", "relevant": "yes"}
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
 
@@ -168,7 +159,7 @@ class TestGeneratorNode:
         assert result["citations"][2].spec_id == "TS38.331"
         assert result["citations"][2].section == "5.3.7"
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_no_citations(self, mock_create_llm):
         """Test generator handles response with no citations."""
         mock_llm = MagicMock()
@@ -178,12 +169,7 @@ class TestGeneratorNode:
         )
         mock_create_llm.return_value = mock_llm
 
-        chunks = [
-            {
-                "content": "Some unrelated content",
-                "relevant": "yes"
-            }
-        ]
+        chunks = [{"content": "Some unrelated content", "relevant": "yes"}]
         state = self._create_state_with_graded_chunks("Unclear question", chunks)
 
         result = generator_node(state)
@@ -193,7 +179,7 @@ class TestGeneratorNode:
         assert "don't have enough information" in result["generation"]
         assert result["citations"] == []
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_empty_graded_chunks(self, mock_create_llm):
         """Test generator handles empty graded chunks."""
         mock_llm = MagicMock()
@@ -212,21 +198,15 @@ class TestGeneratorNode:
         # LLM should not be called when there are no chunks
         mock_llm.invoke.assert_not_called()
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_all_irrelevant_chunks(self, mock_create_llm):
         """Test generator handles case where all chunks are irrelevant."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
 
         chunks = [
-            {
-                "content": "Chunk 1",
-                "relevant": "no"
-            },
-            {
-                "content": "Chunk 2",
-                "relevant": "no"
-            }
+            {"content": "Chunk 1", "relevant": "no"},
+            {"content": "Chunk 2", "relevant": "no"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
 
@@ -240,7 +220,7 @@ class TestGeneratorNode:
         # LLM should not be called when all chunks are irrelevant
         mock_llm.invoke.assert_not_called()
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_context_formatting(self, mock_create_llm):
         """Test generator formats context with source citations."""
         mock_llm = MagicMock()
@@ -252,14 +232,14 @@ class TestGeneratorNode:
                 "content": "HARQ content here",
                 "spec_id": "TS38.321",
                 "section": "5.4",
-                "relevant": "yes"
+                "relevant": "yes",
             },
             {
                 "content": "RRC content here",
                 "spec_id": "TS38.331",
                 "section": "5.3.7",
-                "relevant": "yes"
-            }
+                "relevant": "yes",
+            },
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
 
@@ -277,7 +257,7 @@ class TestGeneratorNode:
         assert "38.321" in prompt or "TS38.321" in prompt
         assert "38.331" in prompt or "TS38.331" in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_includes_question_in_prompt(self, mock_create_llm):
         """Test generator includes question in prompt."""
         mock_llm = MagicMock()
@@ -285,12 +265,7 @@ class TestGeneratorNode:
         mock_create_llm.return_value = mock_llm
 
         question = "What is the maximum number of HARQ processes in NR?"
-        chunks = [
-            {
-                "content": "Test content",
-                "relevant": "yes"
-            }
-        ]
+        chunks = [{"content": "Test content", "relevant": "yes"}]
         state = self._create_state_with_graded_chunks(question, chunks)
 
         generator_node(state)
@@ -300,13 +275,12 @@ class TestGeneratorNode:
         prompt = invoke_call_args[0][0]
         assert question in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_citation_with_spaces(self, mock_create_llm):
         """Test generator extracts citations with various spacing."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = (
-            "Info1 [TS 38.321 §5.4] and info2 [TS  38.331  §5.3.7] "
-            "and info3 [TS 38.101-1 § 5.5A]"
+            "Info1 [TS 38.321 §5.4] and info2 [TS  38.331  §5.3.7] and info3 [TS 38.101-1 § 5.5A]"
         )
         mock_create_llm.return_value = mock_llm
 
@@ -318,14 +292,13 @@ class TestGeneratorNode:
         # Should extract all citations despite spacing variations
         assert len(result["citations"]) == 3
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_citation_formats(self, mock_create_llm):
         """Test generator handles different citation formats."""
         mock_llm = MagicMock()
         # Various valid citation formats
         mock_llm.invoke.return_value = (
-            "Reference [TS 38.321 §5.4] and [TS 38.331 §5.3.7.1] "
-            "and [TS 23.501 §4.2.8.2.3]"
+            "Reference [TS 38.321 §5.4] and [TS 38.331 §5.3.7.1] and [TS 23.501 §4.2.8.2.3]"
         )
         mock_create_llm.return_value = mock_llm
 
@@ -340,7 +313,7 @@ class TestGeneratorNode:
         assert any(c.section == "5.3.7.1" for c in result["citations"])
         assert any(c.section == "4.2.8.2.3" for c in result["citations"])
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_handles_llm_error(self, mock_create_llm):
         """Test generator handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -357,7 +330,7 @@ class TestGeneratorNode:
         assert result["error"] is not None
         assert "error" in result["error"].lower()
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_preserves_other_state_fields(self, mock_create_llm):
         """Test that generator only modifies generation fields."""
         mock_llm = MagicMock()
@@ -378,7 +351,7 @@ class TestGeneratorNode:
         assert result["rewrite_count"] == 1
         assert result["average_confidence"] == 0.85
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_citation_raw_format(self, mock_create_llm):
         """Test that citations preserve raw format."""
         mock_llm = MagicMock()
@@ -394,7 +367,7 @@ class TestGeneratorNode:
         assert len(result["citations"]) == 1
         assert result["citations"][0].raw_citation == "[TS 38.321 §5.4]"
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_uses_correct_settings(self, mock_create_llm):
         """Test that generator uses correct LLM settings from config."""
         mock_llm = MagicMock()
@@ -409,7 +382,7 @@ class TestGeneratorNode:
         # Verify create_llm was called with temperature=0.0 for deterministic outputs
         mock_create_llm.assert_called_once_with(temperature=0.0)
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_duplicate_citations(self, mock_create_llm):
         """Test generator handles duplicate citations."""
         mock_llm = MagicMock()
@@ -430,7 +403,7 @@ class TestGeneratorNode:
         assert all(c.spec_id == "TS38.321" for c in result["citations"])
         assert all(c.section == "5.4" for c in result["citations"])
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_strips_whitespace(self, mock_create_llm):
         """Test generator strips whitespace from LLM output."""
         mock_llm = MagicMock()
@@ -445,7 +418,7 @@ class TestGeneratorNode:
         # Should strip leading/trailing whitespace
         assert result["generation"] == "Answer with spacing [TS 38.321 §5.4]"
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_spec_id_normalization(self, mock_create_llm):
         """Test generator normalizes spec IDs (removes spaces/dots)."""
         mock_llm = MagicMock()
@@ -460,7 +433,7 @@ class TestGeneratorNode:
         # Spec ID should be normalized (no spaces)
         assert result["citations"][0].spec_id == "TS38.321"
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_handles_non_string_llm_response(self, mock_create_llm):
         """Test generator handles non-string LLM response."""
         mock_llm = MagicMock()
@@ -479,7 +452,7 @@ class TestGeneratorNode:
         # Should still extract citations from the string representation
         assert len(result["citations"]) >= 0
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_sorts_chunks_by_similarity(self, mock_create_llm):
         """Test generator sorts chunks by similarity score descending."""
         mock_llm = MagicMock()
@@ -493,22 +466,22 @@ class TestGeneratorNode:
                 "spec_id": "TS38.331",
                 "section": "5.1",
                 "similarity_score": 0.6,
-                "relevant": "yes"
+                "relevant": "yes",
             },
             {
                 "content": "High similarity chunk",
                 "spec_id": "TS38.321",
                 "section": "5.4",
                 "similarity_score": 0.95,
-                "relevant": "yes"
+                "relevant": "yes",
             },
             {
                 "content": "Medium similarity chunk",
                 "spec_id": "TS38.211",
                 "section": "7.3",
                 "similarity_score": 0.75,
-                "relevant": "yes"
-            }
+                "relevant": "yes",
+            },
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
 
@@ -526,7 +499,7 @@ class TestGeneratorNode:
         assert high_pos < medium_pos
         assert medium_pos < low_pos
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_limits_to_top2_when_high_confidence(self, mock_create_llm):
         """Test generator limits to top-2 chunks when average_confidence > 0.8."""
         mock_llm = MagicMock()
@@ -535,30 +508,10 @@ class TestGeneratorNode:
 
         # Create 4 chunks with high confidence
         chunks = [
-            {
-                "content": "Chunk 1",
-                "similarity_score": 0.95,
-                "confidence": 0.9,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 2",
-                "similarity_score": 0.90,
-                "confidence": 0.85,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 3",
-                "similarity_score": 0.85,
-                "confidence": 0.9,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 4",
-                "similarity_score": 0.80,
-                "confidence": 0.88,
-                "relevant": "yes"
-            }
+            {"content": "Chunk 1", "similarity_score": 0.95, "confidence": 0.9, "relevant": "yes"},
+            {"content": "Chunk 2", "similarity_score": 0.90, "confidence": 0.85, "relevant": "yes"},
+            {"content": "Chunk 3", "similarity_score": 0.85, "confidence": 0.9, "relevant": "yes"},
+            {"content": "Chunk 4", "similarity_score": 0.80, "confidence": 0.88, "relevant": "yes"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
         state["average_confidence"] = 0.88  # High confidence (> 0.8)
@@ -574,7 +527,7 @@ class TestGeneratorNode:
         assert "Chunk 3" not in prompt  # Should be excluded
         assert "Chunk 4" not in prompt  # Should be excluded
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_no_limit_when_low_confidence(self, mock_create_llm):
         """Test generator uses all chunks when average_confidence <= 0.8."""
         mock_llm = MagicMock()
@@ -583,30 +536,10 @@ class TestGeneratorNode:
 
         # Create 4 chunks with low confidence
         chunks = [
-            {
-                "content": "Chunk 1",
-                "similarity_score": 0.85,
-                "confidence": 0.7,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 2",
-                "similarity_score": 0.80,
-                "confidence": 0.75,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 3",
-                "similarity_score": 0.75,
-                "confidence": 0.8,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 4",
-                "similarity_score": 0.70,
-                "confidence": 0.72,
-                "relevant": "yes"
-            }
+            {"content": "Chunk 1", "similarity_score": 0.85, "confidence": 0.7, "relevant": "yes"},
+            {"content": "Chunk 2", "similarity_score": 0.80, "confidence": 0.75, "relevant": "yes"},
+            {"content": "Chunk 3", "similarity_score": 0.75, "confidence": 0.8, "relevant": "yes"},
+            {"content": "Chunk 4", "similarity_score": 0.70, "confidence": 0.72, "relevant": "yes"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
         state["average_confidence"] = 0.75  # Low confidence (<= 0.8)
@@ -622,7 +555,7 @@ class TestGeneratorNode:
         assert "Chunk 3" in prompt
         assert "Chunk 4" in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_no_limit_when_exactly_2_chunks(self, mock_create_llm):
         """Test generator uses all chunks when there are exactly 2 chunks."""
         mock_llm = MagicMock()
@@ -631,18 +564,8 @@ class TestGeneratorNode:
 
         # Create exactly 2 chunks
         chunks = [
-            {
-                "content": "Chunk 1",
-                "similarity_score": 0.95,
-                "confidence": 0.9,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 2",
-                "similarity_score": 0.90,
-                "confidence": 0.85,
-                "relevant": "yes"
-            }
+            {"content": "Chunk 1", "similarity_score": 0.95, "confidence": 0.9, "relevant": "yes"},
+            {"content": "Chunk 2", "similarity_score": 0.90, "confidence": 0.85, "relevant": "yes"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
         state["average_confidence"] = 0.88  # High confidence but only 2 chunks
@@ -656,7 +579,7 @@ class TestGeneratorNode:
         assert "Chunk 1" in prompt
         assert "Chunk 2" in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_uses_shortened_prompt(self, mock_create_llm):
         """Test generator uses the new shortened prompt format."""
         mock_llm = MagicMock()
@@ -684,7 +607,7 @@ class TestGeneratorNode:
         assert "STEP 4" not in prompt
         assert "STEP 5" not in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_limits_at_exactly_0_8_confidence(self, mock_create_llm):
         """Test generator behavior at confidence boundary (0.8)."""
         mock_llm = MagicMock()
@@ -693,21 +616,9 @@ class TestGeneratorNode:
 
         # Create 4 chunks with confidence exactly at 0.8
         chunks = [
-            {
-                "content": "Chunk 1",
-                "similarity_score": 0.95,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 2",
-                "similarity_score": 0.90,
-                "relevant": "yes"
-            },
-            {
-                "content": "Chunk 3",
-                "similarity_score": 0.85,
-                "relevant": "yes"
-            }
+            {"content": "Chunk 1", "similarity_score": 0.95, "relevant": "yes"},
+            {"content": "Chunk 2", "similarity_score": 0.90, "relevant": "yes"},
+            {"content": "Chunk 3", "similarity_score": 0.85, "relevant": "yes"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
         state["average_confidence"] = 0.8  # Exactly 0.8 (not > 0.8)
@@ -722,7 +633,7 @@ class TestGeneratorNode:
         assert "Chunk 2" in prompt
         assert "Chunk 3" in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_handles_missing_average_confidence(self, mock_create_llm):
         """Test generator handles missing average_confidence field."""
         mock_llm = MagicMock()
@@ -733,7 +644,7 @@ class TestGeneratorNode:
         chunks = [
             {"content": "Chunk 1", "similarity_score": 0.95, "relevant": "yes"},
             {"content": "Chunk 2", "similarity_score": 0.90, "relevant": "yes"},
-            {"content": "Chunk 3", "similarity_score": 0.85, "relevant": "yes"}
+            {"content": "Chunk 3", "similarity_score": 0.85, "relevant": "yes"},
         ]
         state = self._create_state_with_graded_chunks("Test question", chunks)
         # Don't set average_confidence - should default to 0.0
@@ -748,7 +659,7 @@ class TestGeneratorNode:
         assert "Chunk 2" in prompt
         assert "Chunk 3" in prompt
 
-    @patch('specagent.nodes.generator.create_llm')
+    @patch("specagent.nodes.generator.create_llm")
     def test_generator_prompt_includes_exact_units_guidance(self, mock_create_llm):
         """Test that generator prompt includes guidance for extracting exact units."""
         mock_llm = MagicMock()
@@ -756,10 +667,7 @@ class TestGeneratorNode:
         mock_create_llm.return_value = mock_llm
 
         chunks = [{"content": "The PDU size is 128 bits", "relevant": "yes"}]
-        state = self._create_state_with_graded_chunks(
-            "What is the PDU size?",
-            chunks
-        )
+        state = self._create_state_with_graded_chunks("What is the PDU size?", chunks)
 
         generator_node(state)
 

@@ -82,9 +82,7 @@ def _open_table(uri: str, table_name: str) -> lancedb.table.Table:
         resolved = str(Path(uri).expanduser()) if not uri.startswith("s3://") else uri
         db = lancedb.connect(resolved)
         table_list = db.list_tables()
-        existing = (
-            table_list.tables if hasattr(table_list, "tables") else list(table_list)
-        )
+        existing = table_list.tables if hasattr(table_list, "tables") else list(table_list)
         if table_name in existing:
             table = db.open_table(table_name)
             _validate_embedding_dimension(table)
@@ -96,9 +94,7 @@ def _open_table(uri: str, table_name: str) -> lancedb.table.Table:
     except StoreError:
         raise
     except Exception as e:
-        raise StoreError(
-            f"Failed to open LanceDB table {table_name!r} at {uri!r}"
-        ) from e
+        raise StoreError(f"Failed to open LanceDB table {table_name!r} at {uri!r}") from e
 
 
 def _ensure_scalar_indexes(table: lancedb.table.Table) -> None:
@@ -176,7 +172,7 @@ _SAFE_KEY = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 def _build_where_clause(
     library: str | None,
-    filter: dict | None,  # noqa: A002
+    filter: dict | None,
 ) -> str | None:
     """Build a SQL WHERE clause from a library restriction and field equality filters.
 
@@ -263,9 +259,7 @@ class Store:
                 table.create_fts_index("content", replace=True)
                 logger.debug("FTS index rebuilt on 'content'")
             except Exception as fts_err:
-                logger.warning(
-                    "FTS index rebuild failed (hybrid search degraded): %s", fts_err
-                )
+                logger.warning("FTS index rebuild failed (hybrid search degraded): %s", fts_err)
         except Exception as e:
             raise StoreError(f"Failed to upsert {len(chunks)} chunks") from e
 
@@ -303,6 +297,10 @@ class Store:
     def delete_document(self, doc_id: str) -> int:
         """Delete all chunks belonging to a document.
 
+        Note: The FTS index is NOT rebuilt automatically after deletion to avoid
+        O(N²) cost during bulk ingest replace operations. Call rebuild_fts_index()
+        explicitly if you need hybrid search to reflect the deletion immediately.
+
         Args:
             doc_id: The document UUID to delete.
 
@@ -320,17 +318,25 @@ class Store:
             after = table.count_rows()
             deleted = before - after
             logger.info("Deleted %d chunks for doc_id=%s", deleted, doc_id)
-            try:
-                table.create_fts_index("content", replace=True)
-                logger.debug("FTS index rebuilt after delete of doc_id=%s", doc_id)
-            except Exception as fts_err:
-                logger.warning(
-                    "FTS index rebuild failed after delete (hybrid search may return stale results): %s",
-                    fts_err,
-                )
             return deleted
         except Exception as e:
             raise StoreError(f"Failed to delete document {doc_id!r}") from e
+
+    def rebuild_fts_index(self) -> None:
+        """Rebuild the full-text search index on the content column.
+
+        Call this explicitly after bulk operations (e.g. ingest_folder) rather
+        than relying on per-operation rebuilds.
+
+        Raises:
+            StoreError: If the rebuild fails critically.
+        """
+        try:
+            table = self._table()
+            table.create_fts_index("content", replace=True)
+            logger.info("FTS index rebuilt on 'content'")
+        except Exception as fts_err:
+            logger.warning("FTS index rebuild failed (hybrid search may be degraded): %s", fts_err)
 
     def _vector_search(
         self,
@@ -361,7 +367,7 @@ class Store:
         query_text: str,
         top_k: int,
         library: str | None,
-        filter: dict | None,  # noqa: A002
+        filter: dict | None,
     ) -> list[tuple["ChunkRecord", float]]:
         """Hybrid (BM25 + vector) search over stored chunks.
 
@@ -395,15 +401,9 @@ class Store:
                     )
                     if where is not None:
                         query = query.where(where)
-                    rows = (
-                        query.refine_factor(settings.search_refine_factor)
-                        .limit(top_k)
-                        .to_list()
-                    )
+                    rows = query.refine_factor(settings.search_refine_factor).limit(top_k).to_list()
                 except Exception as hybrid_err:
-                    logger.warning(
-                        "Hybrid search fell back to vector-only: %s", hybrid_err
-                    )
+                    logger.warning("Hybrid search fell back to vector-only: %s", hybrid_err)
                     rows = self._vector_search(table, embedding, where, top_k)
             else:
                 rows = self._vector_search(table, embedding, where, top_k)
@@ -437,8 +437,7 @@ class Store:
             safe_id = doc_id.replace("'", "''")
             rows = table.search().where(f"doc_id = '{safe_id}'").to_list()
             records = [
-                ChunkRecord(**{k: v for k, v in row.items() if k != "_distance"})
-                for row in rows
+                ChunkRecord(**{k: v for k, v in row.items() if k != "_distance"}) for row in rows
             ]
             records.sort(key=lambda r: r.chunk_index)
             return records
@@ -470,7 +469,10 @@ class Store:
             if library is not None:
                 safe_lib = library.replace("'", "''")
                 q = q.where(f"library = '{safe_lib}'")
-            rows = q.to_list()
+            # Project only metadata columns — skip the embedding vector (~3 KB/row)
+            rows = q.select(
+                ["doc_id", "source", "title", "library", "content_hash", "created_at", "metadata"]
+            ).to_list()
 
             # Group by doc_id — keep first occurrence for metadata
             seen: dict[str, dict] = {}
@@ -506,7 +508,8 @@ class Store:
         """
         try:
             table = self._table()
-            rows = table.search().to_list()
+            # Project only the two columns needed for aggregation — skip embeddings
+            rows = table.search().select(["library", "doc_id"]).to_list()
 
             libs: dict[str, dict] = {}
             for row in rows:

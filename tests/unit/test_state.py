@@ -2,8 +2,6 @@
 Unit tests for graph state module.
 """
 
-import pytest
-
 from specagent.graph.state import (
     Citation,
     GradedChunk,

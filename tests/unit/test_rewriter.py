@@ -13,10 +13,7 @@ class TestRewriterNode:
     """Tests for rewriter_node function."""
 
     def _create_state_with_low_confidence(
-        self,
-        question: str,
-        rewrite_count: int = 0,
-        chunks_data: list[dict] | None = None
+        self, question: str, rewrite_count: int = 0, chunks_data: list[dict] | None = None
     ) -> GraphState:
         """Helper to create state with low confidence graded chunks."""
         state = create_initial_state(question)
@@ -47,25 +44,29 @@ class TestRewriterNode:
         ]
         return state
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_successful_rewrite(self, mock_create_llm):
         """Test rewriter successfully rewrites query."""
         # Mock LLM to return rewritten question
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = "What is the maximum number of HARQ processes in 5G NR Release 18?"
+        mock_llm.invoke.return_value = (
+            "What is the maximum number of HARQ processes in 5G NR Release 18?"
+        )
         mock_create_llm.return_value = mock_llm
 
         # Create state with low confidence (needs rewriting)
         state = self._create_state_with_low_confidence(
-            "What is the max HARQ processes?",
-            rewrite_count=0
+            "What is the max HARQ processes?", rewrite_count=0
         )
 
         # Call rewriter node
         result = rewriter_node(state)
 
         # Verify rewritten question is set
-        assert result["rewritten_question"] == "What is the maximum number of HARQ processes in 5G NR Release 18?"
+        assert (
+            result["rewritten_question"]
+            == "What is the maximum number of HARQ processes in 5G NR Release 18?"
+        )
 
         # Verify rewrite count is incremented
         assert result["rewrite_count"] == 1
@@ -73,7 +74,7 @@ class TestRewriterNode:
         # Verify LLM was called
         mock_llm.invoke.assert_called_once()
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_max_rewrites_reached(self, mock_create_llm):
         """Test rewriter stops when max rewrites limit is reached."""
         mock_llm = MagicMock()
@@ -81,10 +82,7 @@ class TestRewriterNode:
         mock_create_llm.return_value = mock_llm
 
         # Create state with rewrite_count at max (default is 1)
-        state = self._create_state_with_low_confidence(
-            "What is HARQ?",
-            rewrite_count=1
-        )
+        state = self._create_state_with_low_confidence("What is HARQ?", rewrite_count=1)
 
         # Call rewriter node
         result = rewriter_node(state)
@@ -96,8 +94,8 @@ class TestRewriterNode:
         # Verify LLM was NOT called
         mock_llm.invoke.assert_not_called()
 
-    @patch('specagent.nodes.rewriter.settings.max_rewrites', 2)
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.settings.max_rewrites", 2)
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_increments_count_correctly(self, mock_create_llm):
         """Test rewriter increments rewrite count from non-zero."""
         mock_llm = MagicMock()
@@ -105,10 +103,7 @@ class TestRewriterNode:
         mock_create_llm.return_value = mock_llm
 
         # Start with rewrite_count=1
-        state = self._create_state_with_low_confidence(
-            "HARQ processes?",
-            rewrite_count=1
-        )
+        state = self._create_state_with_low_confidence("HARQ processes?", rewrite_count=1)
 
         result = rewriter_node(state)
 
@@ -116,7 +111,7 @@ class TestRewriterNode:
         assert result["rewrite_count"] == 2
         assert result["rewritten_question"] == "Improved question about HARQ processes"
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_uses_original_question(self, mock_create_llm):
         """Test that rewriter uses original question in prompt."""
         mock_llm = MagicMock()
@@ -133,7 +128,7 @@ class TestRewriterNode:
         prompt = invoke_call_args[0][0]
         assert question in prompt
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_includes_chunk_context(self, mock_create_llm):
         """Test that rewriter includes retrieved chunks in prompt."""
         mock_llm = MagicMock()
@@ -145,8 +140,7 @@ class TestRewriterNode:
             {"content": "Carrier aggregation allows multiple carriers."},
         ]
         state = self._create_state_with_low_confidence(
-            "What is carrier aggregation?",
-            chunks_data=chunks
+            "What is carrier aggregation?", chunks_data=chunks
         )
 
         rewriter_node(state)
@@ -157,7 +151,7 @@ class TestRewriterNode:
         # Should contain some reference to retrieved chunks
         assert "PDCCH" in prompt or "Carrier aggregation" in prompt
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_handles_llm_error(self, mock_create_llm):
         """Test rewriter handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -173,7 +167,7 @@ class TestRewriterNode:
         assert result["error"] is not None
         assert "error" in result["error"].lower()
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_preserves_other_state_fields(self, mock_create_llm):
         """Test that rewriter only modifies rewrite fields."""
         mock_llm = MagicMock()
@@ -191,17 +185,14 @@ class TestRewriterNode:
         assert result["route_reasoning"] == "Test routing"
         assert result["average_confidence"] == 0.3
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_with_empty_chunks(self, mock_create_llm):
         """Test rewriter handles empty retrieved chunks."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Rewritten with no context"
         mock_create_llm.return_value = mock_llm
 
-        state = self._create_state_with_low_confidence(
-            "Test question",
-            chunks_data=[]
-        )
+        state = self._create_state_with_low_confidence("Test question", chunks_data=[])
 
         result = rewriter_node(state)
 
@@ -209,8 +200,8 @@ class TestRewriterNode:
         assert result["rewritten_question"] == "Rewritten with no context"
         assert result["rewrite_count"] == 1
 
-    @patch('specagent.nodes.rewriter.settings.max_rewrites', 2)
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.settings.max_rewrites", 2)
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_limit_minus_one(self, mock_create_llm):
         """Test rewriter allows rewrite when count is one below limit."""
         mock_llm = MagicMock()
@@ -218,10 +209,7 @@ class TestRewriterNode:
         mock_create_llm.return_value = mock_llm
 
         # At count=1, should allow one more rewrite (max is 2)
-        state = self._create_state_with_low_confidence(
-            "Test question",
-            rewrite_count=1
-        )
+        state = self._create_state_with_low_confidence("Test question", rewrite_count=1)
 
         result = rewriter_node(state)
 
@@ -229,7 +217,7 @@ class TestRewriterNode:
         assert result["rewritten_question"] == "Final rewrite"
         assert result["rewrite_count"] == 2
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_strips_whitespace(self, mock_create_llm):
         """Test rewriter strips extra whitespace from LLM output."""
         mock_llm = MagicMock()
@@ -243,7 +231,7 @@ class TestRewriterNode:
         # Should strip whitespace
         assert result["rewritten_question"] == "What is the maximum number of HARQ processes?"
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_uses_correct_settings(self, mock_create_llm):
         """Test that rewriter uses correct LLM settings from config."""
         mock_llm = MagicMock()
@@ -257,7 +245,7 @@ class TestRewriterNode:
         # Verify create_llm was called
         mock_create_llm.assert_called_once()
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_prompt_format(self, mock_create_llm):
         """Test that rewriter prompt contains all necessary components."""
         mock_llm = MagicMock()
@@ -277,7 +265,7 @@ class TestRewriterNode:
         assert "HARQ" in prompt  # From chunk content
         assert any(keyword in prompt.lower() for keyword in ["rewrite", "reformulate", "specific"])
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_handles_non_string_llm_response(self, mock_create_llm):
         """Test that rewriter handles non-string LLM response."""
         mock_llm = MagicMock()
@@ -322,11 +310,13 @@ class TestRewriterNode:
         # Should have at least 2 telecom terms in the examples
         assert len(found_terms) >= 2, f"Expected at least 2 telecom terms, found: {found_terms}"
 
-    @patch('specagent.nodes.rewriter.create_llm')
+    @patch("specagent.nodes.rewriter.create_llm")
     def test_rewriter_prompt_includes_examples_in_actual_call(self, mock_create_llm):
         """Test that few-shot examples are included when calling LLM."""
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = "RRC connection reconfiguration procedure for X2 handover in 5G NR"
+        mock_llm.invoke.return_value = (
+            "RRC connection reconfiguration procedure for X2 handover in 5G NR"
+        )
         mock_create_llm.return_value = mock_llm
 
         state = self._create_state_with_low_confidence("What is handover?")

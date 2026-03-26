@@ -76,8 +76,7 @@ def convert(source: Path) -> str:
         )
     if ext not in SUPPORTED_EXTENSIONS:
         raise UnsupportedFormatError(
-            f"Unsupported file extension: {ext!r}. "
-            f"Supported: {sorted(SUPPORTED_EXTENSIONS)}"
+            f"Unsupported file extension: {ext!r}. Supported: {sorted(SUPPORTED_EXTENSIONS)}"
         )
 
     logger.debug("Converting %s (ext=%s)", source, ext)

@@ -5,8 +5,8 @@ The GraphState TypedDict defines all data that flows through the LangGraph
 workflow. Each node reads from and writes to this shared state.
 """
 
-from dataclasses import dataclass, field
-from typing import Literal, Optional, TypedDict
+from dataclasses import dataclass
+from typing import Literal, TypedDict
 
 
 @dataclass
@@ -110,7 +110,7 @@ class GraphState(TypedDict, total=False):
     # ==========================================================================
     # Retrieval
     # ==========================================================================
-    rewritten_question: Optional[str]
+    rewritten_question: str | None
     """Reformulated question for improved retrieval (if rewriting was needed)."""
 
     retrieved_chunks: list[RetrievedChunk]
@@ -134,7 +134,7 @@ class GraphState(TypedDict, total=False):
     # ==========================================================================
     # Generation
     # ==========================================================================
-    generation: Optional[str]
+    generation: str | None
     """The generated answer text."""
 
     citations: list[Citation]
@@ -149,10 +149,13 @@ class GraphState(TypedDict, total=False):
     ungrounded_claims: list[str]
     """List of claims not supported by source documents."""
 
+    regeneration_count: int
+    """Number of times the generator has been re-run after a failed hallucination check."""
+
     # ==========================================================================
     # Metadata
     # ==========================================================================
-    error: Optional[str]
+    error: str | None
     """Error message if something went wrong."""
 
     processing_time_ms: float
@@ -185,6 +188,7 @@ def create_initial_state(question: str) -> GraphState:
         graded_chunks=[],
         citations=[],
         rewrite_count=0,
+        regeneration_count=0,
         generation=None,
         error=None,
         ungrounded_claims=[],

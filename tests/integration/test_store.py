@@ -1,4 +1,5 @@
 """Integration tests for LanceDB store."""
+
 import json
 import logging
 import uuid
@@ -173,8 +174,8 @@ def test_build_where_clause_filter_only():
 
 @pytest.mark.unit
 def test_build_where_clause_invalid_key_raises():
-    from specagent.retrieval.store import _build_where_clause
     from specagent.retrieval.exceptions import StoreError
+    from specagent.retrieval.store import _build_where_clause
 
     with pytest.raises(StoreError, match="Invalid filter key"):
         _build_where_clause(None, {"bad-key!": "val"})
@@ -221,9 +222,9 @@ def test_open_table_reraises_store_error_from_validate():
             "specagent.retrieval.store._validate_embedding_dimension",
             side_effect=StoreError("dim mismatch"),
         ),
+        pytest.raises(StoreError, match="dim mismatch"),
     ):
-        with pytest.raises(StoreError, match="dim mismatch"):
-            _open_table("/tmp/test_db", "docs")
+        _open_table("/tmp/test_db", "docs")
 
 
 @pytest.mark.unit
@@ -346,17 +347,28 @@ def test_find_existing_exception_raises_store_error():
 
 
 @pytest.mark.unit
-def test_delete_fts_failure_logs_warning(caplog):
+def test_rebuild_fts_failure_logs_warning(caplog):
     from specagent.retrieval.store import Store
 
     store_obj = Store(uri="/tmp/test_store_unit", table_name="docs")
     mock_table = MagicMock()
-    mock_table.count_rows.side_effect = [1, 0]
     mock_table.create_fts_index.side_effect = RuntimeError("fts error")
     with patch("specagent.retrieval.store._open_table", return_value=mock_table):
         with caplog.at_level(logging.WARNING, logger="specagent.retrieval.store"):
-            store_obj.delete_document("test-doc-id")
+            store_obj.rebuild_fts_index()
     assert "FTS index rebuild failed" in caplog.text
+
+
+@pytest.mark.unit
+def test_rebuild_fts_success_logs_info(caplog):
+    from specagent.retrieval.store import Store
+
+    store_obj = Store(uri="/tmp/test_store_unit", table_name="docs")
+    mock_table = MagicMock()
+    with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+        with caplog.at_level(logging.INFO, logger="specagent.retrieval.store"):
+            store_obj.rebuild_fts_index()
+    assert "FTS index rebuilt" in caplog.text
 
 
 @pytest.mark.unit

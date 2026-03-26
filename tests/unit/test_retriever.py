@@ -138,7 +138,9 @@ def test_retriever_bad_json_metadata_uses_empty_section():
     emb.embed.return_value = iter([[0.1] * 768])
     store = MagicMock()
     store.search.return_value = [(rec, 0.8)]
-    with patch("specagent.nodes.retriever.get_embedder", return_value=emb), \
-         patch("specagent.nodes.retriever.get_store", return_value=store):
+    with (
+        patch("specagent.nodes.retriever.get_embedder", return_value=emb),
+        patch("specagent.nodes.retriever.get_store", return_value=store),
+    ):
         result = retriever_node({"question": "test?", "rewritten_question": None})
     assert result["retrieved_chunks"][0].section == ""

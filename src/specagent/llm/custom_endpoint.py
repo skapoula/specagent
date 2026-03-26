@@ -5,10 +5,8 @@ Provides a simple wrapper for local/custom inference endpoints that implement
 the OpenAI chat completions API format.
 """
 
-import json
 import logging
 import time
-from typing import Optional
 
 import requests
 
@@ -90,9 +88,7 @@ class CustomEndpointLLM:
         for attempt in range(self.max_retries):
             try:
                 start_time = time.perf_counter()
-                response = requests.post(
-                    self.endpoint_url, json=payload, timeout=self.timeout
-                )
+                response = requests.post(self.endpoint_url, json=payload, timeout=self.timeout)
                 response.raise_for_status()
                 inference_ms = (time.perf_counter() - start_time) * 1000
 
@@ -104,10 +100,13 @@ class CustomEndpointLLM:
                 # Retry on 502/503 (Bad Gateway/Service Unavailable) for serverless cold starts
                 if e.response.status_code in (502, 503, 504):
                     if attempt < self.max_retries - 1:
-                        delay = self.retry_delay * (2 ** attempt)  # Exponential backoff
+                        delay = self.retry_delay * (2**attempt)  # Exponential backoff
                         logger.warning(
-                            f"Endpoint returned {e.response.status_code}, "
-                            f"retrying in {delay:.1f}s (attempt {attempt + 1}/{self.max_retries})"
+                            "Endpoint returned %s, retrying in %.1fs (attempt %d/%d)",
+                            e.response.status_code,
+                            delay,
+                            attempt + 1,
+                            self.max_retries,
                         )
                         time.sleep(delay)
                         continue
@@ -117,10 +116,13 @@ class CustomEndpointLLM:
             except (requests.Timeout, requests.ConnectionError) as e:
                 last_exception = e
                 if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (2 ** attempt)
+                    delay = self.retry_delay * (2**attempt)
                     logger.warning(
-                        f"Connection error: {str(e)}, "
-                        f"retrying in {delay:.1f}s (attempt {attempt + 1}/{self.max_retries})"
+                        "Connection error: %s, retrying in %.1fs (attempt %d/%d)",
+                        e,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
                     )
                     time.sleep(delay)
                     continue
@@ -153,45 +155,44 @@ class CustomEndpointLLM:
         }
 
         try:
-            logger.info(f"Performing health check on endpoint: {self.endpoint_url}")
-            response = requests.post(
-                self.endpoint_url, json=test_payload, timeout=timeout
-            )
+            logger.info("Performing health check on endpoint: %s", self.endpoint_url)
+            response = requests.post(self.endpoint_url, json=test_payload, timeout=timeout)
             response.raise_for_status()
 
             # Verify response structure
             result = response.json()
             if "choices" in result and len(result["choices"]) > 0:
-                logger.info(f"✓ Endpoint health check passed ({response.elapsed.total_seconds():.2f}s)")
-                return True, f"Endpoint healthy (responded in {response.elapsed.total_seconds():.2f}s)"
+                elapsed = response.elapsed.total_seconds()
+                logger.info("Endpoint health check passed (%.2fs)", elapsed)
+                return True, f"Endpoint healthy (responded in {elapsed:.2f}s)"
             else:
                 error_msg = "Endpoint returned invalid response structure"
-                logger.warning(f"✗ {error_msg}")
+                logger.warning("Health check: %s", error_msg)
                 return False, error_msg
 
         except requests.Timeout:
             error_msg = f"Endpoint timed out after {timeout}s"
-            logger.error(f"✗ {error_msg}")
+            logger.error("Health check failed: %s", error_msg)
             return False, error_msg
 
         except requests.ConnectionError as e:
-            error_msg = f"Connection failed: {str(e)}"
-            logger.error(f"✗ {error_msg}")
+            error_msg = f"Connection failed: {e!s}"
+            logger.error("Health check failed: %s", error_msg)
             return False, error_msg
 
         except requests.HTTPError as e:
             error_msg = f"HTTP {e.response.status_code}: {e.response.reason}"
-            logger.error(f"✗ {error_msg}")
+            logger.error("Health check failed: %s", error_msg)
             return False, error_msg
 
         except Exception as e:
-            error_msg = f"Unexpected error: {str(e)}"
-            logger.error(f"✗ {error_msg}")
+            error_msg = f"Unexpected error: {e!s}"
+            logger.error("Health check failed: %s", error_msg)
             return False, error_msg
 
 
 def create_custom_llm(
-    endpoint_url: Optional[str] = None,
+    endpoint_url: str | None = None,
     temperature: float = 0.1,
     max_tokens: int = 1024,
 ) -> CustomEndpointLLM:
@@ -210,11 +211,13 @@ def create_custom_llm(
         from specagent.config import settings
 
         # Default to configured endpoint or fallback
-        endpoint_url = str(getattr(
-            settings,
-            "custom_endpoint_url",
-            "http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
-        ))
+        endpoint_url = str(
+            getattr(
+                settings,
+                "custom_endpoint_url",
+                "http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
+            )
+        )
 
     return CustomEndpointLLM(
         endpoint_url=endpoint_url, temperature=temperature, max_tokens=max_tokens

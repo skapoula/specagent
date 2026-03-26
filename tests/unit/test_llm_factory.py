@@ -22,8 +22,8 @@ class TestCreateLLM:
     # Groq provider
     # ------------------------------------------------------------------
 
-    @patch('langchain_openai.ChatOpenAI')
-    @patch('specagent.config.settings')
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
     def test_create_llm_groq_returns_adapter(self, mock_settings, mock_chat_openai):
         """create_llm with llm_provider='groq' returns a _GroqAdapter."""
         mock_settings.llm_provider = "groq"
@@ -38,8 +38,8 @@ class TestCreateLLM:
 
         assert isinstance(llm, _GroqAdapter)
 
-    @patch('langchain_openai.ChatOpenAI')
-    @patch('specagent.config.settings')
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
     def test_create_llm_groq_uses_correct_base_url(self, mock_settings, mock_chat_openai):
         """Groq ChatOpenAI is pointed at the Groq API base URL."""
         mock_settings.llm_provider = "groq"
@@ -58,8 +58,8 @@ class TestCreateLLM:
         assert call_kwargs["temperature"] == 0.0
         assert call_kwargs["max_tokens"] == 1024
 
-    @patch('langchain_openai.ChatOpenAI')
-    @patch('specagent.config.settings')
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
     def test_create_llm_groq_reasoning_effort_included_when_set(
         self, mock_settings, mock_chat_openai
     ):
@@ -77,11 +77,9 @@ class TestCreateLLM:
         call_kwargs = mock_chat_openai.call_args.kwargs
         assert call_kwargs["model_kwargs"]["reasoning_effort"] == "medium"
 
-    @patch('langchain_openai.ChatOpenAI')
-    @patch('specagent.config.settings')
-    def test_create_llm_groq_no_reasoning_effort_when_empty(
-        self, mock_settings, mock_chat_openai
-    ):
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
+    def test_create_llm_groq_no_reasoning_effort_when_empty(self, mock_settings, mock_chat_openai):
         """reasoning_effort is omitted from model_kwargs when empty string."""
         mock_settings.llm_provider = "groq"
         mock_settings.groq_api_key = "gsk_test"
@@ -96,7 +94,7 @@ class TestCreateLLM:
         call_kwargs = mock_chat_openai.call_args.kwargs
         assert "reasoning_effort" not in call_kwargs["model_kwargs"]
 
-    @patch('specagent.config.settings')
+    @patch("specagent.config.settings")
     def test_create_llm_groq_raises_when_no_api_key(self, mock_settings):
         """create_llm raises ValueError when llm_provider='groq' and no API key."""
         mock_settings.llm_provider = "groq"
@@ -135,8 +133,8 @@ class TestCreateLLM:
     # custom_endpoint provider
     # ------------------------------------------------------------------
 
-    @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
-    @patch('specagent.config.settings')
+    @patch("specagent.llm.custom_endpoint.CustomEndpointLLM")
+    @patch("specagent.config.settings")
     def test_create_llm_custom_endpoint_default_temperature(
         self, mock_settings, mock_custom_endpoint
     ):
@@ -159,8 +157,8 @@ class TestCreateLLM:
             retry_delay=5.0,
         )
 
-    @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
-    @patch('specagent.config.settings')
+    @patch("specagent.llm.custom_endpoint.CustomEndpointLLM")
+    @patch("specagent.config.settings")
     def test_create_llm_custom_endpoint_custom_temperature(
         self, mock_settings, mock_custom_endpoint
     ):
@@ -183,14 +181,12 @@ class TestCreateLLM:
             retry_delay=5.0,
         )
 
-    @patch('specagent.llm.custom_endpoint.CustomEndpointLLM')
-    @patch('specagent.config.settings')
-    def test_create_llm_legacy_use_custom_endpoint_bool(
-        self, mock_settings, mock_custom_endpoint
-    ):
+    @patch("specagent.llm.custom_endpoint.CustomEndpointLLM")
+    @patch("specagent.config.settings")
+    def test_create_llm_legacy_use_custom_endpoint_bool(self, mock_settings, mock_custom_endpoint):
         """Legacy use_custom_endpoint=True still routes to CustomEndpointLLM."""
-        mock_settings.llm_provider = "local"         # provider not groq/custom...
-        mock_settings.use_custom_endpoint = True     # ...but legacy bool overrides
+        mock_settings.llm_provider = "local"  # provider not groq/custom...
+        mock_settings.use_custom_endpoint = True  # ...but legacy bool overrides
         mock_settings.custom_endpoint_url = "http://localhost:9000"
         mock_settings.llm_temperature = 0.5
         mock_settings.llm_max_tokens = 512
@@ -204,7 +200,7 @@ class TestCreateLLM:
     # local provider
     # ------------------------------------------------------------------
 
-    @patch('specagent.config.settings')
+    @patch("specagent.config.settings")
     def test_create_llm_local_llm_raises_not_implemented(self, mock_settings):
         """create_llm raises NotImplementedError for llm_provider='local'."""
         mock_settings.llm_provider = "local"

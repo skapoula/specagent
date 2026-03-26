@@ -8,6 +8,9 @@ Routes queries to either:
 Uses structured output from LLM to get routing decision with reasoning.
 """
 
+import json
+import logging
+import re
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -17,6 +20,8 @@ from specagent.llm import create_llm
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
 
+logger = logging.getLogger(__name__)
+
 
 class RouteDecision(BaseModel):
     """Structured output for routing decisions."""
@@ -24,9 +29,7 @@ class RouteDecision(BaseModel):
     route: Literal["retrieve", "reject"] = Field(
         description="'retrieve' for 3GPP questions, 'reject' for off-topic"
     )
-    reasoning: str = Field(
-        description="Brief explanation of the routing decision"
-    )
+    reasoning: str = Field(description="Brief explanation of the routing decision")
 
 
 ROUTER_PROMPT = """You are a router for a 3GPP telecom specification RAG assistant.
@@ -66,12 +69,8 @@ def router_node(state: "GraphState") -> "GraphState":
         # Call LLM
         response = llm.invoke(prompt)
 
-        # Parse JSON response
-        import json
-        import re
-
         # Extract JSON from response (handle cases where LLM adds extra text)
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        json_match = re.search(r"\{.*\}", response, re.DOTALL)
         if json_match:
             json_str = json_match.group(0)
             parsed = json.loads(json_str)
@@ -86,8 +85,9 @@ def router_node(state: "GraphState") -> "GraphState":
 
     except Exception as e:
         # LLM unavailable — default to retrieve so the pipeline can still run
+        logger.error("Router LLM error, defaulting to retrieve: %s", e)
         state["route_decision"] = "retrieve"
         state["route_reasoning"] = "LLM unavailable; defaulting to retrieve"
-        state["error"] = f"Router LLM error: {str(e)}"
+        state["error"] = f"Router LLM error: {e!s}"
 
     return state

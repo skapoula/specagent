@@ -5,6 +5,7 @@ Uses relevant chunks as context to generate a comprehensive answer
 with inline citations in the format [TS XX.XXX §Y.Z].
 """
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ from specagent.llm import create_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
+
+logger = logging.getLogger(__name__)
 
 
 GENERATOR_PROMPT = """You are a 3GPP specification expert assistant. Extract precise answers from the provided 3GPP context ONLY.
@@ -39,9 +42,7 @@ Answer:"""
 
 # Regex pattern to extract citations in format: [TS XX.XXX §Y.Z]
 # Captures: TS number (with optional dash) and section number (with dots/letters)
-CITATION_PATTERN = re.compile(
-    r'\[TS\s+(\d+\.\d+(?:-\d+)?)\s+§\s*([0-9A-Za-z.]+)\]'
-)
+CITATION_PATTERN = re.compile(r"\[TS\s+(\d+\.\d+(?:-\d+)?)\s+§\s*([0-9A-Za-z.]+)\]")
 
 
 def generator_node(state: "GraphState") -> "GraphState":
@@ -62,9 +63,7 @@ def generator_node(state: "GraphState") -> "GraphState":
     graded_chunks = state.get("graded_chunks", [])
 
     # Filter for relevant chunks only
-    relevant_chunks = [
-        gc.chunk for gc in graded_chunks if gc.relevant == "yes"
-    ]
+    relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
 
     # Optimization: Sort by similarity descending, take top-2 if high confidence
     relevant_chunks.sort(key=lambda c: c.similarity_score, reverse=True)
@@ -86,7 +85,7 @@ def generator_node(state: "GraphState") -> "GraphState":
         context_parts = []
         for idx, chunk in enumerate(relevant_chunks, start=1):
             # Format: **Chunk N** [TS XX.XXX §Y.Z]: content
-            source_ref = f"[TS {chunk.spec_id.replace('TS', '').replace('.', '.', 1)} §{chunk.section}]"
+            source_ref = f"[TS {chunk.spec_id.replace('TS', '', 1)} §{chunk.section}]"
             context_parts.append(f"**Chunk {idx}** {source_ref}:\n{chunk.content}")
 
         context = "\n\n".join(context_parts)
@@ -96,10 +95,7 @@ def generator_node(state: "GraphState") -> "GraphState":
         llm = create_llm(temperature=0.0)
 
         # Format prompt with question and context
-        prompt = GENERATOR_PROMPT.format(
-            question=question,
-            context=context
-        )
+        prompt = GENERATOR_PROMPT.format(question=question, context=context)
 
         # Call LLM to generate answer
         generation = llm.invoke(prompt)
@@ -111,7 +107,7 @@ def generator_node(state: "GraphState") -> "GraphState":
         citations = []
         for match in CITATION_PATTERN.finditer(generation):
             spec_num = match.group(1)  # e.g., "38.321" or "38.101-1"
-            section = match.group(2)   # e.g., "5.4" or "5.3.7.1"
+            section = match.group(2)  # e.g., "5.4" or "5.3.7.1"
             raw_citation = match.group(0)  # Full match like "[TS 38.321 §5.4]"
 
             # Normalize spec_id (TS38.321 format - no spaces)
@@ -122,7 +118,7 @@ def generator_node(state: "GraphState") -> "GraphState":
                 spec_id=spec_id,
                 section=section,
                 raw_citation=raw_citation,
-                chunk_preview=""  # Optional field
+                chunk_preview="",  # Optional field
             )
             citations.append(citation)
 
@@ -131,7 +127,7 @@ def generator_node(state: "GraphState") -> "GraphState":
         state["citations"] = citations
 
     except Exception as e:
-        # Handle errors gracefully
+        logger.error("Generator error: %s", e)
         state["error"] = f"Generator error: {e!s}"
         state["generation"] = None
         state["citations"] = []

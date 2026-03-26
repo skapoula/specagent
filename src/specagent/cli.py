@@ -30,7 +30,7 @@ def serve(
     import uvicorn
 
     console.print(f"[green]Starting SpecAgent server on {host}:{port}[/green]")
-    
+
     uvicorn.run(
         "specagent.api.main:app",
         host=host,
@@ -103,11 +103,15 @@ def index(
         help="Library name to index into (default: DEFAULT_LIBRARY from config)",
     ),
     force: bool = typer.Option(
-        False, "--force", "-f",
+        False,
+        "--force",
+        "-f",
         help="Delete existing library and re-index all files",
     ),
     max_concurrency: int = typer.Option(
-        4, "--max-concurrency", "-c",
+        4,
+        "--max-concurrency",
+        "-c",
         help="Maximum concurrent files during ingestion (default: 4)",
     ),
 ) -> None:
@@ -138,9 +142,7 @@ def index(
         except Exception as e:
             console.print(f"[yellow]Warning: could not clear library: {e}[/yellow]")
 
-    console.print(
-        f"[blue]Indexing {target_dir} into library '{target_lib}'...[/blue]"
-    )
+    console.print(f"[blue]Indexing {target_dir} into library '{target_lib}'...[/blue]")
 
     result = asyncio.run(
         ingest_folder(
@@ -183,7 +185,6 @@ def benchmark(
 
     from specagent.evaluation.benchmark import (
         load_benchmark_questions,
-        run_benchmark,
     )
 
     dataset_path = Path(dataset)

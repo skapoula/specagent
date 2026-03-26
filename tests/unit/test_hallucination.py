@@ -252,7 +252,9 @@ class TestHallucinationCheckNode:
     def test_hallucination_no_chunks_partial(self, mock_create_llm):
         """Test hallucination check with no chunks - partial result."""
         mock_llm = MagicMock()
-        mock_llm.invoke.return_value = '{"grounded": "partial", "ungrounded_claims": ["Some claims are questionable"]}'
+        mock_llm.invoke.return_value = (
+            '{"grounded": "partial", "ungrounded_claims": ["Some claims are questionable"]}'
+        )
         mock_create_llm.return_value = mock_llm
 
         state = create_initial_state("Test question")
@@ -524,9 +526,7 @@ class TestContainsNumericalOrTabularContent:
         assert not _contains_numerical_or_tabular_content(
             "According to [TS 38.321], the MAC layer handles HARQ."
         )
-        assert not _contains_numerical_or_tabular_content(
-            "See [TS 23.501] for more details."
-        )
+        assert not _contains_numerical_or_tabular_content("See [TS 23.501] for more details.")
 
     def test_ignores_spec_citations_with_section(self):
         """Test that spec citations with section numbers are ignored."""
@@ -542,18 +542,14 @@ class TestContainsNumericalOrTabularContent:
         assert not _contains_numerical_or_tabular_content(
             "According to [ts 38.321], this is specified."
         )
-        assert not _contains_numerical_or_tabular_content(
-            "See [Ts 23.501] for details."
-        )
+        assert not _contains_numerical_or_tabular_content("See [Ts 23.501] for details.")
 
     def test_detects_numbers_with_citations_present(self):
         """Test that actual numbers are still detected even with citations."""
         assert _contains_numerical_or_tabular_content(
             "According to [TS 38.321], the maximum is 16 HARQ processes."
         )
-        assert _contains_numerical_or_tabular_content(
-            "The value is 100ms as per [TS 38.214]."
-        )
+        assert _contains_numerical_or_tabular_content("The value is 100ms as per [TS 38.214].")
 
     def test_mixed_citations_and_text(self):
         """Test text with only citations and no other numbers."""
@@ -780,14 +776,15 @@ class TestHallucinationCheckConditional:
     @patch("specagent.nodes.hallucination.re.search")
     def test_with_chunks_json_parse_fallback(self, mock_re_search, mock_create_llm):
         """Test fallback to direct json.loads when regex doesn't match (with chunks)."""
+
         # Mock regex search to return None (no match) for the second call
         # First call is for citation pattern in _contains_numerical_or_tabular_content
         # We need to handle multiple re.search calls
         def search_side_effect(pattern, text, *args):
-            if pattern == r'\[TS\s+\d+\.\d+[^\]]*\]':
+            if pattern == r"\[TS\s+\d+\.\d+[^\]]*\]":
                 # Citation pattern - return None (no citations)
                 return None
-            elif pattern == r'\{.*\}':
+            elif pattern == r"\{.*\}":
                 # JSON pattern - return None to trigger fallback
                 return None
             else:
@@ -822,8 +819,7 @@ class TestHallucinationCheckConditional:
         ]
         state["retrieved_chunks"] = retrieved_chunks
         state["graded_chunks"] = [
-            GradedChunk(chunk=chunk, relevant="yes", confidence=0.85)
-            for chunk in retrieved_chunks
+            GradedChunk(chunk=chunk, relevant="yes", confidence=0.85) for chunk in retrieved_chunks
         ]
 
         result = hallucination_check_node(state)

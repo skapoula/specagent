@@ -10,7 +10,8 @@ Usage:
 """
 
 import functools
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from specagent.config import settings
 
@@ -29,7 +30,7 @@ def setup_tracing() -> None:
     Example:
         # Start Phoenix server first:
         # phoenix serve
-        
+
         from specagent.tracing import setup_tracing
         setup_tracing()
     """
@@ -37,8 +38,8 @@ def setup_tracing() -> None:
         return
 
     try:
-        from phoenix.otel import register
         from openinference.instrumentation.langchain import LangChainInstrumentor
+        from phoenix.otel import register
 
         # Register tracer provider with Phoenix
         tracer_provider = register(
@@ -51,12 +52,13 @@ def setup_tracing() -> None:
 
     except ImportError:
         import warnings
+
         warnings.warn(
-            "Phoenix tracing dependencies not installed. "
-            "Install with: pip install specagent[eval]"
+            "Phoenix tracing dependencies not installed. Install with: pip install specagent[eval]"
         )
     except Exception as e:
         import warnings
+
         warnings.warn(f"Failed to setup tracing: {e}")
 
 
@@ -75,6 +77,7 @@ def traced(name: str | None = None) -> Callable[[F], F]:
         def my_function():
             ...
     """
+
     def decorator(func: F) -> F:
         span_name = name or func.__name__
 

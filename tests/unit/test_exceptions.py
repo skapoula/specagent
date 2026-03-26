@@ -1,4 +1,5 @@
 """Tests for domain exception classes in specagent.retrieval.exceptions."""
+
 import pytest
 
 

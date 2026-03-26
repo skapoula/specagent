@@ -1,8 +1,9 @@
 """Unit tests for the CLI commands."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from typer.testing import CliRunner
-from unittest.mock import MagicMock, patch
 
 from specagent.cli import app
 
@@ -42,6 +43,7 @@ def test_index_command_has_force_option():
 # ---------------------------------------------------------------------------
 # serve command
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestServeCommand:
@@ -86,6 +88,7 @@ class TestServeCommand:
 # ---------------------------------------------------------------------------
 # query command
 # ---------------------------------------------------------------------------
+
 
 def _ok_result() -> dict[str, object]:
     """Return a typical successful GraphState-like dict."""
@@ -173,6 +176,7 @@ class TestQueryCommand:
 # index command
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestIndexCommand:
     def test_index_calls_ingest_folder(self, tmp_path):
@@ -221,15 +225,13 @@ class TestIndexCommand:
         )
 
         mock_store = MagicMock()
-        mock_store.list_documents.return_value = [
-            {"doc_id": "doc1"}, {"doc_id": "doc2"}
-        ]
+        mock_store.list_documents.return_value = [{"doc_id": "doc1"}, {"doc_id": "doc2"}]
 
-        with patch("specagent.retrieval.resources.get_store", return_value=mock_store), \
-             patch("asyncio.run", return_value=mock_result):
-            result = runner.invoke(
-                app, ["index", "--docs-dir", str(tmp_path), "--force"]
-            )
+        with (
+            patch("specagent.retrieval.resources.get_store", return_value=mock_store),
+            patch("asyncio.run", return_value=mock_result),
+        ):
+            result = runner.invoke(app, ["index", "--docs-dir", str(tmp_path), "--force"])
 
         assert result.exit_code == 0
         mock_store.delete_document.assert_called()
@@ -250,11 +252,11 @@ class TestIndexCommand:
             errors=[],
         )
 
-        with patch("specagent.retrieval.resources.get_store", side_effect=RuntimeError("DB error")), \
-             patch("asyncio.run", return_value=mock_result):
-            result = runner.invoke(
-                app, ["index", "--docs-dir", str(tmp_path), "--force"]
-            )
+        with (
+            patch("specagent.retrieval.resources.get_store", side_effect=RuntimeError("DB error")),
+            patch("asyncio.run", return_value=mock_result),
+        ):
+            result = runner.invoke(app, ["index", "--docs-dir", str(tmp_path), "--force"])
 
         # Should warn but not crash
         assert result.exit_code == 0
@@ -312,6 +314,7 @@ class TestIndexCommand:
 # benchmark command
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestBenchmarkCommand:
     def test_benchmark_missing_dataset_exits_with_error(self, tmp_path):
@@ -331,9 +334,7 @@ class TestBenchmarkCommand:
             "specagent.evaluation.benchmark.load_benchmark_questions",
             return_value=mock_questions,
         ):
-            result = runner.invoke(
-                app, ["benchmark", "--dataset", str(dataset_file)]
-            )
+            result = runner.invoke(app, ["benchmark", "--dataset", str(dataset_file)])
 
         # Command runs to completion (not-yet-implemented message is expected)
         assert result.exit_code == 0
@@ -367,6 +368,7 @@ class TestBenchmarkCommand:
 # ---------------------------------------------------------------------------
 # version command
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestVersionCommand:

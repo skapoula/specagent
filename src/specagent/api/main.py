@@ -45,12 +45,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing SpecAgent resources...")
 
     try:
-        status = initialize_resources()
-        logger.info(f"Resource initialization status: {status}")
+        init_status = initialize_resources()
+        logger.info("Resource initialization status: %s", init_status)
         logger.info("LanceDB store opened successfully")
         logger.info("Embedder initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize resources: {e}")
+        logger.error("Failed to initialize resources: %s", e)
         raise RuntimeError(f"Startup failed: {e}") from e
 
     # TODO: Initialize Phoenix tracing if enabled
@@ -80,13 +80,12 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # CORS middleware
+    # CORS middleware — origins configured via CORS_ALLOW_ORIGINS env var
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure for production
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.cors_allow_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     # Register routes

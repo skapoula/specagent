@@ -9,7 +9,6 @@ import json
 import logging
 import statistics
 import sys
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -95,24 +94,24 @@ class BenchmarkReport:
     def to_markdown(self) -> str:
         """Generate markdown report."""
         lines = [
-            f"# SpecAgent Benchmark Report",
-            f"",
+            "# SpecAgent Benchmark Report",
+            "",
             f"**Date:** {self.timestamp}",
-            f"",
-            f"## Summary",
-            f"",
-            f"| Metric | Value |",
-            f"|--------|-------|",
+            "",
+            "## Summary",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
             f"| Total Questions | {self.total_questions} |",
             f"| Correct Answers | {self.correct_answers} |",
             f"| **Accuracy** | **{self.accuracy:.1%}** |",
             f"| Average Latency | {self.average_latency_ms:.0f}ms |",
             f"| Average Confidence | {self.average_confidence:.2f} |",
-            f"",
-            f"## Accuracy by Difficulty",
-            f"",
-            f"| Difficulty | Accuracy |",
-            f"|------------|----------|",
+            "",
+            "## Accuracy by Difficulty",
+            "",
+            "| Difficulty | Accuracy |",
+            "|------------|----------|",
         ]
 
         for difficulty, acc in sorted(self.accuracy_by_difficulty.items()):
@@ -120,15 +119,17 @@ class BenchmarkReport:
 
         # Add confidence analysis section
         if self.confidence_distribution:
-            lines.extend([
-                f"",
-                f"## Confidence Analysis",
-                f"",
-                f"### Confidence Statistics",
-                f"",
-                f"| Metric | Value |",
-                f"|--------|-------|",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "## Confidence Analysis",
+                    "",
+                    "### Confidence Statistics",
+                    "",
+                    "| Metric | Value |",
+                    "|--------|-------|",
+                ]
+            )
 
             for metric, value in sorted(self.confidence_stats.items()):
                 if metric == "std":
@@ -136,41 +137,47 @@ class BenchmarkReport:
                 else:
                     lines.append(f"| {metric.capitalize()} | {value:.3f} |")
 
-            lines.extend([
-                f"",
-                f"### Confidence Distribution",
-                f"",
-                f"Frequency of confidence scores assigned to generated answers:",
-                f"",
-                f"| Confidence Range | Count | Percentage |",
-                f"|------------------|-------|------------|",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "### Confidence Distribution",
+                    "",
+                    "Frequency of confidence scores assigned to generated answers:",
+                    "",
+                    "| Confidence Range | Count | Percentage |",
+                    "|------------------|-------|------------|",
+                ]
+            )
 
             for range_label, count in self.confidence_distribution.items():
                 percentage = (count / self.total_questions * 100) if self.total_questions > 0 else 0
                 lines.append(f"| {range_label} | {count} | {percentage:.1f}% |")
 
-        lines.extend([
-            f"",
-            f"## Failed Questions",
-            f"",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Failed Questions",
+                "",
+            ]
+        )
 
         failed = [r for r in self.results if not r.is_correct]
         if failed:
             for r in failed[:10]:  # Limit to first 10
-                lines.extend([
-                    f"### {r.question_id}",
-                    f"",
-                    f"**Question:** {r.question}",
-                    f"",
-                    f"**Expected:** {r.expected_answer}",
-                    f"",
-                    f"**Generated:** {r.generated_answer}",
-                    f"",
-                    f"**Confidence:** {r.confidence:.2f}",
-                    f"",
-                ])
+                lines.extend(
+                    [
+                        f"### {r.question_id}",
+                        "",
+                        f"**Question:** {r.question}",
+                        "",
+                        f"**Expected:** {r.expected_answer}",
+                        "",
+                        f"**Generated:** {r.generated_answer}",
+                        "",
+                        f"**Confidence:** {r.confidence:.2f}",
+                        "",
+                    ]
+                )
         else:
             lines.append("No failed questions! 🎉")
 
@@ -301,7 +308,7 @@ def compute_confidence_stats(results: list[BenchmarkResult]) -> dict[str, float]
 
 
 def analyze_confidence_by_correctness(
-    results: list[BenchmarkResult]
+    results: list[BenchmarkResult],
 ) -> dict[str, dict[str, float]]:
     """
     Analyze confidence levels by answer correctness.
@@ -354,9 +361,9 @@ def setup_trace_logging(output_dir: Path, timestamp: str, verbose: bool = False)
     # File handler - always write to file
     log_filename = f"benchmark_trace_{timestamp.replace(':', '-').split('.')[0]}.log"
     log_path = output_dir / log_filename
-    file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+    file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
     file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(message)s')
+    file_formatter = logging.Formatter("%(message)s")
     file_handler.setFormatter(file_formatter)
     trace_logger.addHandler(file_handler)
 
@@ -364,7 +371,7 @@ def setup_trace_logging(output_dir: Path, timestamp: str, verbose: bool = False)
     if verbose:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter('%(message)s')
+        console_formatter = logging.Formatter("%(message)s")
         console_handler.setFormatter(console_formatter)
         trace_logger.addHandler(console_handler)
 
@@ -444,6 +451,7 @@ def run_benchmark(
         try:
             # Execute pipeline
             import time
+
             start_time = time.time()
             state = run_query(question.question)
             elapsed_ms = (time.time() - start_time) * 1000
@@ -505,7 +513,9 @@ def run_benchmark(
             trace.info(f"  → Retrieved: {len(retrieved_chunks)} chunks")
             if graded_chunks:
                 relevant_count = len([c for c in graded_chunks if c.relevant == "yes"])
-                trace.info(f"  → Grading: {relevant_count} relevant, {len(graded_chunks) - relevant_count} filtered")
+                trace.info(
+                    f"  → Grading: {relevant_count} relevant, {len(graded_chunks) - relevant_count} filtered"
+                )
 
             # Log rewrites
             rewrite_count = state.get("rewrite_count", 0)
@@ -514,7 +524,11 @@ def run_benchmark(
 
             # Log generation
             if generated_answer:
-                answer_preview = generated_answer[:100] + "..." if len(generated_answer) > 100 else generated_answer
+                answer_preview = (
+                    generated_answer[:100] + "..."
+                    if len(generated_answer) > 100
+                    else generated_answer
+                )
                 trace.info(f"  → Generated: {answer_preview}")
 
             # Check correctness
@@ -528,12 +542,14 @@ def run_benchmark(
             confidence = state.get("average_confidence", 0.0)
             result_icon = "✓" if is_correct else "✗"
             result_text = "CORRECT" if is_correct else "INCORRECT"
-            trace.info(f"  → Result: {result_icon} {result_text} (confidence: {confidence:.2f}, latency: {elapsed_ms:.0f}ms)")
+            trace.info(
+                f"  → Result: {result_icon} {result_text} (confidence: {confidence:.2f}, latency: {elapsed_ms:.0f}ms)"
+            )
 
             # Log timing breakdown if available
             node_timings = state.get("node_timings", {})
             if node_timings and verbose:
-                trace.info(f"  → Timing breakdown:")
+                trace.info("  → Timing breakdown:")
                 for node_name, node_time in sorted(node_timings.items()):
                     trace.info(f"      {node_name}: {node_time:.0f}ms")
 
@@ -541,7 +557,9 @@ def run_benchmark(
             llm_times = state.get("llm_inference_times", [])
             if llm_times and verbose:
                 total_llm_time = sum(t.get("inference_ms", 0) for t in llm_times)
-                trace.info(f"  → LLM inference time: {total_llm_time:.0f}ms ({len(llm_times)} calls)")
+                trace.info(
+                    f"  → LLM inference time: {total_llm_time:.0f}ms ({len(llm_times)} calls)"
+                )
 
             trace.info("")
 
@@ -562,8 +580,8 @@ def run_benchmark(
 
         except Exception as e:
             # Handle unexpected errors
-            trace.info(f"  → Exception: {str(e)}")
-            trace.info(f"  → Result: ✗ EXCEPTION")
+            trace.info(f"  → Exception: {e!s}")
+            trace.info("  → Result: ✗ EXCEPTION")
             trace.info("")
             results.append(
                 BenchmarkResult(
@@ -595,14 +613,10 @@ def run_benchmark(
 
     # Average metrics
     average_latency_ms = (
-        sum(r.latency_ms for r in results) / total_questions
-        if total_questions > 0
-        else 0.0
+        sum(r.latency_ms for r in results) / total_questions if total_questions > 0 else 0.0
     )
     average_confidence = (
-        sum(r.confidence for r in results) / total_questions
-        if total_questions > 0
-        else 0.0
+        sum(r.confidence for r in results) / total_questions if total_questions > 0 else 0.0
     )
 
     # Confidence analysis
@@ -672,7 +686,9 @@ def run_benchmark(
     trace.info("Output Files:")
     trace.info(f"  JSON: {json_path}")
     trace.info(f"  Markdown: {md_path}")
-    trace_log_path = output_path / f"benchmark_trace_{timestamp.replace(':', '-').split('.')[0]}.log"
+    trace_log_path = (
+        output_path / f"benchmark_trace_{timestamp.replace(':', '-').split('.')[0]}.log"
+    )
     trace.info(f"  Trace: {trace_log_path}")
     trace.info("")
     trace.info("=" * 80)

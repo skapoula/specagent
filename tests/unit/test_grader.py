@@ -1,9 +1,10 @@
 """Unit tests for grader node."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from specagent.graph.state import GraphState, RetrievedChunk, GradedChunk, create_initial_state
+import pytest
+
+from specagent.graph.state import GraphState, RetrievedChunk, create_initial_state
 from specagent.nodes.grader import GradeResult, grader_node
 
 
@@ -13,20 +14,14 @@ class TestGradeResult:
 
     def test_grade_result_relevant(self):
         """Test creating GradeResult for relevant chunk."""
-        result = GradeResult(
-            relevant="yes",
-            confidence=0.85
-        )
+        result = GradeResult(relevant="yes", confidence=0.85)
 
         assert result.relevant == "yes"
         assert result.confidence == 0.85
 
     def test_grade_result_not_relevant(self):
         """Test creating GradeResult for irrelevant chunk."""
-        result = GradeResult(
-            relevant="no",
-            confidence=0.95
-        )
+        result = GradeResult(relevant="no", confidence=0.95)
 
         assert result.relevant == "no"
         assert result.confidence == 0.95
@@ -80,7 +75,7 @@ class TestGraderNode:
         ]
         return state
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_all_relevant(self, mock_create_llm):
         """Test grader node with all relevant chunks."""
         # Mock LLM to return batch response with all relevant
@@ -90,13 +85,18 @@ class TestGraderNode:
 
         # Create state with 3 chunks (mid-range similarity to trigger LLM)
         chunks = [
-            {"content": "The maximum number of HARQ processes for NR is 16.", "similarity_score": 0.7},
-            {"content": "HARQ processes are used for retransmission handling.", "similarity_score": 0.65},
+            {
+                "content": "The maximum number of HARQ processes for NR is 16.",
+                "similarity_score": 0.7,
+            },
+            {
+                "content": "HARQ processes are used for retransmission handling.",
+                "similarity_score": 0.65,
+            },
             {"content": "Both FDD and TDD support 16 HARQ processes.", "similarity_score": 0.75},
         ]
         state = self._create_state_with_chunks(
-            "What is the maximum number of HARQ processes in NR?",
-            chunks
+            "What is the maximum number of HARQ processes in NR?", chunks
         )
 
         # Call grader node
@@ -110,7 +110,7 @@ class TestGraderNode:
         expected_avg = (0.9 + 0.85 + 0.8) / 3
         assert result["average_confidence"] == pytest.approx(expected_avg)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_all_irrelevant(self, mock_create_llm):
         """Test grader node with all irrelevant chunks."""
         # Mock LLM to return batch response with all irrelevant
@@ -125,8 +125,7 @@ class TestGraderNode:
             {"content": "The F1 interface connects gNB-DU and gNB-CU.", "similarity_score": 0.65},
         ]
         state = self._create_state_with_chunks(
-            "What is the maximum number of HARQ processes in NR?",
-            chunks
+            "What is the maximum number of HARQ processes in NR?", chunks
         )
 
         # Call grader node
@@ -140,7 +139,7 @@ class TestGraderNode:
         expected_avg = (0.95 + 0.9 + 0.85) / 3
         assert result["average_confidence"] == pytest.approx(expected_avg)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_mixed_relevance(self, mock_create_llm):
         """Test grader node with mixed relevant and irrelevant chunks."""
         # Mock LLM to return batch response with mixed results
@@ -151,14 +150,19 @@ class TestGraderNode:
 
         # Create state with mixed chunks (mid-range similarity to trigger LLM)
         chunks = [
-            {"content": "The maximum number of HARQ processes for NR is 16.", "similarity_score": 0.7},
-            {"content": "The PDCCH carries downlink control information.", "similarity_score": 0.65},
+            {
+                "content": "The maximum number of HARQ processes for NR is 16.",
+                "similarity_score": 0.7,
+            },
+            {
+                "content": "The PDCCH carries downlink control information.",
+                "similarity_score": 0.65,
+            },
             {"content": "HARQ processes handle retransmissions in NR.", "similarity_score": 0.75},
             {"content": "The F1 interface is used in split architecture.", "similarity_score": 0.6},
         ]
         state = self._create_state_with_chunks(
-            "What is the maximum number of HARQ processes in NR?",
-            chunks
+            "What is the maximum number of HARQ processes in NR?", chunks
         )
 
         # Call grader node
@@ -174,7 +178,7 @@ class TestGraderNode:
         expected_avg = (0.9 + 0.8 + 0.85) / 3
         assert result["average_confidence"] == pytest.approx(expected_avg)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_preserves_chunk_data(self, mock_create_llm):
         """Test that grader preserves original chunk data in GradedChunk."""
         mock_llm = MagicMock()
@@ -188,7 +192,7 @@ class TestGraderNode:
                 "section": "5.4.1",
                 "similarity_score": 0.7,  # Mid-range to trigger LLM
                 "chunk_id": "test_chunk_123",
-                "source": "TS38.321.docx"
+                "source": "TS38.321.docx",
             }
         ]
         state = self._create_state_with_chunks("Test question", chunks)
@@ -204,14 +208,16 @@ class TestGraderNode:
         assert graded_chunk.chunk.chunk_id == "test_chunk_123"
         assert graded_chunk.chunk.source == "TS38.321.docx"
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_single_chunk(self, mock_create_llm):
         """Test grader with single chunk."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = '{"grades": [{"relevant": "yes", "confidence": 0.88}]}'
         mock_create_llm.return_value = mock_llm
 
-        chunks = [{"content": "Single test chunk", "similarity_score": 0.7}]  # Mid-range to trigger LLM
+        chunks = [
+            {"content": "Single test chunk", "similarity_score": 0.7}
+        ]  # Mid-range to trigger LLM
         state = self._create_state_with_chunks("Test question", chunks)
 
         result = grader_node(state)
@@ -220,7 +226,7 @@ class TestGraderNode:
         assert result["graded_chunks"][0].relevant == "yes"
         assert result["average_confidence"] == 0.88
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_empty_chunks(self, mock_create_llm):
         """Test grader with no retrieved chunks."""
         mock_llm = MagicMock()
@@ -237,14 +243,16 @@ class TestGraderNode:
         # LLM should not be called for empty chunks
         mock_llm.invoke.assert_not_called()
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_llm_call_format(self, mock_create_llm):
         """Test that LLM is called with correct format."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = '{"grades": [{"relevant": "yes", "confidence": 0.8}]}'
         mock_create_llm.return_value = mock_llm
 
-        chunks = [{"content": "Test chunk content", "similarity_score": 0.7}]  # Mid-range to trigger LLM
+        chunks = [
+            {"content": "Test chunk content", "similarity_score": 0.7}
+        ]  # Mid-range to trigger LLM
         state = self._create_state_with_chunks("What is HARQ?", chunks)
 
         grader_node(state)
@@ -256,7 +264,7 @@ class TestGraderNode:
         assert "What is HARQ?" in prompt
         assert "Test chunk content" in prompt
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_handles_llm_error(self, mock_create_llm):
         """Test grader handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -273,7 +281,7 @@ class TestGraderNode:
         assert result["error"] is not None
         assert "error" in result["error"].lower()
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_preserves_other_state_fields(self, mock_create_llm):
         """Test that grader only modifies grading fields."""
         mock_llm = MagicMock()
@@ -292,7 +300,7 @@ class TestGraderNode:
         assert result["route_reasoning"] == "Test routing"
         assert result["rewrite_count"] == 1
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_multiple_chunks_different_specs(self, mock_create_llm):
         """Test grader with chunks from different specifications."""
         mock_llm = MagicMock()
@@ -300,9 +308,24 @@ class TestGraderNode:
         mock_create_llm.return_value = mock_llm
 
         chunks = [
-            {"content": "HARQ info", "spec_id": "TS38.321", "section": "5.4", "similarity_score": 0.7},
-            {"content": "More HARQ", "spec_id": "TS38.331", "section": "7.2", "similarity_score": 0.65},
-            {"content": "Unrelated", "spec_id": "TS38.401", "section": "6.1", "similarity_score": 0.6},
+            {
+                "content": "HARQ info",
+                "spec_id": "TS38.321",
+                "section": "5.4",
+                "similarity_score": 0.7,
+            },
+            {
+                "content": "More HARQ",
+                "spec_id": "TS38.331",
+                "section": "7.2",
+                "similarity_score": 0.65,
+            },
+            {
+                "content": "Unrelated",
+                "spec_id": "TS38.401",
+                "section": "6.1",
+                "similarity_score": 0.6,
+            },
         ]
         state = self._create_state_with_chunks("What is HARQ?", chunks)
 
@@ -314,7 +337,7 @@ class TestGraderNode:
         assert result["graded_chunks"][1].chunk.spec_id == "TS38.331"
         assert result["graded_chunks"][2].chunk.spec_id == "TS38.401"
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_average_confidence_calculation(self, mock_create_llm):
         """Test that average confidence is calculated correctly."""
         mock_llm = MagicMock()
@@ -323,9 +346,7 @@ class TestGraderNode:
         mock_create_llm.return_value = mock_llm
 
         # Create 5 chunks but only top-3 will be graded (mid-range similarity to trigger LLM)
-        chunks = [
-            {"content": f"Chunk {i}", "similarity_score": 0.55 + i*0.05} for i in range(5)
-        ]
+        chunks = [{"content": f"Chunk {i}", "similarity_score": 0.55 + i * 0.05} for i in range(5)]
         state = self._create_state_with_chunks("Test question", chunks)
 
         result = grader_node(state)
@@ -336,7 +357,7 @@ class TestGraderNode:
         expected_avg = (0.6 + 0.7 + 0.8) / 3
         assert result["average_confidence"] == pytest.approx(expected_avg)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_auto_grade_high_similarity(self, mock_create_llm):
         """Test auto-grading for chunks with similarity > 0.82."""
         mock_llm = MagicMock()
@@ -364,7 +385,7 @@ class TestGraderNode:
         assert result["graded_chunks"][1].confidence == pytest.approx(0.87)
         assert result["graded_chunks"][2].confidence == pytest.approx(0.95)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_auto_grade_low_similarity(self, mock_create_llm):
         """Test auto-grading for chunks with similarity < 0.55."""
         mock_llm = MagicMock()
@@ -392,10 +413,9 @@ class TestGraderNode:
         assert result["graded_chunks"][1].confidence == pytest.approx(0.55)  # 1 - 0.45
         assert result["graded_chunks"][2].confidence == pytest.approx(0.8)  # 1 - 0.2
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_mixed_auto_and_llm_grading(self, mock_create_llm):
         """Test mixed auto-grading and LLM grading for mid-range similarity."""
-        from specagent.nodes.grader import BatchGradeResult
 
         mock_llm = MagicMock()
         # Only the mid-range chunk should be graded by LLM
@@ -405,8 +425,8 @@ class TestGraderNode:
         # Create chunks with mixed similarity scores
         chunks = [
             {"content": "High similarity", "similarity_score": 0.90},  # auto: yes
-            {"content": "Mid similarity", "similarity_score": 0.65},   # LLM
-            {"content": "Low similarity", "similarity_score": 0.4},    # auto: no
+            {"content": "Mid similarity", "similarity_score": 0.65},  # LLM
+            {"content": "Low similarity", "similarity_score": 0.4},  # auto: no
         ]
         state = self._create_state_with_chunks("Test question", chunks)
 
@@ -430,10 +450,9 @@ class TestGraderNode:
         assert result["graded_chunks"][2].relevant == "no"
         assert result["graded_chunks"][2].confidence == pytest.approx(0.6)  # 1 - 0.4
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_mid_range_similarity_uses_llm(self, mock_create_llm):
         """Test that mid-range similarity (0.55-0.82) always uses LLM."""
-        from specagent.nodes.grader import BatchGradeResult
 
         mock_llm = MagicMock()
         # All chunks in mid-range should be graded by LLM
@@ -462,10 +481,9 @@ class TestGraderNode:
         assert result["graded_chunks"][2].relevant == "yes"
         assert result["graded_chunks"][2].confidence == 0.75
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_boundary_similarity_scores(self, mock_create_llm):
         """Test grading behavior at similarity score boundaries (0.55, 0.82)."""
-        from specagent.nodes.grader import BatchGradeResult
 
         mock_llm = MagicMock()
         # Chunks at 0.55 and 0.82 should use LLM (3 grades for 3 chunks)
@@ -476,7 +494,7 @@ class TestGraderNode:
         chunks = [
             {"content": "At lower boundary", "similarity_score": 0.55},  # LLM (not < 0.55)
             {"content": "At upper boundary", "similarity_score": 0.82},  # LLM (not > 0.82)
-            {"content": "Just above lower", "similarity_score": 0.56},   # LLM
+            {"content": "Just above lower", "similarity_score": 0.56},  # LLM
         ]
         state = self._create_state_with_chunks("Test question", chunks)
 
@@ -486,16 +504,14 @@ class TestGraderNode:
         mock_llm.invoke.assert_called_once()
         assert len(result["graded_chunks"]) == 3
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_only_top_3_chunks_graded(self, mock_create_llm):
         """Test that only top-3 chunks are graded even with more retrieved."""
         mock_llm = MagicMock()
         mock_create_llm.return_value = mock_llm
 
         # Create 5 chunks, all with high similarity
-        chunks = [
-            {"content": f"Chunk {i}", "similarity_score": 0.95} for i in range(5)
-        ]
+        chunks = [{"content": f"Chunk {i}", "similarity_score": 0.95} for i in range(5)]
         state = self._create_state_with_chunks("Test question", chunks)
 
         result = grader_node(state)
@@ -504,7 +520,7 @@ class TestGraderNode:
         assert len(result["graded_chunks"]) == 3
         mock_llm.invoke.assert_not_called()  # All auto-graded (high similarity)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_json_response_without_regex_match(self, mock_create_llm):
         """Test parsing JSON response without extra text (direct JSON)."""
         mock_llm = MagicMock()
@@ -521,7 +537,7 @@ class TestGraderNode:
         assert result["graded_chunks"][0].relevant == "yes"
         assert result["graded_chunks"][0].confidence == 0.85
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_handles_grade_count_mismatch(self, mock_create_llm):
         """Test error handling when LLM returns wrong number of grades."""
         mock_llm = MagicMock()
@@ -544,12 +560,12 @@ class TestGraderNode:
         assert result["graded_chunks"] == []
         assert result["average_confidence"] == 0.0
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_handles_invalid_json_response(self, mock_create_llm):
         """Test error handling when LLM returns invalid JSON."""
         mock_llm = MagicMock()
         # Return invalid JSON that will fail parsing
-        mock_llm.invoke.return_value = 'This is not JSON at all'
+        mock_llm.invoke.return_value = "This is not JSON at all"
         mock_create_llm.return_value = mock_llm
 
         chunks = [{"content": "Test chunk", "similarity_score": 0.7}]
@@ -563,7 +579,7 @@ class TestGraderNode:
         assert result["graded_chunks"] == []
         assert result["average_confidence"] == 0.0
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_auto_grade_threshold_0_82(self, mock_create_llm):
         """Test auto-grading with new threshold 0.82 instead of 0.85."""
         mock_llm = MagicMock()
@@ -599,7 +615,7 @@ class TestGraderNode:
         assert result["graded_chunks"][2].relevant == "yes"
         assert result["graded_chunks"][2].confidence == pytest.approx(0.84)
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_low_similarity_penalty_threshold_0_55(self, mock_create_llm):
         """Test auto-grading with low-similarity penalty at 0.55."""
         mock_llm = MagicMock()
@@ -622,7 +638,7 @@ class TestGraderNode:
         assert len(result["graded_chunks"]) == 3
         assert all(gc.relevant == "no" for gc in result["graded_chunks"])
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_mid_range_0_55_to_0_82_uses_llm(self, mock_create_llm):
         """Test that mid-range similarity (0.55-0.82) uses LLM."""
         mock_llm = MagicMock()
@@ -646,7 +662,7 @@ class TestGraderNode:
         assert result["graded_chunks"][0].confidence == 0.75
         assert result["graded_chunks"][1].confidence == 0.70
 
-    @patch('specagent.nodes.grader.create_llm')
+    @patch("specagent.nodes.grader.create_llm")
     def test_grader_boundary_at_0_55(self, mock_create_llm):
         """Test grading behavior at similarity boundary (0.55)."""
         mock_llm = MagicMock()

@@ -282,6 +282,14 @@ class Settings(BaseSettings):
     # ==========================================================================
     # API Configuration
     # ==========================================================================
+    cors_allow_origins: list[str] = Field(
+        default=["http://localhost:3000"],
+        description=(
+            "Allowed CORS origins for the REST API. "
+            "Set to the frontend URL(s) in production. "
+            "Env var: CORS_ALLOW_ORIGINS (comma-separated)."
+        ),
+    )
     api_host: str = Field(
         default="0.0.0.0",
         description="Host to bind API server",
@@ -343,6 +351,17 @@ class Settings(BaseSettings):
             raise ValueError(f"chunk_overlap ({v}) must be less than chunk_size ({chunk_size})")
         return v
 
+    @field_validator("chunk_overlap_tokens")
+    @classmethod
+    def validate_chunk_overlap_tokens(cls, v: int, info) -> int:
+        """Ensure token overlap is less than token chunk size."""
+        chunk_size_tokens = info.data.get("chunk_size_tokens", 512)
+        if v >= chunk_size_tokens:
+            raise ValueError(
+                f"chunk_overlap_tokens ({v}) must be less than chunk_size_tokens ({chunk_size_tokens})"
+            )
+        return v
+
     @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir")
     @classmethod
     def resolve_path(cls, v: Path) -> Path:
@@ -354,10 +373,10 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Get cached settings instance.
-    
+
     Uses LRU cache to ensure settings are only loaded once.
     Call `get_settings.cache_clear()` to reload settings.
-    
+
     Returns:
         Settings: Application settings instance
     """

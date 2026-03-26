@@ -17,14 +17,22 @@ import pytest
 
 from specagent.retrieval.resources import clear_resource_cache
 
-
 # =============================================================================
 # Configuration Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def mock_settings():
-    """Provide test settings without requiring .env file."""
+    """Provide test settings without requiring .env file.
+
+    Clears the get_settings lru_cache before and after the test so that any
+    code calling get_settings() during the test receives a fresh instance
+    built from the patched environment variables.
+    """
+    from specagent.config import Settings, get_settings
+
+    get_settings.cache_clear()
     with patch.dict(
         "os.environ",
         {
@@ -34,8 +42,14 @@ def mock_settings():
             "ENABLE_TRACING": "false",
         },
     ):
-        from specagent.config import Settings
-        yield Settings()
+        new_settings = Settings()
+        # Patch the module-level singletons imported at load time in each module
+        with (
+            patch("specagent.config.settings", new_settings),
+            patch("specagent.graph.workflow.settings", new_settings),
+        ):
+            yield new_settings
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -55,24 +69,41 @@ def reset_resource_cache():
 # Sample Data Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def sample_chunks():
     """Sample ChunkRecord objects for testing."""
     import json
     import uuid as _uuid
+
     from specagent.retrieval.store import ChunkRecord
 
     data = [
-        ("TS38.321.docx", "5.4 HARQ Entity",
-         "The maximum number of HARQ processes for NR is 16 for both FDD and TDD."),
-        ("TS38.101-1.docx", "5.5A Carrier Aggregation",
-         "The UE shall support a maximum of 16 component carriers for CA."),
-        ("TS38.331.docx", "5.3.7 RRC Connection Re-establishment",
-         "RRC connection re-establishment is initiated when T311 expires."),
-        ("TS38.211.docx", "7.3 Physical Downlink Control Channel",
-         "The PDCCH carries downlink control information (DCI)."),
-        ("TS38.401.docx", "6.1 F1 Interface",
-         "The gNB-DU and gNB-CU are connected via the F1 interface."),
+        (
+            "TS38.321.docx",
+            "5.4 HARQ Entity",
+            "The maximum number of HARQ processes for NR is 16 for both FDD and TDD.",
+        ),
+        (
+            "TS38.101-1.docx",
+            "5.5A Carrier Aggregation",
+            "The UE shall support a maximum of 16 component carriers for CA.",
+        ),
+        (
+            "TS38.331.docx",
+            "5.3.7 RRC Connection Re-establishment",
+            "RRC connection re-establishment is initiated when T311 expires.",
+        ),
+        (
+            "TS38.211.docx",
+            "7.3 Physical Downlink Control Channel",
+            "The PDCCH carries downlink control information (DCI).",
+        ),
+        (
+            "TS38.401.docx",
+            "6.1 F1 Interface",
+            "The gNB-DU and gNB-CU are connected via the F1 interface.",
+        ),
     ]
     return [
         ChunkRecord(
@@ -120,21 +151,25 @@ def sample_off_topic_question():
 # Mock API Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def mock_embedding_response():
     """Mock embedding API response."""
+
     def _mock_response(texts: list[str]) -> list[list[float]]:
         rng = np.random.default_rng(hash(tuple(texts)) % 2**32)
         embeddings = rng.random((len(texts), 768)).astype(np.float32)
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         normalized = embeddings / norms
         return normalized.tolist()
+
     return _mock_response
 
 
 @pytest.fixture
 def mock_llm_response():
     """Mock LLM API response."""
+
     def _mock_response(prompt: str) -> str:
         # Return structured responses based on prompt content
         if "router" in prompt.lower():
@@ -147,12 +182,14 @@ def mock_llm_response():
             return '{"grounded": "yes", "ungrounded_claims": []}'
         else:
             return "The maximum number of HARQ processes in NR is 16. [TS 38.321 §5.4]"
+
     return _mock_response
 
 
 # =============================================================================
 # Directory Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def tmp_index_dir(tmp_path: Path) -> Path:
@@ -167,10 +204,10 @@ def tmp_data_dir(tmp_path: Path, sample_markdown_files) -> Path:
     """Provide temporary directory with sample markdown files."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    
+
     for filename, content in sample_markdown_files.items():
         (data_dir / filename).write_text(content)
-    
+
     return data_dir
 
 
@@ -206,10 +243,12 @@ Timer T311 is started upon detection of radio link failure.
 # Graph State Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def initial_graph_state(sample_question):
     """Provide initial graph state for testing."""
     from specagent.graph.state import create_initial_state
+
     return create_initial_state(sample_question)
 
 
@@ -264,6 +303,7 @@ def state_after_retrieval(initial_graph_state):
 # =============================================================================
 # Benchmark Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def sample_benchmark_questions():

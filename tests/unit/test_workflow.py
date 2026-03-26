@@ -2,8 +2,9 @@
 Unit tests for LangGraph workflow construction and execution.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from specagent.graph.state import GraphState, create_initial_state
 from specagent.graph.workflow import (
@@ -152,9 +153,7 @@ class TestShouldRewrite:
 
         assert result == "generate"
 
-    def test_should_rewrite_returns_generate_when_max_rewrites_reached(
-        self, mock_settings
-    ):
+    def test_should_rewrite_returns_generate_when_max_rewrites_reached(self, mock_settings):
         """should_rewrite should return 'generate' when max rewrites reached even if confidence low."""
         state: GraphState = {
             "question": "Test question",
@@ -166,9 +165,7 @@ class TestShouldRewrite:
 
         assert result == "generate"
 
-    def test_should_rewrite_defaults_to_rewrite_when_fields_missing(
-        self, mock_settings
-    ):
+    def test_should_rewrite_defaults_to_rewrite_when_fields_missing(self, mock_settings):
         """should_rewrite should default to 'rewrite' when average_confidence defaults to 0.0."""
         state: GraphState = {
             "question": "Test question",
@@ -230,40 +227,58 @@ class TestShouldRegenerate:
 
 
 @pytest.mark.unit
+class TestGetCompiledGraph:
+    """Tests for _get_compiled_graph() caching."""
+
+    def test_get_compiled_graph_builds_and_caches(self):
+        """_get_compiled_graph() should build the graph once and cache it."""
+        import specagent.graph.workflow as wf
+
+        wf._compiled_graph = None
+        with patch("specagent.graph.workflow.build_graph") as mock_build:
+            mock_build.return_value = MagicMock()
+            g1 = wf._get_compiled_graph()
+            g2 = wf._get_compiled_graph()
+        assert g1 is g2
+        mock_build.assert_called_once()
+        wf._compiled_graph = None
+
+
+@pytest.mark.unit
 class TestRunQuery:
     """Tests for run_query() function."""
 
-    @patch("specagent.graph.workflow.build_graph")
-    def test_run_query_creates_initial_state(self, mock_build_graph, sample_question):
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_run_query_creates_initial_state(self, mock_get_graph, sample_question):
         """run_query should create initial state from question."""
         # Mock the graph to return a simple state
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = create_initial_state(sample_question)
-        mock_build_graph.return_value = mock_graph
+        mock_get_graph.return_value = mock_graph
 
         result = run_query(sample_question)
 
         assert result["question"] == sample_question
 
-    @patch("specagent.graph.workflow.build_graph")
-    def test_run_query_invokes_graph(self, mock_build_graph, sample_question):
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_run_query_invokes_graph(self, mock_get_graph, sample_question):
         """run_query should invoke the compiled graph."""
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = create_initial_state(sample_question)
-        mock_build_graph.return_value = mock_graph
+        mock_get_graph.return_value = mock_graph
 
         run_query(sample_question)
 
-        # Check that graph was built and invoked
-        mock_build_graph.assert_called_once()
+        # Check that graph was obtained and invoked
+        mock_get_graph.assert_called_once()
         mock_graph.invoke.assert_called_once()
 
-    @patch("specagent.graph.workflow.build_graph")
-    def test_run_query_adds_processing_time(self, mock_build_graph, sample_question):
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_run_query_adds_processing_time(self, mock_get_graph, sample_question):
         """run_query should add processing_time_ms to final state."""
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = create_initial_state(sample_question)
-        mock_build_graph.return_value = mock_graph
+        mock_get_graph.return_value = mock_graph
 
         result = run_query(sample_question)
 
@@ -271,14 +286,14 @@ class TestRunQuery:
         assert isinstance(result["processing_time_ms"], float)
         assert result["processing_time_ms"] >= 0
 
-    @patch("specagent.graph.workflow.build_graph")
-    def test_run_query_returns_graph_state(self, mock_build_graph, sample_question):
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_run_query_returns_graph_state(self, mock_get_graph, sample_question):
         """run_query should return the final GraphState."""
         mock_graph = MagicMock()
         expected_state = create_initial_state(sample_question)
         expected_state["generation"] = "Test answer"
         mock_graph.invoke.return_value = expected_state
-        mock_build_graph.return_value = mock_graph
+        mock_get_graph.return_value = mock_graph
 
         result = run_query(sample_question)
 
