@@ -110,5 +110,29 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
         )
 
 
+def check_llm_health(timeout: int = 30) -> tuple[bool, str]:
+    """Check LLM backend health based on the configured provider.
+
+    For Groq: verifies the API key is present (no network call).
+    For custom_endpoint: performs an HTTP health check against the endpoint.
+
+    Args:
+        timeout: Timeout in seconds for the HTTP check (custom_endpoint only).
+
+    Returns:
+        Tuple of (is_healthy: bool, message: str).
+    """
+    from specagent.config import settings  # noqa: PLC0415
+
+    if settings.llm_provider == "groq":
+        if settings.groq_api_key:
+            return True, "Groq API key present"
+        return False, "GROQ_API_KEY is not set"
+
+    from specagent.llm.custom_endpoint import check_llm_endpoint_health  # noqa: PLC0415
+
+    return check_llm_endpoint_health(timeout=timeout)
+
+
 # Alias for backwards compatibility
 get_llm = create_llm

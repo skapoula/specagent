@@ -402,12 +402,12 @@ def run_benchmark(
         RuntimeError: If LLM endpoint health check fails
     """
     from specagent.graph.workflow import run_query
-    from specagent.llm.custom_endpoint import check_llm_endpoint_health
+    from specagent.llm.factory import check_llm_health
 
     # Perform health check before starting benchmark
     if not skip_health_check:
         logger.info("Performing LLM endpoint health check...")
-        is_healthy, message = check_llm_endpoint_health(timeout=30)
+        is_healthy, message = check_llm_health(timeout=30)
 
         if not is_healthy:
             logger.error(
