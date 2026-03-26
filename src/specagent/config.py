@@ -288,6 +288,7 @@ class Settings(BaseSettings):
     )
     langchain_api_key: str = Field(
         default="",
+        repr=False,  # prevent key from appearing in Settings repr/logs
         description="LangSmith API key (env var: LANGCHAIN_API_KEY).",
     )
     langchain_project: str = Field(
