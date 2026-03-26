@@ -156,3 +156,10 @@ def test_setup_langsmith_missing_package_warns():
                 ls_module.setup_langsmith_tracing()
             matching = [x for x in w if "langsmith" in str(x.message).lower()]
             assert len(matching) >= 1
+
+
+@pytest.mark.unit
+def test_setup_langsmith_tracing_exported_from_tracing_package():
+    """setup_langsmith_tracing is importable from specagent.tracing."""
+    from specagent.tracing import setup_langsmith_tracing  # noqa: PLC0415 — intentional late import for test isolation
+    assert callable(setup_langsmith_tracing)
