@@ -9,6 +9,7 @@ import logging
 import time
 
 import requests
+from langsmith import traceable
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class CustomEndpointLLM:
         result_text, _ = self.invoke_with_timing(prompt)
         return result_text
 
+    @traceable(name="custom_endpoint_llm", run_type="llm")
     def invoke_with_timing(self, prompt: str) -> tuple[str, float]:
         """
         Call the LLM with a prompt and return timing information.

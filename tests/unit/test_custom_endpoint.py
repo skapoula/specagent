@@ -271,3 +271,17 @@ def test_check_llm_endpoint_health_with_timeout():
         ok, msg = check_llm_endpoint_health(timeout=10)
     assert ok is False
     mock_cls.return_value.health_check.assert_called_once_with(timeout=10)
+
+
+@pytest.mark.unit
+def test_invoke_with_timing_traced_when_langsmith_active(monkeypatch):
+    """@traceable on invoke_with_timing does not break return value when LANGCHAIN_TRACING_V2 is unset."""
+    monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
+    llm = CustomEndpointLLM("http://test/v1/chat/completions")
+    ok_resp = MagicMock()
+    ok_resp.json.return_value = {"choices": [{"message": {"content": "traced-ok"}}]}
+    ok_resp.raise_for_status = MagicMock()
+    with patch("specagent.llm.custom_endpoint.requests.post", return_value=ok_resp):
+        text, ms = llm.invoke_with_timing("hello")
+    assert text == "traced-ok"
+    assert isinstance(ms, float)
