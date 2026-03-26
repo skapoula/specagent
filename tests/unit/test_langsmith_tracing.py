@@ -19,7 +19,9 @@ def test_langsmith_importable():
 def test_settings_enable_langsmith_defaults_true():
     """enable_langsmith defaults to True."""
     get_settings.cache_clear()
-    s = get_settings()
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("ENABLE_LANGSMITH", None)
+        s = get_settings()
     assert s.enable_langsmith is True
     get_settings.cache_clear()
 
