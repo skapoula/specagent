@@ -680,3 +680,47 @@ class TestGraderNode:
         # At boundary 0.55, should use LLM (not auto-grade)
         mock_llm.invoke.assert_called_once()
         assert len(result["graded_chunks"]) == 1
+
+
+@pytest.mark.unit
+class TestGraderObservability:
+    def _make_chunk(self, similarity_score: float) -> RetrievedChunk:
+        return RetrievedChunk(
+            content="content",
+            chunk_id="c1",
+            doc_id="d1",
+            source="TS38.321.docx",
+            title="T",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.321",
+            section="5.4",
+            similarity_score=similarity_score,
+        )
+
+    @patch("specagent.nodes.grader.create_llm")
+    def test_all_auto_graded_high(self, mock_create_llm):
+        from specagent.nodes.grader import grader_node  # noqa: PLC0415
+
+        state = create_initial_state("test")
+        state["retrieved_chunks"] = [
+            self._make_chunk(0.90),
+            self._make_chunk(0.88),
+            self._make_chunk(0.85),
+        ]
+        result = grader_node(state)
+        assert result["grader_auto_count"] == 3
+        assert result["grader_llm_count"] == 0
+
+    @patch("specagent.nodes.grader.create_llm")
+    def test_all_auto_graded_low(self, mock_create_llm):
+        from specagent.nodes.grader import grader_node  # noqa: PLC0415
+
+        state = create_initial_state("test")
+        state["retrieved_chunks"] = [
+            self._make_chunk(0.40),
+            self._make_chunk(0.30),
+        ]
+        result = grader_node(state)
+        assert result["grader_auto_count"] == 2
+        assert result["grader_llm_count"] == 0

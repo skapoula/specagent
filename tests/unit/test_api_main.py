@@ -404,3 +404,6 @@ class TestLifespan:
             with pytest.raises(RuntimeError, match="Startup failed"):
                 with TestClient(app, raise_server_exceptions=True):
                     pass
+
+
+

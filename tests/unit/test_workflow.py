@@ -486,3 +486,141 @@ class TestShouldRewriteWithChunks:
             ms.grader_confidence_threshold = 0.7
             ms.min_relevant_chunk_percentage = 0.5
             assert should_rewrite(state) == "generate"
+
+
+@pytest.mark.unit
+class TestShouldRegenerateLoopGuard:
+    """Verify should_regenerate enforces the one-retry cap."""
+
+    def test_not_grounded_count_2_routes_to_finish(self):
+        """regeneration_count=2 must route to finish even when not_grounded."""
+        state: GraphState = {
+            "hallucination_check": "not_grounded",
+            "regeneration_count": 2,
+        }
+        assert should_regenerate(state) == "finish"
+
+    def test_not_grounded_count_1_routes_to_regenerate(self):
+        """regeneration_count=1 is still within the one-retry budget."""
+        state: GraphState = {
+            "hallucination_check": "not_grounded",
+            "regeneration_count": 1,
+        }
+        assert should_regenerate(state) == "regenerate"
+
+    def test_not_grounded_count_0_routes_to_regenerate(self):
+        """regeneration_count=0 (first attempt) must trigger regeneration."""
+        state: GraphState = {
+            "hallucination_check": "not_grounded",
+            "regeneration_count": 0,
+        }
+        assert should_regenerate(state) == "regenerate"
+
+
+@pytest.mark.unit
+class TestFlushQueryJournal:
+    """Tests for _flush_query_journal helper in workflow.py."""
+
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_journal_disabled_skips_flush(self, mock_get_graph, sample_question):
+        """run_query does not call _flush_query_journal when enable_query_journal=False."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = create_initial_state(sample_question)
+        mock_get_graph.return_value = mock_graph
+
+        with patch("specagent.graph.workflow.settings") as ms:
+            ms.enable_query_journal = False
+            with patch("specagent.graph.workflow._flush_query_journal") as mock_flush:
+                run_query(sample_question)
+                mock_flush.assert_not_called()
+
+    @patch("specagent.graph.workflow._get_compiled_graph")
+    def test_journal_enabled_calls_flush(self, mock_get_graph, sample_question):
+        """run_query calls _flush_query_journal when enable_query_journal=True."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = create_initial_state(sample_question)
+        mock_get_graph.return_value = mock_graph
+
+        with patch("specagent.graph.workflow.settings") as ms:
+            ms.enable_query_journal = True
+            with patch("specagent.graph.workflow._flush_query_journal") as mock_flush:
+                run_query(sample_question)
+                mock_flush.assert_called_once()
+
+    def test_flush_counts_num_relevant_correctly(self):
+        """_flush_query_journal counts only graded_chunks with relevant='yes'."""
+        from specagent.graph.workflow import _flush_query_journal  # noqa: PLC0415
+        from specagent.observability.models import QueryEvent  # noqa: PLC0415
+
+        yes_chunk = MagicMock()
+        yes_chunk.relevant = "yes"
+        no_chunk = MagicMock()
+        no_chunk.relevant = "no"
+
+        state: GraphState = {
+            "trace_id": "t1",
+            "question": "Q?",
+            "route_decision": "retrieve",
+            "rewrite_count": 0,
+            "retrieved_chunks": [MagicMock(), MagicMock(), MagicMock()],
+            "graded_chunks": [yes_chunk, no_chunk, yes_chunk],
+            "processing_time_ms": 100.0,
+            "llm_calls": [],
+            "retrieval_events": [],
+        }
+
+        captured_events: list = []
+        mock_journal = MagicMock()
+        mock_journal.write.side_effect = lambda rec: captured_events.append(rec)
+
+        with patch("specagent.observability.journal.get_journal", return_value=mock_journal):
+            _flush_query_journal(state)
+
+        query_events = [e for e in captured_events if isinstance(e, QueryEvent)]
+        assert len(query_events) == 1
+        assert query_events[0].num_relevant == 2
+        assert query_events[0].num_retrieved == 3
+
+    def test_flush_writes_llm_calls_and_retrieval_events(self):
+        """_flush_query_journal writes each LLMCallRecord and RetrievalRecord."""
+        from specagent.graph.workflow import _flush_query_journal  # noqa: PLC0415
+        from specagent.observability.models import LLMCallRecord, RetrievalRecord  # noqa: PLC0415
+
+        llm_call = LLMCallRecord(
+            node="router",
+            trace_id="trace-abc",
+            model="test-model",
+            provider="groq",
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+            inference_ms=100.0,
+        )
+        retrieval = RetrievalRecord(
+            trace_id="trace-abc",
+            query="HARQ processes",
+            embed_ms=20.0,
+            search_ms=30.0,
+            num_results=3,
+            top_similarity=0.85,
+            mean_similarity=0.75,
+            rewrite_index=0,
+        )
+        state: GraphState = {
+            "trace_id": "trace-abc",
+            "question": "What is HARQ?",
+            "route_decision": "retrieve",
+            "rewrite_count": 0,
+            "retrieved_chunks": [],
+            "graded_chunks": [],
+            "processing_time_ms": 200.0,
+            "llm_calls": [llm_call],
+            "retrieval_events": [retrieval],
+        }
+
+        mock_journal = MagicMock()
+        with patch("specagent.observability.journal.get_journal", return_value=mock_journal):
+            _flush_query_journal(state)
+
+        # 1 LLMCallRecord + 1 RetrievalRecord + 1 QueryEvent = 3 writes
+        assert mock_journal.write.call_count == 3

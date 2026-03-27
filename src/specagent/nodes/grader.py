@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_HIGH_SIMILARITY_AUTO_THRESHOLD = 0.82
+_LOW_SIMILARITY_AUTO_THRESHOLD = 0.55
+
 
 class GradeResult(BaseModel):
     """Structured output for document grading."""
@@ -53,7 +56,7 @@ Return JSON: {{"grades": [{{"relevant": "yes"/"no", "confidence": 0.0-1.0}}, ...
 Provide exactly {num_chunks} grades in order."""
 
 
-def grader_node(state: "GraphState") -> "GraphState":
+def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-grade tracking adds necessary statements to single-responsibility function
     """
     Grade retrieved chunks for relevance to the query.
 
@@ -61,7 +64,7 @@ def grader_node(state: "GraphState") -> "GraphState":
     Uses similarity-based auto-grading to skip LLM calls when possible:
     - similarity > 0.82: auto "yes" with high confidence
     - similarity < 0.55: auto "no" with high confidence
-    - similarity 0.55–0.82: use LLM for accurate assessment
+    - similarity 0.55-0.82: use LLM for accurate assessment
 
     Args:
         state: Current graph state with retrieved_chunks populated
@@ -90,9 +93,11 @@ def grader_node(state: "GraphState") -> "GraphState":
         llm_chunks = []  # Chunks needing LLM grading
         llm_chunk_indices = []  # Track original positions
         total_confidence = 0.0
+        auto_grade_count = 0
+        llm_grade_count = 0
 
         for i, chunk in enumerate(chunks_to_grade):
-            if chunk.similarity_score > 0.82:
+            if chunk.similarity_score > _HIGH_SIMILARITY_AUTO_THRESHOLD:
                 # Auto-grade as relevant with high confidence
                 grade = GradeResult(relevant="yes", confidence=chunk.similarity_score)
                 graded_chunk = GradedChunk(
@@ -100,7 +105,8 @@ def grader_node(state: "GraphState") -> "GraphState":
                 )
                 graded_chunks.append(graded_chunk)
                 total_confidence += grade.confidence
-            elif chunk.similarity_score < 0.55:
+                auto_grade_count += 1
+            elif chunk.similarity_score < _LOW_SIMILARITY_AUTO_THRESHOLD:
                 # Auto-grade as not relevant with high confidence
                 grade = GradeResult(relevant="no", confidence=1.0 - chunk.similarity_score)
                 graded_chunk = GradedChunk(
@@ -108,6 +114,7 @@ def grader_node(state: "GraphState") -> "GraphState":
                 )
                 graded_chunks.append(graded_chunk)
                 total_confidence += grade.confidence
+                auto_grade_count += 1
             else:
                 # Mid-range similarity: needs LLM grading
                 llm_chunks.append(chunk)
@@ -131,6 +138,11 @@ def grader_node(state: "GraphState") -> "GraphState":
 
             # Single LLM call to grade uncertain chunks
             response = llm.invoke(prompt)
+            _call = llm.get_last_call()
+            if _call is not None:
+                _call.node = "grader"
+                _call.trace_id = state.get("trace_id", "")
+                state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
 
             # Parse batch JSON response
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
@@ -154,6 +166,7 @@ def grader_node(state: "GraphState") -> "GraphState":
                 )
                 graded_chunks[idx] = graded_chunk
                 total_confidence += grade.confidence
+            llm_grade_count = len(llm_chunks)
 
         # Remove any None placeholders left if LLM grading was skipped unexpectedly
         graded_chunks = [gc for gc in graded_chunks if gc is not None]
@@ -164,6 +177,8 @@ def grader_node(state: "GraphState") -> "GraphState":
         # Update state
         state["graded_chunks"] = graded_chunks
         state["average_confidence"] = average_confidence
+        state["grader_auto_count"] = auto_grade_count
+        state["grader_llm_count"] = llm_grade_count
 
     except Exception as e:
         logger.error("Grader error: %s", e)

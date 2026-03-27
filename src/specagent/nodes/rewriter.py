@@ -55,7 +55,8 @@ def rewriter_node(state: "GraphState") -> "GraphState":
     Returns:
         Updated state with rewritten_question and incremented rewrite_count
     """
-    # Get original question and current rewrite count
+    # Always rewrite from the original question, not rewritten_question, to avoid
+    # semantic drift across multiple rewrite cycles.
     question = state.get("question", "")
     rewrite_count = state.get("rewrite_count", 0)
 
@@ -89,6 +90,19 @@ def rewriter_node(state: "GraphState") -> "GraphState":
 
         # Call LLM to rewrite the question
         rewritten_question = llm.invoke(prompt)
+        _call = llm.get_last_call()
+        if _call is not None:
+            _call.node = "rewriter"
+            _call.trace_id = state.get("trace_id", "")
+            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+        _pre_scores = [c.similarity_score for c in state.get("retrieved_chunks", [])]
+        if _pre_scores:
+            logger.debug(
+                "Rewriter pre-scores: top=%.3f mean=%.3f rewrite_count=%d",
+                max(_pre_scores),
+                sum(_pre_scores) / len(_pre_scores),
+                state.get("rewrite_count", 0),
+            )
 
         # Strip whitespace from the response
         if isinstance(rewritten_question, str):

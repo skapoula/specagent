@@ -56,7 +56,7 @@ class TestCreateLLM:
         assert call_kwargs["base_url"] == "https://api.groq.com/openai/v1"
         assert call_kwargs["model"] == "llama-3.1-8b-instant"
         assert call_kwargs["temperature"] == 0.0
-        assert call_kwargs["max_tokens"] == 1024
+        assert call_kwargs["model_kwargs"]["max_tokens"] == 1024
 
     @patch("langchain_openai.ChatOpenAI")
     @patch("specagent.config.settings")

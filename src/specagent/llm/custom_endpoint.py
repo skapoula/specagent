@@ -5,11 +5,17 @@ Provides a simple wrapper for local/custom inference endpoints that implement
 the OpenAI chat completions API format.
 """
 
+from __future__ import annotations
+
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import requests
 from langsmith import traceable
+
+if TYPE_CHECKING:
+    from specagent.observability.models import LLMCallRecord
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,7 @@ class CustomEndpointLLM:
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self._last_call: LLMCallRecord | None = None
 
     def invoke(self, prompt: str) -> str:
         """
@@ -95,7 +102,24 @@ class CustomEndpointLLM:
                 inference_ms = (time.perf_counter() - start_time) * 1000
 
                 result = response.json()
-                return result["choices"][0]["message"]["content"], inference_ms
+                result_text = result["choices"][0]["message"]["content"]
+                try:
+                    from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
+
+                    usage = result.get("usage", {})
+                    self._last_call = LLMCallRecord(
+                        node="",
+                        trace_id="",
+                        model=result.get("model", "unknown"),
+                        provider="custom_endpoint",
+                        prompt_tokens=usage.get("prompt_tokens"),
+                        completion_tokens=usage.get("completion_tokens"),
+                        total_tokens=usage.get("total_tokens"),
+                        inference_ms=inference_ms,
+                    )
+                except Exception:
+                    self._last_call = None
+                return result_text, inference_ms
 
             except requests.HTTPError as e:
                 last_exception = e
@@ -134,6 +158,10 @@ class CustomEndpointLLM:
         if last_exception:  # pragma: no cover
             raise last_exception
         raise RuntimeError("All retry attempts failed")
+
+    def get_last_call(self) -> LLMCallRecord | None:
+        """Return the LLMCallRecord from the most recent successful invoke(), or None."""
+        return self._last_call
 
     def health_check(self, timeout: int = 30) -> tuple[bool, str]:
         """
@@ -213,13 +241,7 @@ def create_custom_llm(
         from specagent.config import settings
 
         # Default to configured endpoint or fallback
-        endpoint_url = str(
-            getattr(
-                settings,
-                "custom_endpoint_url",
-                "http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
-            )
-        )
+        endpoint_url = str(settings.custom_endpoint_url)
 
     return CustomEndpointLLM(
         endpoint_url=endpoint_url, temperature=temperature, max_tokens=max_tokens
@@ -247,11 +269,7 @@ def check_llm_endpoint_health(timeout: int = 30) -> tuple[bool, str]:
     """
     from specagent.config import settings
 
-    endpoint_url = getattr(
-        settings,
-        "custom_endpoint_url",
-        "http://qwen3-4b-predictor.ml-serving.10.0.1.2.sslip.io:30750/v1/chat/completions",
-    )
+    endpoint_url = settings.custom_endpoint_url
 
     # Create temporary client for health check
     client = CustomEndpointLLM(endpoint_url=endpoint_url)

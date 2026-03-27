@@ -808,7 +808,7 @@ def test_run_benchmark_health_check_success_prints_message(tmp_path):
         "ungrounded_claims": [],
         "error": None,
         "node_timings": {},
-        "llm_inference_times": [],
+        "llm_calls": [],
     }
     with (
         patch(
@@ -844,7 +844,7 @@ def test_run_benchmark_rejected_question(tmp_path):
         "ungrounded_claims": [],
         "error": None,
         "node_timings": {},
-        "llm_inference_times": [],
+        "llm_calls": [],
     }
     with patch("specagent.graph.workflow.run_query", return_value=mock_state):
         report = run_benchmark(
@@ -873,7 +873,7 @@ def test_run_benchmark_verbose_paths(tmp_path):
         "ungrounded_claims": [],
         "error": None,
         "node_timings": {"router": 50.0, "retriever": 300.0},
-        "llm_inference_times": [{"inference_ms": 400.0}],
+        "llm_calls": [],
     }
     with (
         patch("specagent.graph.workflow.run_query", return_value=mock_state),

@@ -280,6 +280,17 @@ class Settings(BaseSettings):
         description="Enable OpenTelemetry tracing to Phoenix",
     )
 
+    # Query journal — writes a JSONL record per completed query for offline analysis.
+    # Disabled by default to avoid disk writes in CI / test environments.
+    enable_query_journal: bool = Field(
+        default=False,
+        description="Write a JSONL query journal to journal_dir after each query.",
+    )
+    journal_dir: Path = Field(
+        default=Path("data/journal"),
+        description="Directory for JSONL query journal files.",
+    )
+
     # LangSmith tracing (https://smith.langchain.com)
     # Set LANGCHAIN_API_KEY to activate. setup_langsmith_tracing() reads these.
     enable_langsmith: bool = Field(
@@ -326,7 +337,7 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir")
+    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir", "journal_dir")
     @classmethod
     def resolve_path(cls, v: Path) -> Path:
         """Resolve paths to absolute paths."""

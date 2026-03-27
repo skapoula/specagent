@@ -99,6 +99,11 @@ def generator_node(state: "GraphState") -> "GraphState":
 
         # Call LLM to generate answer
         generation = llm.invoke(prompt)
+        _call = llm.get_last_call()
+        if _call is not None:
+            _call.node = "generator"
+            _call.trace_id = state.get("trace_id", "")
+            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
 
         # Convert to string and strip whitespace
         generation = generation.strip() if isinstance(generation, str) else str(generation).strip()
