@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" font-family="Arial, sans-serif">
+  <!-- Background -->
+  <rect width="1000" height="640" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="500" y="32" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a1a1a">C4 Container Diagram — SpecAgent</text>
+  <text x="500" y="52" text-anchor="middle" font-size="12" fill="#666666">Level 2: Runtime Containers</text>
+
+  <!-- System Boundary -->
+  <rect x="160" y="70" width="680" height="520" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="500" y="90" text-anchor="middle" font-size="11" fill="#888888">[SpecAgent System Boundary]</text>
+
+  <!-- Arrow defs -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#707070"/>
+    </marker>
+    <!-- Database cylinder clip -->
+  </defs>
+
+  <!-- Container: CLI (Typer) -->
+  <rect x="200" y="105" width="170" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="285" y="136" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">CLI</text>
+  <text x="285" y="153" text-anchor="middle" font-size="10" fill="#d6eaff">[Typer / Python]</text>
+  <text x="285" y="170" text-anchor="middle" font-size="10" fill="#e8f3ff">Terminal entry point:</text>
+  <text x="285" y="184" text-anchor="middle" font-size="10" fill="#e8f3ff">query, serve, index</text>
+
+  <!-- Container: REST API (FastAPI) -->
+  <rect x="200" y="230" width="170" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="285" y="261" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">REST API</text>
+  <text x="285" y="278" text-anchor="middle" font-size="10" fill="#d6eaff">[FastAPI / Uvicorn]</text>
+  <text x="285" y="295" text-anchor="middle" font-size="10" fill="#e8f3ff">HTTP endpoints:</text>
+  <text x="285" y="309" text-anchor="middle" font-size="10" fill="#e8f3ff">GET /health, POST /query</text>
+
+  <!-- Container: LangGraph Agent Pipeline -->
+  <rect x="415" y="160" width="200" height="100" rx="6" fill="#1168BD" stroke="#0a4d8c" stroke-width="2"/>
+  <text x="515" y="192" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Agent Pipeline</text>
+  <text x="515" y="210" text-anchor="middle" font-size="10" fill="#cce0ff">[LangGraph / Python]</text>
+  <text x="515" y="228" text-anchor="middle" font-size="10" fill="#e8f0ff">6-node agentic workflow:</text>
+  <text x="515" y="244" text-anchor="middle" font-size="10" fill="#e8f0ff">route → retrieve → grade → generate</text>
+
+  <!-- Container: Retrieval Engine -->
+  <rect x="415" y="305" width="200" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="515" y="336" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Retrieval Engine</text>
+  <text x="515" y="353" text-anchor="middle" font-size="10" fill="#d6eaff">[Python / fastembed]</text>
+  <text x="515" y="370" text-anchor="middle" font-size="10" fill="#e8f3ff">Embed query, hybrid</text>
+  <text x="515" y="384" text-anchor="middle" font-size="10" fill="#e8f3ff">BM25 + ANN search</text>
+
+  <!-- Container: Ingestor -->
+  <rect x="415" y="440" width="200" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="515" y="471" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Ingestor</text>
+  <text x="515" y="488" text-anchor="middle" font-size="10" fill="#d6eaff">[Python / markitdown]</text>
+  <text x="515" y="505" text-anchor="middle" font-size="10" fill="#e8f3ff">Convert → chunk → embed</text>
+  <text x="515" y="519" text-anchor="middle" font-size="10" fill="#e8f3ff">→ write to LanceDB</text>
+
+  <!-- Container: LanceDB (database cylinder style) -->
+  <rect x="670" y="305" width="150" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <ellipse cx="745" cy="305" rx="75" ry="12" fill="#5ea8e8" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="745" y="343" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">LanceDB</text>
+  <text x="745" y="360" text-anchor="middle" font-size="10" fill="#d6eaff">[Embedded / Disk]</text>
+  <text x="745" y="377" text-anchor="middle" font-size="10" fill="#e8f3ff">Persistent vector index</text>
+  <text x="745" y="391" text-anchor="middle" font-size="10" fill="#e8f3ff">768d embeddings + BM25</text>
+
+  <!-- Container: Observability -->
+  <rect x="200" y="440" width="170" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="285" y="471" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Observability</text>
+  <text x="285" y="488" text-anchor="middle" font-size="10" fill="#d6eaff">[structlog / JSONL]</text>
+  <text x="285" y="505" text-anchor="middle" font-size="10" fill="#e8f3ff">Query journal, node</text>
+  <text x="285" y="519" text-anchor="middle" font-size="10" fill="#e8f3ff">timings, LLM call log</text>
+
+  <!-- External: Person -->
+  <ellipse cx="70" cy="195" rx="22" ry="22" fill="#08427B" stroke="#052e56" stroke-width="1.5"/>
+  <line x1="70" y1="217" x2="70" y2="248" stroke="#08427B" stroke-width="2"/>
+  <line x1="50" y1="232" x2="90" y2="232" stroke="#08427B" stroke-width="2"/>
+  <line x1="70" y1="248" x2="52" y2="268" stroke="#08427B" stroke-width="2"/>
+  <line x1="70" y1="248" x2="88" y2="268" stroke="#08427B" stroke-width="2"/>
+  <text x="70" y="283" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1a1a">User</text>
+
+  <!-- External: Groq API -->
+  <rect x="670" y="160" width="150" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <text x="745" y="190" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Groq LLM API</text>
+  <text x="745" y="207" text-anchor="middle" font-size="10" fill="#eeeeee">[External / Cloud]</text>
+  <text x="745" y="222" text-anchor="middle" font-size="10" fill="#ffffff">LLM inference</text>
+
+  <!-- External: Phoenix -->
+  <rect x="670" y="440" width="150" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <text x="745" y="470" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Arize Phoenix</text>
+  <text x="745" y="487" text-anchor="middle" font-size="10" fill="#eeeeee">[External / Local]</text>
+  <text x="745" y="502" text-anchor="middle" font-size="10" fill="#ffffff">OTel trace collector</text>
+
+  <!-- ARROWS -->
+  <!-- User -> CLI -->
+  <line x1="93" y1="195" x2="199" y2="165" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="135" y="170" text-anchor="middle" font-size="9" fill="#555555">CLI commands</text>
+
+  <!-- User -> REST API -->
+  <line x1="93" y1="205" x2="199" y2="270" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="135" y="248" text-anchor="middle" font-size="9" fill="#555555">HTTP/JSON</text>
+
+  <!-- CLI -> Agent Pipeline -->
+  <line x1="370" y1="150" x2="414" y2="195" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="393" y="166" text-anchor="middle" font-size="9" fill="#555555">run_query()</text>
+
+  <!-- REST API -> Agent Pipeline -->
+  <line x1="370" y1="270" x2="414" y2="235" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="393" y="260" text-anchor="middle" font-size="9" fill="#555555">run_query()</text>
+
+  <!-- Agent Pipeline -> Retrieval Engine -->
+  <line x1="515" y1="260" x2="515" y2="304" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="540" y="285" text-anchor="middle" font-size="9" fill="#555555">search()</text>
+
+  <!-- Agent Pipeline -> Groq API -->
+  <line x1="615" y1="200" x2="669" y2="200" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="641" y="193" text-anchor="middle" font-size="9" fill="#555555">LLM calls</text>
+
+  <!-- Retrieval Engine -> LanceDB -->
+  <line x1="615" y1="345" x2="669" y2="345" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="641" y="338" text-anchor="middle" font-size="9" fill="#555555">hybrid search</text>
+
+  <!-- Ingestor -> LanceDB -->
+  <line x1="615" y1="480" x2="669" y2="400" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="649" y="440" text-anchor="middle" font-size="9" fill="#555555">write chunks</text>
+
+  <!-- CLI -> Ingestor (index command) -->
+  <line x1="285" y1="355" x2="414" y2="455" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="334" y="418" text-anchor="middle" font-size="9" fill="#555555">index command</text>
+
+  <!-- Observability -> Phoenix -->
+  <line x1="370" y1="480" x2="414" y2="480" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <!-- skip this, different x range -->
+
+  <!-- Agent Pipeline -> Observability -->
+  <line x1="415" y1="240" x2="285" y2="439" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="318" y="350" text-anchor="middle" font-size="9" fill="#555555">emit events</text>
+
+  <!-- Observability -> Phoenix -->
+  <line x1="370" y1="490" x2="669" y2="475" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="520" y="498" text-anchor="middle" font-size="9" fill="#555555">OTel spans</text>
+
+  <!-- Legend -->
+  <rect x="20" y="80" width="125" height="76" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
+  <text x="30" y="97" font-size="11" font-weight="bold" fill="#333333">Legend</text>
+  <rect x="30" y="104" width="12" height="12" rx="2" fill="#08427B"/>
+  <text x="48" y="115" font-size="10" fill="#444444">Person</text>
+  <rect x="30" y="121" width="12" height="12" rx="2" fill="#1168BD"/>
+  <text x="48" y="132" font-size="10" fill="#444444">Primary container</text>
+  <rect x="30" y="138" width="12" height="12" rx="2" fill="#438DD5"/>
+  <text x="48" y="149" font-size="10" fill="#444444">Container</text>
+  <rect x="30" y="141" width="0" height="0"/>
+  <rect x="30" y="155" width="12" height="12" rx="2" fill="#999999"/>
+  <text x="48" y="166" font-size="10" fill="#444444">External system</text>
+</svg>
