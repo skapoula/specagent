@@ -180,3 +180,4 @@ phoenix_data/
 CLAUDE.local.md
 .claude/CLAUDE.local.md
 .claude/settings.local.json
+.worktrees/
