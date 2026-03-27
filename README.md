@@ -81,11 +81,14 @@ cp .env.example .env
 ### Build the Index
 
 ```bash
+# Download embedding model to local cache
+specagent download-model
+
 # Download TSpec-LLM dataset (requires HuggingFace account)
 python scripts/download_data.py
 
-# Build LanceDB index
-specagent index --data-dir data/raw --output-dir data/index
+# Build LanceDB index from documents in data/docs/
+specagent index
 ```
 
 ### Run a Query
@@ -142,7 +145,7 @@ kubectl -n specagent get pods
 pytest
 
 # Run with coverage
-pytest --cov=specagent --cov-report=html
+pytest --cov=src/specagent --cov-report=html
 
 # Run specific test categories
 pytest -m unit           # Fast unit tests
@@ -156,8 +159,8 @@ pytest -m e2e            # End-to-end tests
 # Run TSpec-LLM benchmark
 specagent benchmark --dataset data/evaluation/tspec_benchmark.json
 
-# Run RAGAS evaluation
-python scripts/run_ragas_eval.py
+# Run benchmark with output directory and sample limit
+specagent benchmark --output-dir data/results --limit 100
 ```
 
 ## 🔧 Development
@@ -184,19 +187,21 @@ ruff format src/ tests/
 ```
 specagent/
 ├── src/specagent/
-│   ├── nodes/          # LangGraph nodes (router, grader, etc.)
-│   ├── graph/          # Workflow definition and state
-│   ├── retrieval/      # Chunking, embedding, LanceDB indexing
-│   ├── api/            # FastAPI REST endpoints
-│   ├── evaluation/     # RAGAS metrics, benchmark runner
-│   └── tracing/        # Phoenix observability
+│   ├── nodes/          # LangGraph nodes (router, retriever, grader, rewriter, generator, hallucination)
+│   ├── graph/          # Workflow assembly (workflow.py) and state schema (state.py)
+│   ├── retrieval/      # LanceDB store, chunker, embedder, ingestor, converter
+│   ├── llm/            # LLM factory (Groq + custom OpenAI-compatible endpoint)
+│   ├── api/            # FastAPI REST endpoints (/health, /query)
+│   ├── observability/  # JSONL query journal (QueryJournal)
+│   ├── evaluation/     # RAGAS metrics, TSpec-LLM benchmark runner
+│   └── tracing/        # Arize Phoenix + LangSmith observability
 ├── tests/
-│   ├── unit/           # Fast, isolated tests
-│   ├── integration/    # Multi-component tests
-│   └── e2e/            # Full pipeline tests
+│   ├── unit/           # Fast, isolated tests (~35 files)
+│   ├── integration/    # Multi-component tests (real LanceDB in tmp_path)
+│   └── e2e/            # Full pipeline tests (mocked LLM + store)
 ├── k8s/                # Kubernetes manifests
 ├── docs/               # Documentation
-└── scripts/            # Utility scripts
+└── scripts/            # Utility scripts (download_data.py, run_benchmark.py)
 ```
 
 ## 🎓 What I Learned

@@ -346,7 +346,7 @@ def evaluate_trajectory(thread_id: str, query_type: str):
 ### 5.1 Instrumentation Setup
 
 ```python
-# src/specagent/tracing.py
+# src/specagent/tracing/phoenix.py
 from phoenix.otel import register
 from openinference.instrumentation.langchain import LangChainInstrumentor
 
@@ -506,8 +506,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Run RAGAS evaluation
-        run: python scripts/run_ragas_eval.py --dataset tspec-benchmark
+      - name: Run benchmark evaluation
+        run: specagent benchmark --dataset data/evaluation/tspec_benchmark.json --output-dir data/results
       - name: Check accuracy threshold
         run: |
           ACCURACY=$(cat eval_results.json | jq '.accuracy')

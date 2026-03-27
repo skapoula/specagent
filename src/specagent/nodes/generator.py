@@ -105,6 +105,13 @@ def generator_node(state: "GraphState") -> "GraphState":
             _call.trace_id = state.get("trace_id", "")
             state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
 
+            try:
+                from specagent.tracing.rag_spans import emit_llm_usage_span  # noqa: PLC0415
+
+                emit_llm_usage_span(_call)
+            except Exception:
+                pass  # tracing must never break generation
+
         # Convert to string and strip whitespace
         generation = generation.strip() if isinstance(generation, str) else str(generation).strip()
 

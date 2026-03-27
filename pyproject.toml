@@ -89,7 +89,9 @@ eval = [
     # Evaluation Frameworks
     "ragas>=0.2.0",
     "arize-phoenix>=5.0.0",
+    "opentelemetry-sdk>=1.27.0",
     "openinference-instrumentation-langchain>=0.1.0",
+    "openinference-semantic-conventions>=0.1.9",
 
     # LangChain Evaluation
     "langsmith>=0.1.0",

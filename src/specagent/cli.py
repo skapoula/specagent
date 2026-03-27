@@ -49,6 +49,9 @@ def query(
 ) -> None:
     """Run a single query through the pipeline."""
     setup_langsmith_tracing()
+    from specagent.tracing.phoenix import setup_tracing  # noqa: PLC0415
+
+    setup_tracing()
     from specagent.graph.workflow import run_query
 
     console.print(f"[blue]Question:[/blue] {question}\n")
@@ -89,6 +92,17 @@ def query(
         table.add_row("Confidence", f"{result.get('average_confidence', 0):.2f}")
 
         console.print(table)
+
+        try:
+            from specagent.observability.report import (  # noqa: PLC0415
+                build_query_report,
+                format_report,
+            )
+
+            err_console = Console(stderr=True)
+            err_console.print(format_report(build_query_report(result)))
+        except Exception:
+            pass
 
 
 @app.command()

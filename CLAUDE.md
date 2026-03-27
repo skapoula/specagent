@@ -32,61 +32,76 @@ Build a question-answering system that:
 
 ```
 src/specagent/
-├── config.py         # Pydantic Settings (environment config)
-├── cli.py            # Typer CLI
-├── nodes/            # LangGraph nodes (router, grader, rewriter, generator, hallucination)
-├── graph/            # State definition and workflow assembly
-├── retrieval/        # Chunking, embeddings, LanceDB vector store
-├── api/              # FastAPI endpoints
-├── evaluation/       # RAGAS metrics, benchmark runner
-└── tracing/          # Phoenix integration
+├── config.py         # Pydantic Settings (all env vars, @lru_cache singleton)
+├── cli.py            # Typer CLI (serve, query, index, benchmark, download-model, version)
+├── nodes/            # LangGraph nodes (router, retriever, grader, rewriter, generator, hallucination)
+├── graph/
+│   ├── state.py      # GraphState TypedDict, RetrievedChunk, GradedChunk, Citation dataclasses
+│   └── workflow.py   # build_graph(), run_query(), conditional edges, timing wrappers
+├── retrieval/
+│   ├── store.py      # LanceDB Store (ChunkRecord schema, hybrid BM25+vector search, CRUD)
+│   ├── ingestor.py   # Async 7-step ingest pipeline (read→dedup→convert→chunk→embed→write→delete-old)
+│   ├── chunker.py    # Token-aware recursive chunker with section header propagation
+│   ├── embedder.py   # embed_documents() / embed_query() with nomic prefix handling
+│   ├── converter.py  # MarkItDown-based file-to-Markdown (22 supported extensions)
+│   ├── resources.py  # @lru_cache singletons: get_store(), get_embedder()
+│   └── exceptions.py # Domain exceptions: UnsupportedFormatError, IngestionError, StoreError, EmbeddingError
+├── llm/
+│   ├── factory.py    # create_llm() dispatching to Groq or custom endpoint
+│   └── custom_endpoint.py  # CustomEndpointLLM (OpenAI-compatible, retry, @traceable)
+├── api/
+│   ├── main.py       # FastAPI app, /health + /query endpoints, lifespan startup
+│   └── models.py     # QueryRequest, QueryResponse, HealthResponse Pydantic schemas
+├── observability/
+│   ├── models.py     # LLMCallRecord, RetrievalRecord, QueryEvent
+│   └── journal.py    # Thread-safe rotating JSONL journal (QueryJournal)
+├── evaluation/
+│   ├── benchmark.py  # TSpec-LLM runner + LLM judge, JSON+MD report output
+│   └── metrics.py    # RAGAS metrics
+└── tracing/
+    ├── phoenix.py    # Arize Phoenix + OpenTelemetry setup
+    └── langsmith.py  # LangSmith tracing setup
 ```
 
 ## Commands
 
 ```bash
 # Development
-pip install -e ".[dev,eval]"   # Install with dev dependencies
-pytest                          # Run all tests
-pytest -m unit                  # Run unit tests only
-ruff check src/ tests/          # Lint
-ruff format src/ tests/         # Format
-mypy src/specagent              # Type check
+pip install -e ".[dev,eval]"        # Install with dev + eval dependencies
+pytest                               # Run all tests (unit + integration, excludes slow)
+pytest -m unit                       # Run unit tests only
+pytest -m integration                # Run integration tests (real LanceDB)
+pytest -m e2e                        # Run end-to-end pipeline tests
+pytest --cov=src/specagent           # Run with coverage report
+ruff check src/ tests/               # Lint
+ruff format src/ tests/              # Format
+mypy src/specagent                   # Type check
 
 # Application
-specagent serve                 # Start FastAPI server (port 8000)
-specagent query "question"      # Run single query
-specagent index                 # Build LanceDB index from data/docs/
-specagent index --force         # Rebuild index from scratch
-specagent index --docs-dir PATH # Ingest from custom directory
-specagent benchmark             # Run evaluation
+specagent serve                      # Start FastAPI server (port 8000)
+specagent query "question"           # Run single query
+specagent query "question" --verbose # Run with timing + metadata output
+specagent index                      # Build LanceDB index from data/docs/
+specagent index --docs-dir PATH      # Ingest from custom directory
+specagent index --library NAME       # Tag chunks with a library name
+specagent index --force              # Re-ingest even if content hash unchanged
+specagent index --max-concurrency 4  # Control parallel ingest workers (default: 4)
+specagent benchmark                  # Run TSpec-LLM evaluation
+specagent download-model             # Download ONNX embedding model to local cache
+specagent version                    # Print version string
 
 # Docker
-docker-compose up               # Start API + Phoenix
-docker-compose up -d            # Background mode
+docker-compose up                    # Start API (port 8000) + Phoenix (port 6006)
+docker-compose --profile ui up       # Also start Gradio UI (port 7860)
+docker-compose up -d                 # Background mode
 ```
-
-## Implementation Status
-
-Implemented (ready to use):
-- `config.py` - Pydantic Settings
-- `graph/state.py` - GraphState TypedDict
-- `graph/workflow.py` - LangGraph skeleton
-- `api/main.py` - FastAPI application
-- `cli.py` - Typer CLI
-- `tracing/phoenix.py` - Phoenix integration
-- `tests/conftest.py` - Pytest fixtures
-
-Needs implementation (placeholders exist):
-- `retrieval/chunker.py` - Document chunking
-- `retrieval/embedder.py` - fastembed embeddings client
-- `retrieval/resources.py` - LanceDB Store + fastembed singletons
-- `nodes/*.py` - All LangGraph nodes
 
 ## Key Patterns
 
 ### Node Signature
 All nodes follow: `def node_name(state: GraphState) -> GraphState`
+
+Each node is wrapped by `create_timed_node()` in `workflow.py`, which accumulates elapsed milliseconds into `state["node_timings"]`.
 
 ### Structured Output
 Use Pydantic models with LLM:
@@ -104,6 +119,27 @@ Always load from `settings`:
 from specagent.config import settings
 model = settings.embedding_model
 ```
+
+### Embedding Prefixes (nomic asymmetric model)
+```python
+# Ingestion
+"search_document: " + chunk_text
+
+# Query time
+"search_query: " + query_text
+```
+
+### Grader Auto-Grade Thresholds
+- Similarity > 0.82 → auto-grade as relevant (no LLM call)
+- Similarity < 0.55 → auto-grade as not relevant (no LLM call)
+- Mid-range (0.55–0.82) → single batched LLM call for all mid-range chunks
+
+### Hallucination Skip Thresholds
+- avg_confidence >= 0.65 (numerical/tabular content) or 0.70 (other) → skip hallucination check
+- Content type detected by scanning for number patterns and markdown table structures
+
+### Per-Request Overrides
+Pass `max_rewrites_override` and `library_filter` in initial state to override global settings per query. The API exposes both via `QueryRequest.max_rewrites` and `QueryRequest.library`.
 
 ## Constraints
 

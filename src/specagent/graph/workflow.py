@@ -62,6 +62,29 @@ def create_timed_node(
     return timed_node
 
 
+def create_traced_node(
+    node_func: Callable[[GraphState], GraphState], node_name: str
+) -> Callable[[GraphState], GraphState]:
+    """Wrap a node with a Phoenix OTel span (no-op when tracing is disabled).
+
+    Args:
+        node_func: The original node function.
+        node_name: Span name shown in Phoenix.
+
+    Returns:
+        Wrapped node function, or the original if tracing is off.
+    """
+    if not settings.enable_tracing:
+        return node_func
+
+    try:
+        from specagent.tracing.phoenix import create_phoenix_node_wrapper  # noqa: PLC0415
+
+        return create_phoenix_node_wrapper(node_func, node_name)
+    except ImportError:
+        return node_func
+
+
 def should_retrieve(state: GraphState) -> Literal["retrieve", "reject"]:
     """
     Conditional edge: Route based on router decision.
@@ -183,15 +206,19 @@ def build_graph() -> CompiledStateGraph:
     # Initialize graph with state schema
     workflow = StateGraph(GraphState)
 
-    # Add nodes with timing instrumentation
-    workflow.add_node("router", create_timed_node(router_node, "router"))
-    workflow.add_node("retriever", create_timed_node(retriever_node, "retriever"))
-    workflow.add_node("grader", create_timed_node(grader_node, "grader"))
-    workflow.add_node("rewriter", create_timed_node(rewriter_node, "rewriter"))
-    workflow.add_node("generator", create_timed_node(generator_node, "generator"))
-    workflow.add_node(
-        "hallucination_check", create_timed_node(hallucination_check_node, "hallucination_check")
-    )
+    def _wrap(
+        func: Callable[[GraphState], GraphState], name: str
+    ) -> Callable[[GraphState], GraphState]:
+        """Chain timing + Phoenix span wrappers around a node."""
+        return create_timed_node(create_traced_node(func, name), name)
+
+    # Add nodes with timing and Phoenix tracing instrumentation
+    workflow.add_node("router", _wrap(router_node, "router"))
+    workflow.add_node("retriever", _wrap(retriever_node, "retriever"))
+    workflow.add_node("grader", _wrap(grader_node, "grader"))
+    workflow.add_node("rewriter", _wrap(rewriter_node, "rewriter"))
+    workflow.add_node("generator", _wrap(generator_node, "generator"))
+    workflow.add_node("hallucination_check", _wrap(hallucination_check_node, "hallucination_check"))
 
     # Add edges from START
     workflow.add_edge(START, "router")
@@ -310,14 +337,42 @@ def run_query(
     graph = _get_compiled_graph()
 
     start_time = time.perf_counter()
-    final_state = graph.invoke(state)
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-    # Add timing metadata
-    final_state["processing_time_ms"] = elapsed_ms
+    if settings.enable_tracing:
+        try:
+            from opentelemetry import trace  # noqa: PLC0415
+
+            from specagent.tracing.rag_spans import emit_query_span  # noqa: PLC0415
+
+            tracer = trace.get_tracer("specagent.pipeline")
+            with tracer.start_as_current_span("rag_pipeline") as span:
+                span.set_attribute("session.id", state.get("trace_id", ""))
+                final_state = graph.invoke(state)
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                final_state["processing_time_ms"] = elapsed_ms
+                emit_query_span(
+                    query=question,
+                    answer=final_state.get("generation"),
+                    trace_id=final_state.get("trace_id", ""),
+                )
+        except ImportError:
+            final_state = graph.invoke(state)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            final_state["processing_time_ms"] = elapsed_ms
+    else:
+        final_state = graph.invoke(state)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        final_state["processing_time_ms"] = elapsed_ms
 
     if settings.enable_query_journal:
         _flush_query_journal(final_state)
+
+    try:
+        from specagent.observability.report import build_query_report, log_report  # noqa: PLC0415
+
+        log_report(build_query_report(final_state))
+    except Exception:
+        pass  # monitoring report must never break the pipeline
 
     return final_state
 

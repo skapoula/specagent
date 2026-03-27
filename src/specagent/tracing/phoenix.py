@@ -10,10 +10,13 @@ Usage:
 """
 
 import functools
+import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
 
 from specagent.config import settings
+
+logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -159,3 +162,44 @@ def record_exception(exception: Exception) -> None:
 
     except ImportError:
         pass
+
+
+def create_phoenix_node_wrapper(
+    node_func: "Callable[[Any], Any]",
+    node_name: str,
+) -> "Callable[[Any], Any]":
+    """Wrap a LangGraph node function in a named OpenTelemetry span.
+
+    Creates a child span for every invocation. When tracing is disabled
+    or opentelemetry is not installed, the node runs unwrapped.
+
+    Args:
+        node_func: The original node function accepting GraphState.
+        node_name: Span name shown in Phoenix (e.g. 'retriever', 'generator').
+
+    Returns:
+        Wrapped node function that emits a Phoenix span on each call.
+    """
+    if not settings.enable_tracing:
+        return node_func
+
+    @functools.wraps(node_func)
+    def wrapped(state: Any) -> Any:
+        try:
+            from opentelemetry import trace  # noqa: PLC0415
+
+            tracer = trace.get_tracer("specagent.nodes")
+            with tracer.start_as_current_span(node_name) as span:
+                span.set_attribute("node.name", node_name)
+                span.set_attribute("session.id", state.get("trace_id", "") if isinstance(state, dict) else "")
+                result = node_func(state)
+                if isinstance(result, dict) and result.get("error"):
+                    span.set_attribute("node.error", str(result["error"]))
+                return result
+        except ImportError:
+            return node_func(state)
+        except Exception:
+            logger.debug("Phoenix node wrapper failed for %s", node_name, exc_info=True)
+            return node_func(state)
+
+    return wrapped

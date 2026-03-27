@@ -64,6 +64,10 @@ specagent/
 │       │   ├── embedder.py
 │       │   ├── resources.py
 │       │   └── store.py
+│       ├── llm/                # Phase 2: LLM factory
+│       │   ├── __init__.py
+│       │   ├── factory.py
+│       │   └── custom_endpoint.py
 │       ├── evaluation/         # Phase 4: Eval harness
 │       │   ├── __init__.py
 │       │   ├── metrics.py
@@ -72,9 +76,13 @@ specagent/
 │       │   ├── __init__.py
 │       │   ├── main.py
 │       │   └── models.py
+│       ├── observability/      # Phase 4: Query journaling
+│       │   ├── models.py
+│       │   └── journal.py
 │       └── tracing/            # Phase 4: Observability
 │           ├── __init__.py
-│           └── phoenix.py
+│           ├── phoenix.py
+│           └── langsmith.py
 ├── tests/
 │   ├── conftest.py
 │   ├── unit/
@@ -179,16 +187,17 @@ claude "Create src/specagent/nodes/router.py with:
 - Use langchain_groq.ChatGroq with model from settings.groq_model for LLM calls
 Include tests with mocked LLM responses for both retrieve and reject cases."
 
-# Task 2.3: Grader node  
+# Task 2.3: Grader node
 claude "Create src/specagent/nodes/grader.py with:
 - Pydantic model GradeResult with: relevant (Literal['yes', 'no']), confidence (float 0-1)
 - Function grader_node(state: GraphState) -> GraphState that:
-  - Iterates through state['retrieved_chunks']
-  - Calls LLM to grade each chunk's relevance to the question
-  - Populates state['graded_chunks'] with results
+  - Grades only the top-3 retrieved chunks (not all retrieved_chunks)
+  - Auto-grades without LLM when similarity > 0.82 (relevant) or < 0.55 (not relevant)
+  - Sends remaining mid-range chunks in a single batched LLM call
+  - Records grader_auto_count and grader_llm_count in state for observability
   - Calculates average confidence score
 - Include the grading prompt from our PRD
-Write tests covering: all relevant, all irrelevant, mixed results."
+Write tests covering: all relevant, all irrelevant, mixed results, auto-grade fast path."
 
 # Task 2.4: Rewriter node
 claude "Create src/specagent/nodes/rewriter.py with:
@@ -211,13 +220,15 @@ Include citation extraction regex and tests."
 
 # Task 2.6: Hallucination checker
 claude "Create src/specagent/nodes/hallucination.py with:
-- Pydantic model HallucinationResult with: grounded (Literal['yes', 'no', 'partial']), 
+- Pydantic model HallucinationResult with: grounded (Literal['yes', 'no', 'partial']),
   ungrounded_claims (list[str])
 - Function hallucination_check_node(state: GraphState) -> GraphState that:
-  - Compares generation against source chunks
-  - Uses LLM-as-judge to verify factual grounding
+  - Skips the LLM check when avg_confidence >= 0.65 (numerical/tabular content)
+    or >= 0.70 (other content) — content type detected by scanning for number
+    patterns and markdown table structures
+  - Maps LLM response to 'grounded', 'partial', or 'not_grounded'
   - Updates state['hallucination_check']
-Write tests for grounded, not grounded, and partial cases."
+Write tests for grounded, not grounded, partial, and skip-threshold cases."
 
 # Task 2.7: Workflow assembly
 claude "Create src/specagent/graph/workflow.py with:
@@ -283,13 +294,13 @@ claude "Create src/specagent/evaluation/metrics.py with:
 Include type hints and docstrings."
 
 # Task 4.2: Benchmark runner
-claude "Create scripts/run_benchmark.py with:
-- Load TSpec-LLM benchmark questions from JSON
-- Run each through the pipeline
+claude "Create src/specagent/evaluation/benchmark.py with a benchmark runner
+that is also wired into the CLI as 'specagent benchmark':
+- Load TSpec-LLM benchmark questions from JSON (--dataset flag)
+- Run each through the pipeline with --limit for sampling
 - Compute accuracy by difficulty (easy/medium/hard)
-- Generate markdown report with results table
-- Save results to evaluation/results/{timestamp}.json
-Use argparse for CLI: --dataset, --output-dir, --limit (for testing)"
+- Generate JSON + Markdown report (--output-dir flag)
+Note: the benchmark command is registered in cli.py, not as a standalone script."
 
 # Task 4.3: Phoenix tracing setup
 claude "Create src/specagent/tracing/phoenix.py with:

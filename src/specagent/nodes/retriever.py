@@ -107,6 +107,20 @@ def retriever_node(state: "GraphState") -> "GraphState":
         state["retrieval_events"] = [*list(state.get("retrieval_events", [])), rec]
 
         state["retrieved_chunks"] = retrieved_chunks
+
+        try:
+            from specagent.tracing.rag_spans import emit_retrieval_span  # noqa: PLC0415
+
+            emit_retrieval_span(
+                embed_ms=embed_ms,
+                search_ms=search_ms,
+                query=query,
+                results=retrieved_chunks,
+                rewrite_index=state.get("rewrite_count", 0),
+            )
+        except Exception:
+            pass  # tracing must never break retrieval
+
         logger.info("Retrieved %d chunks for query", len(retrieved_chunks))
 
     except Exception as e:
