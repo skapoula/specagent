@@ -7,6 +7,7 @@ hybrid BM25+vector search against the LanceDB store.
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,21 +40,28 @@ def retriever_node(state: "GraphState") -> "GraphState":
         state["retrieved_chunks"] = []
         return state
 
+    embed_ms: float = 0.0
+    search_ms: float = 0.0
+
     try:
         embedder = get_embedder()
         store = get_store()
 
         # Embed with query prefix (asymmetric search requirement)
+        t0 = time.perf_counter()
         query_vector = list(next(embedder.embed([_QUERY_PREFIX + query])))
+        embed_ms = (time.perf_counter() - t0) * 1000
 
         # Hybrid search: BM25 + ANN vector
+        t1 = time.perf_counter()
         results = store.search(
             embedding=query_vector,
             query_text=query,
             top_k=settings.retrieval_top_k,
-            library=settings.default_library,
+            library=state.get("library_filter") or settings.default_library,
             filter=None,
         )
+        search_ms = (time.perf_counter() - t1) * 1000
 
         retrieved_chunks: list[RetrievedChunk] = []
         for record, similarity_score in results:
@@ -82,6 +90,21 @@ def retriever_node(state: "GraphState") -> "GraphState":
                     similarity_score=float(similarity_score),
                 )
             )
+
+        from specagent.observability.models import RetrievalRecord  # noqa: PLC0415
+
+        scores = [c.similarity_score for c in retrieved_chunks]
+        rec = RetrievalRecord(
+            trace_id=state.get("trace_id", ""),
+            query=query,
+            embed_ms=embed_ms,
+            search_ms=search_ms,
+            num_results=len(retrieved_chunks),
+            top_similarity=max(scores) if scores else None,
+            mean_similarity=sum(scores) / len(scores) if scores else None,
+            rewrite_index=state.get("rewrite_count", 0),
+        )
+        state["retrieval_events"] = [*list(state.get("retrieval_events", [])), rec]
 
         state["retrieved_chunks"] = retrieved_chunks
         logger.info("Retrieved %d chunks for query", len(retrieved_chunks))

@@ -68,6 +68,11 @@ def router_node(state: "GraphState") -> "GraphState":
 
         # Call LLM
         response = llm.invoke(prompt)
+        _call = llm.get_last_call()
+        if _call is not None:
+            _call.node = "router"
+            _call.trace_id = state.get("trace_id", "")
+            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
 
         # Extract JSON from response (handle cases where LLM adds extra text)
         json_match = re.search(r"\{.*\}", response, re.DOTALL)

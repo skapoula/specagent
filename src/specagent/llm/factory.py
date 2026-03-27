@@ -12,8 +12,15 @@ Backend selection is controlled by the ``llm_provider`` setting:
 All returned objects implement :class:`LLMProtocol` — ``invoke(prompt) -> str``.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Protocol
+import time
+import warnings
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from specagent.observability.models import LLMCallRecord
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +30,10 @@ class LLMProtocol(Protocol):
 
     def invoke(self, prompt: str) -> str:
         """Call the LLM with a prompt and return the response."""
+        ...
+
+    def get_last_call(self) -> Any:
+        """Return the LLMCallRecord from the most recent invoke(), or None if not invoked."""
         ...
 
 
@@ -36,14 +47,38 @@ class _GroqAdapter:
 
     def __init__(self, chat_model: Any) -> None:
         self._model = chat_model
+        self._last_call: LLMCallRecord | None = None
 
     def invoke(self, prompt: str) -> str:
-        """Send prompt to Groq and return the response as a plain string."""
+        """Send prompt to Groq, capture token usage, and return the response text."""
         from langchain_core.messages import HumanMessage  # noqa: PLC0415
 
+        start = time.perf_counter()
         response = self._model.invoke([HumanMessage(content=prompt)])
+        inference_ms = (time.perf_counter() - start) * 1000
+        try:
+            from specagent.config import settings  # noqa: PLC0415
+            from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
+
+            usage = response.usage_metadata
+            self._last_call = LLMCallRecord(
+                node="",
+                trace_id="",
+                model=settings.groq_model,
+                provider="groq",
+                prompt_tokens=usage.get("input_tokens") if usage else None,
+                completion_tokens=usage.get("output_tokens") if usage else None,
+                total_tokens=usage.get("total_tokens") if usage else None,
+                inference_ms=inference_ms,
+            )
+        except Exception:
+            self._last_call = None
         content = response.content
         return content if isinstance(content, str) else str(content)
+
+    def get_last_call(self) -> LLMCallRecord | None:
+        """Return the LLMCallRecord from the most recent invoke(), or None."""
+        return self._last_call
 
 
 def create_llm(temperature: float | None = None) -> LLMProtocol:
@@ -77,20 +112,27 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
         model_kwargs: dict[str, Any] = {}
         if settings.groq_reasoning_effort:
             model_kwargs["reasoning_effort"] = settings.groq_reasoning_effort
+        if settings.groq_max_tokens:
+            model_kwargs["max_tokens"] = settings.groq_max_tokens
 
         logger.debug("Creating Groq LLM: model=%s", settings.groq_model)
-        chat_model = ChatOpenAI(  # type: ignore[call-arg]  # max_tokens missing from stubs
+        chat_model = ChatOpenAI(  # type: ignore[call-arg]  # temperature/timeout missing from stubs
             model=settings.groq_model,
             api_key=SecretStr(settings.groq_api_key),
             base_url="https://api.groq.com/openai/v1",
             temperature=temp,
             timeout=60,
-            max_tokens=settings.groq_max_tokens,
             model_kwargs=model_kwargs,
         )
         return _GroqAdapter(chat_model)
 
     elif provider == "custom_endpoint" or settings.use_custom_endpoint:
+        if settings.use_custom_endpoint and provider != "custom_endpoint":
+            warnings.warn(
+                "use_custom_endpoint=True is deprecated. Set llm_provider='custom_endpoint' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         from specagent.llm.custom_endpoint import CustomEndpointLLM  # noqa: PLC0415
 
         logger.debug("Creating custom-endpoint LLM: url=%s", settings.custom_endpoint_url)

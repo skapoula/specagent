@@ -166,6 +166,11 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
 
             # Call LLM to check for hallucinations
             response = llm.invoke(prompt)
+            _call = llm.get_last_call()
+            if _call is not None:
+                _call.node = "hallucination_check"
+                _call.trace_id = state.get("trace_id", "")
+                state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
             check_result = _parse_hallucination_json(response)
 
             # Map HallucinationResult.grounded to state hallucination_check values
@@ -205,6 +210,11 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
 
         # Call LLM to check for hallucinations
         response = llm.invoke(prompt)
+        _call = llm.get_last_call()
+        if _call is not None:
+            _call.node = "hallucination_check"
+            _call.trace_id = state.get("trace_id", "")
+            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
         result = _parse_hallucination_json(response)
 
         # Map HallucinationResult.grounded to state hallucination_check values

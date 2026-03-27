@@ -250,13 +250,51 @@ def _get_compiled_graph() -> CompiledStateGraph:
     return _compiled_graph
 
 
-def run_query(question: str, max_rewrites: int | None = None) -> GraphState:
+def _flush_query_journal(state: "GraphState") -> None:
+    """Write QueryEvent and sub-records to the JSONL journal. Never raises."""
+    try:
+        from specagent.observability.journal import get_journal  # noqa: PLC0415
+        from specagent.observability.models import QueryEvent  # noqa: PLC0415
+
+        journal = get_journal()
+        for record in state.get("llm_calls", []):
+            journal.write(record)
+        for record in state.get("retrieval_events", []):
+            journal.write(record)
+
+        graded = state.get("graded_chunks", [])
+        relevant_count = sum(1 for g in graded if getattr(g, "relevant", None) == "yes")
+        event = QueryEvent(
+            trace_id=state.get("trace_id", ""),
+            question=state.get("question", ""),
+            route_decision=state.get("route_decision", "reject"),
+            rewrite_count=state.get("rewrite_count", 0),
+            num_retrieved=len(state.get("retrieved_chunks", [])),
+            num_relevant=relevant_count,
+            hallucination_check=state.get("hallucination_check"),
+            total_ms=state.get("processing_time_ms", 0.0),
+            llm_calls=state.get("llm_calls", []),
+            retrievals=state.get("retrieval_events", []),
+        )
+        journal.write(event)
+    except Exception:
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).warning("Failed to write query journal", exc_info=True)
+
+
+def run_query(
+    question: str,
+    max_rewrites: int | None = None,
+    library: str | None = None,
+) -> GraphState:
     """
     Execute a query through the agentic RAG pipeline.
 
     Args:
         question: User's natural language question
         max_rewrites: Per-request override for max rewrites. Defaults to settings value.
+        library: Per-request library filter. If provided, overrides settings.default_library.
 
     Returns:
         Final graph state with answer, citations, and metadata
@@ -265,6 +303,8 @@ def run_query(question: str, max_rewrites: int | None = None) -> GraphState:
     state = create_initial_state(question)
     if max_rewrites is not None:
         state["max_rewrites_override"] = max_rewrites
+    if library is not None:
+        state["library_filter"] = library
 
     # Use cached compiled graph (compiled once per process)
     graph = _get_compiled_graph()
@@ -275,6 +315,9 @@ def run_query(question: str, max_rewrites: int | None = None) -> GraphState:
 
     # Add timing metadata
     final_state["processing_time_ms"] = elapsed_ms
+
+    if settings.enable_query_journal:
+        _flush_query_journal(final_state)
 
     return final_state
 

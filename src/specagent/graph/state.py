@@ -5,6 +5,7 @@ The GraphState TypedDict defines all data that flows through the LangGraph
 workflow. Each node reads from and writes to this shared state.
 """
 
+import uuid
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
@@ -158,6 +159,9 @@ class GraphState(TypedDict, total=False):
     max_rewrites_override: int | None
     """Per-request max rewrites override; if None, falls back to settings.max_rewrites."""
 
+    library_filter: str | None
+    """Per-request library restriction; overrides settings.default_library when set."""
+
     # ==========================================================================
     # Metadata
     # ==========================================================================
@@ -173,8 +177,23 @@ class GraphState(TypedDict, total=False):
     node_timings: dict[str, float]
     """Timing for each node execution in milliseconds (e.g., {'router': 150.2, 'retriever': 320.5})."""
 
-    llm_inference_times: list[dict[str, float]]
-    """LLM inference timings with context (e.g., [{'node': 'router', 'inference_ms': 145.3}])."""
+    # ==========================================================================
+    # Observability (Phase 1+)
+    # ==========================================================================
+    trace_id: str
+    """UUID4 trace identifier correlating all events for this query run."""
+
+    llm_calls: list
+    """LLMCallRecord instances accumulated during this query. Typed as bare list to avoid circular import."""
+
+    retrieval_events: list
+    """RetrievalRecord instances accumulated during this query. Typed as bare list to avoid circular import."""
+
+    grader_auto_count: int
+    """Number of chunks graded automatically (high/low similarity bypass)."""
+
+    grader_llm_count: int
+    """Number of chunks graded via LLM call."""
 
 
 def create_initial_state(question: str) -> GraphState:
@@ -200,5 +219,9 @@ def create_initial_state(question: str) -> GraphState:
         error=None,
         ungrounded_claims=[],
         node_timings={},
-        llm_inference_times=[],
+        trace_id=str(uuid.uuid4()),
+        llm_calls=[],
+        retrieval_events=[],
+        grader_auto_count=0,
+        grader_llm_count=0,
     )
