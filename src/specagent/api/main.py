@@ -90,7 +90,9 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         HTTPException: 500 if pipeline fails
     """
     try:
-        result = run_query(request.question, max_rewrites=request.max_rewrites)
+        result = run_query(
+            request.question, max_rewrites=request.max_rewrites, library=request.library
+        )
 
         # Check if query was rejected
         if result.get("route_decision") == "reject":

@@ -225,7 +225,7 @@ class TestIndexCommand:
         )
 
         mock_store = MagicMock()
-        mock_store.list_documents.return_value = [{"doc_id": "doc1"}, {"doc_id": "doc2"}]
+        mock_store.delete_library.return_value = 42
 
         with (
             patch("specagent.retrieval.resources.get_store", return_value=mock_store),
@@ -234,7 +234,7 @@ class TestIndexCommand:
             result = runner.invoke(app, ["index", "--docs-dir", str(tmp_path), "--force"])
 
         assert result.exit_code == 0
-        mock_store.delete_document.assert_called()
+        mock_store.delete_library.assert_called_once()
 
     def test_index_force_store_error_shows_warning(self, tmp_path):
         """index --force continues with a warning when the store raises an exception."""

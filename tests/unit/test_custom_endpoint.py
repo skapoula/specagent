@@ -232,16 +232,14 @@ def test_create_custom_llm_from_settings():
 
 
 @pytest.mark.unit
-def test_create_custom_llm_settings_fallback():
-    """When settings has no custom_endpoint_url, getattr fallback is used."""
+def test_create_custom_llm_uses_settings_url():
+    """When endpoint_url is None, create_custom_llm reads settings.custom_endpoint_url."""
     from specagent.llm.custom_endpoint import create_custom_llm
 
     with patch("specagent.config.settings") as ms:
-        # Simulate missing attribute so getattr returns the fallback default
-        del ms.custom_endpoint_url
+        ms.custom_endpoint_url = "http://from-settings-v2/v1"
         llm = create_custom_llm()
-    # The fallback URL contains qwen3 (hardcoded default)
-    assert "qwen3" in llm.endpoint_url
+    assert "from-settings-v2" in llm.endpoint_url
 
 
 @pytest.mark.unit

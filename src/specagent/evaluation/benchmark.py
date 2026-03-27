@@ -573,7 +573,8 @@ def run_benchmark(
                     trace.info(f"      {node_name}: {node_time:.0f}ms")
 
             # Log LLM inference times if available
-            llm_times = state.get("llm_inference_times", [])
+            llm_calls = state.get("llm_calls", [])
+            llm_times = [{"inference_ms": c.inference_ms} for c in llm_calls]
             if llm_times and verbose:
                 total_llm_time = sum(t.get("inference_ms", 0) for t in llm_times)
                 trace.info(

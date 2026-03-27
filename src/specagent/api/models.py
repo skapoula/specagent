@@ -27,6 +27,10 @@ class QueryRequest(BaseModel):
         le=5,
         description="Maximum number of query rewrites to attempt",
     )
+    library: str | None = Field(
+        default=None,
+        description="Library to restrict retrieval to. If None, uses the server default library.",
+    )
 
 
 class CitationSchema(BaseModel):

@@ -138,10 +138,8 @@ def index(
         console.print(f"[yellow]--force: clearing library '{target_lib}'...[/yellow]")
         try:
             store = get_store()
-            docs = store.list_documents(library=target_lib, limit=10000, offset=0)
-            for doc in docs:
-                store.delete_document(doc["doc_id"])
-            console.print(f"[green]Cleared {len(docs)} existing documents.[/green]")
+            deleted = store.delete_library(target_lib)
+            console.print(f"[green]Cleared {deleted} chunks from library '{target_lib}'.[/green]")
         except Exception as e:
             console.print(f"[yellow]Warning: could not clear library: {e}[/yellow]")
 

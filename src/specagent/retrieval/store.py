@@ -322,6 +322,33 @@ class Store:
         except Exception as e:
             raise StoreError(f"Failed to delete document {doc_id!r}") from e
 
+    def delete_library(self, library: str) -> int:
+        """Delete all chunks belonging to a library.
+
+        Note: The FTS index is NOT rebuilt automatically after deletion.
+        Call rebuild_fts_index() explicitly if hybrid search must reflect the deletion.
+
+        Args:
+            library: Library name to purge.
+
+        Returns:
+            Number of rows deleted.
+
+        Raises:
+            StoreError: If the delete fails.
+        """
+        try:
+            table = self._table()
+            safe_lib = library.replace("'", "''")
+            before = table.count_rows()
+            table.delete(f"library = '{safe_lib}'")
+            after = table.count_rows()
+            deleted = before - after
+            logger.info("Deleted %d chunks for library=%s", deleted, library)
+            return deleted
+        except Exception as e:
+            raise StoreError(f"Failed to delete library {library!r}") from e
+
     def rebuild_fts_index(self) -> None:
         """Rebuild the full-text search index on the content column.
 
