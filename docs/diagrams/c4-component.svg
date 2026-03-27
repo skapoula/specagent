@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 680" width="1020" height="680" font-family="Arial, sans-serif">
+  <!-- Background -->
+  <rect width="1020" height="680" fill="#ffffff"/>
+
+  <!-- Arrow defs -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#707070"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#cc4444"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="510" y="32" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a1a1a">C4 Component Diagram — Agent Pipeline</text>
+  <text x="510" y="52" text-anchor="middle" font-size="12" fill="#666666">Level 3: LangGraph Agentic Workflow Components</text>
+
+  <!-- Pipeline boundary -->
+  <rect x="160" y="70" width="700" height="540" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="510" y="90" text-anchor="middle" font-size="11" fill="#888888">[Agent Pipeline Container Boundary]</text>
+
+  <!-- START indicator -->
+  <circle cx="510" cy="120" r="18" fill="#333333"/>
+  <text x="510" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#ffffff">START</text>
+
+  <!-- Component: Router -->
+  <rect x="390" y="158" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="186" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Router</text>
+  <text x="510" y="202" text-anchor="middle" font-size="10" fill="#334455">[nodes/router.py]</text>
+  <text x="510" y="218" text-anchor="middle" font-size="10" fill="#334455">LLM decides: retrieve or reject</text>
+  <text x="510" y="230" text-anchor="middle" font-size="10" fill="#334455">off-topic questions</text>
+
+  <!-- Branch: reject -->
+  <rect x="790" y="168" width="130" height="52" rx="6" fill="#f5e6e6" stroke="#cc4444" stroke-width="1.5"/>
+  <text x="855" y="192" text-anchor="middle" font-size="11" font-weight="bold" fill="#cc4444">Reject</text>
+  <text x="855" y="208" text-anchor="middle" font-size="10" fill="#994444">Returns off-topic</text>
+  <text x="855" y="220" text-anchor="middle" font-size="10" fill="#994444">response → END</text>
+
+  <!-- Arrow: START -> Router -->
+  <line x1="510" y1="138" x2="510" y2="157" stroke="#333333" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Arrow: Router -> Reject -->
+  <line x1="630" y1="194" x2="789" y2="194" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="710" y="188" text-anchor="middle" font-size="9" fill="#cc4444">off-topic</text>
+
+  <!-- Component: Retriever -->
+  <rect x="390" y="278" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="306" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Retriever</text>
+  <text x="510" y="322" text-anchor="middle" font-size="10" fill="#334455">[nodes/retriever.py]</text>
+  <text x="510" y="338" text-anchor="middle" font-size="10" fill="#334455">Hybrid BM25+ANN search</text>
+  <text x="510" y="350" text-anchor="middle" font-size="10" fill="#334455">top-10 chunks from LanceDB</text>
+
+  <!-- Arrow: Router -> Retriever -->
+  <line x1="510" y1="238" x2="510" y2="277" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="530" y="261" text-anchor="middle" font-size="9" fill="#555555">retrieve</text>
+
+  <!-- Component: Grader -->
+  <rect x="390" y="398" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Grader</text>
+  <text x="510" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/grader.py]</text>
+  <text x="510" y="458" text-anchor="middle" font-size="10" fill="#334455">Auto-grade high/low similarity;</text>
+  <text x="510" y="470" text-anchor="middle" font-size="10" fill="#334455">batch LLM grade for mid-range</text>
+
+  <!-- Arrow: Retriever -> Grader -->
+  <line x1="510" y1="358" x2="510" y2="397" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Component: Rewriter (conditional path) -->
+  <rect x="175" y="398" width="165" height="80" rx="6" fill="#e8f0ff" stroke="#438DD5" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="258" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Rewriter</text>
+  <text x="258" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/rewriter.py]</text>
+  <text x="258" y="458" text-anchor="middle" font-size="10" fill="#334455">LLM reformulates query</text>
+  <text x="258" y="470" text-anchor="middle" font-size="10" fill="#334455">with 3GPP terminology</text>
+
+  <!-- Arrow: Grader -> Rewriter (conditional: low quality) -->
+  <line x1="390" y1="440" x2="341" y2="440" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+  <text x="362" y="433" text-anchor="middle" font-size="9" fill="#e67e22">low quality</text>
+
+  <!-- Arrow: Rewriter -> Retriever (loop back) -->
+  <path d="M 258 398 Q 258 320 390 318" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+  <text x="290" y="308" text-anchor="middle" font-size="9" fill="#e67e22">retry (max 2x)</text>
+
+  <!-- Component: Generator -->
+  <rect x="390" y="520" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="548" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Generator</text>
+  <text x="510" y="564" text-anchor="middle" font-size="10" fill="#334455">[nodes/generator.py]</text>
+  <text x="510" y="580" text-anchor="middle" font-size="10" fill="#334455">Synthesize answer with</text>
+  <text x="510" y="592" text-anchor="middle" font-size="10" fill="#334455">inline [TS XX.XXX §Y.Z] citations</text>
+
+  <!-- Arrow: Grader -> Generator (good quality) -->
+  <line x1="510" y1="478" x2="510" y2="519" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="535" y="502" text-anchor="middle" font-size="9" fill="#2e7d32">good quality</text>
+
+  <!-- Component: Hallucination Checker -->
+  <rect x="700" y="398" width="220" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="810" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Hallucination Checker</text>
+  <text x="810" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/hallucination.py]</text>
+  <text x="810" y="458" text-anchor="middle" font-size="10" fill="#334455">Verify answer grounded in</text>
+  <text x="810" y="470" text-anchor="middle" font-size="10" fill="#334455">retrieved source chunks</text>
+
+  <!-- Arrow: Generator -> Hallucination Checker -->
+  <path d="M 630 560 Q 810 560 810 479" fill="none" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Arrow: Hallucination Checker -> Generator (regenerate, once) -->
+  <path d="M 700 425 Q 680 500 630 555" fill="none" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="660" y="498" text-anchor="middle" font-size="9" fill="#cc4444">not grounded</text>
+  <text x="660" y="510" text-anchor="middle" font-size="9" fill="#cc4444">(once)</text>
+
+  <!-- END indicator -->
+  <circle cx="810" cy="520" r="18" fill="#333333" stroke="#333333" stroke-width="3"/>
+  <circle cx="810" cy="520" r="12" fill="#ffffff"/>
+  <text x="810" y="546" text-anchor="middle" font-size="11" font-weight="bold" fill="#333333">END</text>
+
+  <!-- Arrow: Hallucination Checker -> END (grounded) -->
+  <line x1="810" y1="478" x2="810" y2="501" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="840" y="492" text-anchor="middle" font-size="9" fill="#2e7d32">grounded</text>
+
+  <!-- External: GraphState -->
+  <rect x="20" y="278" width="130" height="90" rx="6" fill="#f5f5f5" stroke="#999999" stroke-width="1.5"/>
+  <text x="85" y="304" text-anchor="middle" font-size="11" font-weight="bold" fill="#333333">GraphState</text>
+  <text x="85" y="320" text-anchor="middle" font-size="9" fill="#555555">[graph/state.py]</text>
+  <text x="85" y="336" text-anchor="middle" font-size="9" fill="#555555">Shared TypedDict</text>
+  <text x="85" y="350" text-anchor="middle" font-size="9" fill="#555555">passed through</text>
+  <text x="85" y="362" text-anchor="middle" font-size="9" fill="#555555">every node</text>
+
+  <!-- Dotted line: GraphState -> Pipeline -->
+  <line x1="150" y1="323" x2="389" y2="323" stroke="#999999" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+
+  <!-- External: LanceDB -->
+  <rect x="700" y="278" width="140" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <ellipse cx="770" cy="278" rx="70" ry="10" fill="#aaaaaa" stroke="#777777" stroke-width="1.5"/>
+  <text x="770" y="316" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">LanceDB</text>
+  <text x="770" y="333" text-anchor="middle" font-size="10" fill="#eeeeee">[Vector Store]</text>
+  <text x="770" y="347" text-anchor="middle" font-size="10" fill="#ffffff">Chunk index</text>
+
+  <!-- Arrow: Retriever -> LanceDB -->
+  <line x1="630" y1="318" x2="699" y2="318" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="664" y="311" text-anchor="middle" font-size="9" fill="#555555">search()</text>
+
+  <!-- External: Groq LLM -->
+  <rect x="700" y="520" width="140" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <text x="770" y="548" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Groq LLM API</text>
+  <text x="770" y="565" text-anchor="middle" font-size="10" fill="#eeeeee">[External]</text>
+  <text x="770" y="582" text-anchor="middle" font-size="10" fill="#ffffff">LLM inference</text>
+
+  <!-- Arrow: Generator -> Groq -->
+  <line x1="630" y1="570" x2="699" y2="565" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Legend -->
+  <rect x="20" y="80" width="132" height="120" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
+  <text x="30" y="97" font-size="11" font-weight="bold" fill="#333333">Legend</text>
+  <rect x="30" y="104" width="12" height="12" rx="2" fill="#85BBF0" stroke="#438DD5" stroke-width="1"/>
+  <text x="48" y="115" font-size="10" fill="#444444">Component (node)</text>
+  <rect x="30" y="121" width="12" height="12" rx="2" fill="#e8f0ff" stroke="#438DD5" stroke-width="1"/>
+  <text x="48" y="132" font-size="10" fill="#444444">Conditional path</text>
+  <rect x="30" y="138" width="12" height="12" rx="2" fill="#999999"/>
+  <text x="48" y="149" font-size="10" fill="#444444">External system</text>
+  <line x1="30" y1="162" x2="55" y2="162" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="62" y="166" font-size="9" fill="#2e7d32">happy path</text>
+  <line x1="30" y1="178" x2="55" y2="178" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-red)"/>
+  <text x="62" y="182" font-size="9" fill="#cc4444">retry / reject</text>
+  <line x1="30" y1="194" x2="55" y2="194" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="62" y="198" font-size="9" fill="#e67e22">rewrite loop</text>
+</svg>
