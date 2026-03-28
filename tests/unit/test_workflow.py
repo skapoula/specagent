@@ -500,13 +500,13 @@ class TestShouldRegenerateLoopGuard:
         }
         assert should_regenerate(state) == "finish"
 
-    def test_not_grounded_count_1_routes_to_regenerate(self):
-        """regeneration_count=1 is still within the one-retry budget."""
+    def test_not_grounded_count_1_routes_to_finish(self):
+        """regeneration_count=1 means regeneration already happened; must route to finish."""
         state: GraphState = {
             "hallucination_check": "not_grounded",
             "regeneration_count": 1,
         }
-        assert should_regenerate(state) == "regenerate"
+        assert should_regenerate(state) == "finish"
 
     def test_not_grounded_count_0_routes_to_regenerate(self):
         """regeneration_count=0 (first attempt) must trigger regeneration."""

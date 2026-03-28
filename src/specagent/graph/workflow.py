@@ -164,7 +164,7 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
     regeneration_count = state.get("regeneration_count", 0)
 
     # Allow exactly one regeneration attempt (count is already incremented by the node)
-    if hallucination_result == "not_grounded" and regeneration_count <= 1:
+    if hallucination_result == "not_grounded" and regeneration_count == 0:
         return "regenerate"
 
     return "finish"
