@@ -70,7 +70,7 @@ def sample_tspec_dataset(tmp_path: Path) -> Path:
     }
 
     dataset_path = tmp_path / "benchmark.json"
-    with open(dataset_path, "w") as f:
+    with dataset_path.open("w") as f:
         json.dump(data, f, indent=2)
 
     return dataset_path
