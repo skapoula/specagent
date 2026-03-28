@@ -125,6 +125,8 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
                 for c in result.get("citations", [])
             ],
             confidence=_calculate_confidence(result),
+            ungrounded_claims=result.get("ungrounded_claims", []),
+            hallucination_status=result.get("hallucination_check", "unknown"),
             metadata={
                 "rewrites": result.get("rewrite_count", 0),
                 "chunks_retrieved": len(result.get("retrieved_chunks", [])),

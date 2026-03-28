@@ -32,7 +32,7 @@ class TestQueryRequest:
         req = QueryRequest(question="What is HARQ?")
         assert req.question == "What is HARQ?"
         assert req.verbose is False
-        assert req.max_rewrites == 2
+        assert req.max_rewrites is None
 
     def test_verbose_can_be_set_true(self):
         req = QueryRequest(question="What is HARQ?", verbose=True)
@@ -194,6 +194,37 @@ class TestQueryResponse:
     def test_missing_metadata_raises_validation_error(self):
         with pytest.raises(ValidationError):
             QueryResponse(answer="ok", confidence=0.5)  # type: ignore[call-arg]
+
+    def test_ungrounded_claims_defaults_to_empty_list(self):
+        resp = QueryResponse(answer="ok", confidence=0.5, metadata=_make_metadata())
+        assert resp.ungrounded_claims == []
+
+    def test_hallucination_status_defaults_to_unknown(self):
+        resp = QueryResponse(answer="ok", confidence=0.5, metadata=_make_metadata())
+        assert resp.hallucination_status == "unknown"
+
+    def test_ungrounded_claims_can_be_set(self):
+        resp = QueryResponse(
+            answer="ok",
+            confidence=0.5,
+            metadata=_make_metadata(),
+            ungrounded_claims=["Claim A", "Claim B"],
+        )
+        assert resp.ungrounded_claims == ["Claim A", "Claim B"]
+
+    def test_hallucination_status_can_be_set(self):
+        resp = QueryResponse(
+            answer="ok",
+            confidence=0.5,
+            metadata=_make_metadata(),
+            hallucination_status="partial",
+        )
+        assert resp.hallucination_status == "partial"
+
+    def test_ungrounded_claims_independent_instances(self):
+        r1 = QueryResponse(answer="A.", confidence=0.5, metadata=_make_metadata())
+        r2 = QueryResponse(answer="B.", confidence=0.5, metadata=_make_metadata())
+        assert r1.ungrounded_claims is not r2.ungrounded_claims
 
 
 @pytest.mark.unit

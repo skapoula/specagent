@@ -21,11 +21,11 @@ class QueryRequest(BaseModel):
         default=False,
         description="Include detailed reasoning and intermediate steps",
     )
-    max_rewrites: int = Field(
-        default=2,
+    max_rewrites: int | None = Field(
+        default=None,
         ge=0,
         le=5,
-        description="Maximum number of query rewrites to attempt",
+        description="Maximum number of query rewrites. If omitted, uses the server default.",
     )
     library: str | None = Field(
         default=None,
@@ -95,6 +95,14 @@ class QueryResponse(BaseModel):
     )
     metadata: QueryMetadata = Field(
         description="Processing metadata and statistics",
+    )
+    ungrounded_claims: list[str] = Field(
+        default_factory=list,
+        description="Claims in the answer not fully supported by retrieved sources.",
+    )
+    hallucination_status: str = Field(
+        default="unknown",
+        description="Hallucination check result: grounded | partial | not_grounded | skipped | unknown.",
     )
 
     model_config = {

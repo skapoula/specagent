@@ -254,6 +254,39 @@ class TestQueryEndpoint:
         assert meta["chunks_retrieved"] == 2
         assert meta["chunks_used"] == 1
 
+    def test_ungrounded_claims_surfaced_in_response(self, client):
+        result = self._make_result()
+        result["ungrounded_claims"] = ["Claim A", "Claim B"]
+        with patch("specagent.api.main.run_query", return_value=result):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 200
+        assert resp.json()["ungrounded_claims"] == ["Claim A", "Claim B"]
+
+    def test_hallucination_status_surfaced_in_response(self, client):
+        result = self._make_result(hallucination_check="partial")
+        with patch("specagent.api.main.run_query", return_value=result):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 200
+        assert resp.json()["hallucination_status"] == "partial"
+
+    def test_ungrounded_claims_defaults_to_empty_when_absent(self, client):
+        result = self._make_result()
+        # Remove ungrounded_claims from result entirely
+        result.pop("ungrounded_claims", None)
+        with patch("specagent.api.main.run_query", return_value=result):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 200
+        assert resp.json()["ungrounded_claims"] == []
+
+    def test_hallucination_status_defaults_to_unknown_when_absent(self, client):
+        result = self._make_result()
+        # Remove hallucination_check from result
+        result.pop("hallucination_check", None)
+        with patch("specagent.api.main.run_query", return_value=result):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 200
+        assert resp.json()["hallucination_status"] == "unknown"
+
     def test_generation_none_triggers_response_error(self, client):
         # generation=None is present in the dict so dict.get() returns None,
         # not the fallback string.  Pydantic rejects None for a required str field,

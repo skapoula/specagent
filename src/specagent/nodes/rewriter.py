@@ -60,8 +60,11 @@ def rewriter_node(state: "GraphState") -> "GraphState":
     question = state.get("question", "")
     rewrite_count = state.get("rewrite_count", 0)
 
-    # Check if we've reached the maximum number of rewrites
-    if rewrite_count >= settings.max_rewrites:
+    # Check if we've reached the maximum number of rewrites.
+    # Use the per-request override when present, otherwise fall back to the global setting.
+    _override = state.get("max_rewrites_override")
+    max_rewrites: int = _override if _override is not None else settings.max_rewrites
+    if rewrite_count >= max_rewrites:
         # Don't rewrite if at limit
         return state
 
