@@ -500,8 +500,8 @@ class TestGeneratorNode:
         assert medium_pos < low_pos
 
     @patch("specagent.nodes.generator.create_llm")
-    def test_generator_limits_to_top2_when_high_confidence(self, mock_create_llm):
-        """Test generator limits to top-2 chunks when average_confidence > 0.8."""
+    def test_generator_includes_all_chunks_when_high_confidence(self, mock_create_llm):
+        """Test generator includes all chunks regardless of confidence level."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Answer [TS 38.321 §5.4]"
         mock_create_llm.return_value = mock_llm
@@ -518,14 +518,14 @@ class TestGeneratorNode:
 
         generator_node(state)
 
-        # Verify only top-2 chunks are in prompt (optimization)
+        # Verify all chunks are included — top-2 truncation was removed (Issue 3)
         invoke_call_args = mock_llm.invoke.call_args
         prompt = invoke_call_args[0][0]
 
         assert "Chunk 1" in prompt
         assert "Chunk 2" in prompt
-        assert "Chunk 3" not in prompt  # Should be excluded
-        assert "Chunk 4" not in prompt  # Should be excluded
+        assert "Chunk 3" in prompt  # All chunks included
+        assert "Chunk 4" in prompt  # All chunks included
 
     @patch("specagent.nodes.generator.create_llm")
     def test_generator_no_limit_when_low_confidence(self, mock_create_llm):

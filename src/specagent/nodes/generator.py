@@ -65,11 +65,8 @@ def generator_node(state: "GraphState") -> "GraphState":
     # Filter for relevant chunks only
     relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
 
-    # Optimization: Sort by similarity descending, take top-2 if high confidence
+    # Sort by similarity descending so highest-relevance chunks appear first in context
     relevant_chunks.sort(key=lambda c: c.similarity_score, reverse=True)
-    avg_conf = state.get("average_confidence", 0.0)
-    if avg_conf > 0.8 and len(relevant_chunks) > 2:
-        relevant_chunks = relevant_chunks[:2]  # Reduce context tokens ~50%
 
     # Handle case where no relevant chunks are available
     if not relevant_chunks:

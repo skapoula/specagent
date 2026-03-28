@@ -7,6 +7,7 @@ hybrid BM25+vector search against the LanceDB store.
 
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,6 +23,27 @@ logger = logging.getLogger(__name__)
 
 # nomic-embed-text-v1.5 asymmetric search requires task-specific prefix
 _QUERY_PREFIX = "search_query: "
+
+# Matches version/release suffixes like -l00, -r17, -e15 at end of filename stem
+_VERSION_SUFFIX_RE = re.compile(r"-[ler]\d+$", re.IGNORECASE)
+
+
+def _normalize_spec_id(source: str) -> str:
+    """Derive a normalized spec ID from a source file path.
+
+    Strips version suffixes (e.g. -l00, -r17) and ensures the result
+    starts with the 'TS' prefix.
+
+    Examples:
+        "/data/TS38.321.docx"   -> "TS38.321"
+        "/data/38.321-l00.docx" -> "TS38.321"
+        "/data/38.331-r17.docx" -> "TS38.331"
+        "/data/TS38.521.pdf"    -> "TS38.521"
+    """
+    stem = Path(source).stem
+    stem = _VERSION_SUFFIX_RE.sub("", stem)
+    stem = "TS" + stem if not stem.upper().startswith("TS") else "TS" + stem[2:]
+    return stem
 
 
 def retriever_node(state: "GraphState") -> "GraphState":
@@ -65,9 +87,9 @@ def retriever_node(state: "GraphState") -> "GraphState":
 
         retrieved_chunks: list[RetrievedChunk] = []
         for record, similarity_score in results:
-            # Derive spec_id from filename stem
-            # "TS38.321.docx" -> stem "TS38.321"
-            stem = Path(record.source).stem
+            # Derive normalized spec_id from source path
+            # "TS38.321.docx" -> "TS38.321", "38.321-l00.docx" -> "TS38.321"
+            spec_id = _normalize_spec_id(record.source)
 
             # Deserialize section header from metadata JSON
             try:
@@ -85,7 +107,7 @@ def retriever_node(state: "GraphState") -> "GraphState":
                     title=record.title,
                     chunk_index=record.chunk_index,
                     file_type=record.file_type,
-                    spec_id=stem,
+                    spec_id=spec_id,
                     section=section,
                     similarity_score=float(similarity_score),
                 )
