@@ -105,7 +105,7 @@ def query(
             err_console = Console(stderr=True)
             err_console.print(format_report(build_query_report(result)))
         except Exception:
-            logger.warning("Failed to build query report", exc_info=True)
+            logger.error("Failed to build query report", exc_info=True)
 
 
 @app.command()

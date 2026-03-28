@@ -1,14 +1,41 @@
 """Tests for the EMF/WMF to JPEG converter."""
 
-import sys
-from unittest.mock import MagicMock, patch
+import io
+import subprocess
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from PIL import Image
 
 from specagent.retrieval.emf_converter import EMF_MIME_TYPES, convert_emf_to_jpeg
 from specagent.retrieval.exceptions import IngestionError
 
-_FAKE_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100  # minimal JPEG header
+
+def _make_png_bytes() -> bytes:
+    """Return minimal 1×1 white PNG — used as the fake Inkscape output."""
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color=(255, 255, 255)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+_FAKE_PNG = _make_png_bytes()
+
+
+def _make_completed_process(returncode: int = 0) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout="", stderr="")
+
+
+def _inkscape_side_effect(png_bytes: bytes = _FAKE_PNG, returncode: int = 0):
+    """Return a side_effect function that writes png_bytes to the output path."""
+
+    def fake_run(cmd, **kwargs):
+        out_arg = next(a for a in cmd if a.startswith("--export-filename="))
+        out_path = Path(out_arg.split("=", 1)[1])
+        out_path.write_bytes(png_bytes)
+        return _make_completed_process(returncode=returncode)
+
+    return fake_run
 
 
 @pytest.mark.unit
@@ -27,79 +54,84 @@ class TestEmfMimeTypes:
 
 @pytest.mark.unit
 class TestConvertEmfToJpeg:
-    def _make_fitz_mock(self, jpeg_bytes: bytes = _FAKE_JPEG) -> MagicMock:
-        """Build a fitz module mock that returns jpeg_bytes on tobytes()."""
-        pixmap = MagicMock()
-        pixmap.tobytes.return_value = jpeg_bytes
-
-        page = MagicMock()
-        page.get_pixmap.return_value = pixmap
-
-        doc = MagicMock()
-        doc.__getitem__ = MagicMock(return_value=page)
-
-        fitz_mock = MagicMock()
-        fitz_mock.open.return_value = doc
-        return fitz_mock
-
     def test_returns_jpeg_bytes(self):
-        """Successful conversion returns non-empty bytes."""
-        fitz_mock = self._make_fitz_mock()
-        with patch.dict("sys.modules", {"fitz": fitz_mock}):
+        """Successful conversion returns non-empty JPEG bytes."""
+        with patch(
+            "specagent.retrieval.emf_converter.subprocess.run",
+            side_effect=_inkscape_side_effect(),
+        ):
             result = convert_emf_to_jpeg(b"fake-emf-content")
         assert isinstance(result, bytes)
         assert len(result) > 0
-        assert result == _FAKE_JPEG
 
     def test_jpeg_header_present(self):
         """Output starts with the JPEG SOI marker \\xff\\xd8."""
-        fitz_mock = self._make_fitz_mock()
-        with patch.dict("sys.modules", {"fitz": fitz_mock}):
+        with patch(
+            "specagent.retrieval.emf_converter.subprocess.run",
+            side_effect=_inkscape_side_effect(),
+        ):
             result = convert_emf_to_jpeg(b"fake-emf-content")
         assert result[:2] == b"\xff\xd8"
 
     def test_default_filetype_is_emf(self):
-        """fitz.open is called with filetype='emf' by default."""
-        fitz_mock = self._make_fitz_mock()
-        with patch.dict("sys.modules", {"fitz": fitz_mock}):
+        """Inkscape is invoked with an .emf input file by default."""
+        with patch(
+            "specagent.retrieval.emf_converter.subprocess.run",
+            side_effect=_inkscape_side_effect(),
+        ) as mock_run:
             convert_emf_to_jpeg(b"fake-emf-content")
-        fitz_mock.open.assert_called_once_with(stream=b"fake-emf-content", filetype="emf")
+        cmd = mock_run.call_args[0][0]
+        assert any("input.emf" in str(a) for a in cmd)
 
     def test_wmf_filetype_passed_through(self):
-        """fitz.open is called with filetype='wmf' when specified."""
-        fitz_mock = self._make_fitz_mock()
-        with patch.dict("sys.modules", {"fitz": fitz_mock}):
+        """Inkscape is invoked with a .wmf input file when filetype='wmf'."""
+        with patch(
+            "specagent.retrieval.emf_converter.subprocess.run",
+            side_effect=_inkscape_side_effect(),
+        ) as mock_run:
             convert_emf_to_jpeg(b"fake-wmf-content", filetype="wmf")
-        fitz_mock.open.assert_called_once_with(stream=b"fake-wmf-content", filetype="wmf")
+        cmd = mock_run.call_args[0][0]
+        assert any("input.wmf" in str(a) for a in cmd)
 
-    def test_dpi_forwarded_to_get_pixmap(self):
-        """The dpi parameter is forwarded to page.get_pixmap()."""
-        fitz_mock = self._make_fitz_mock()
-        with patch.dict("sys.modules", {"fitz": fitz_mock}):
+    def test_dpi_forwarded_to_inkscape(self):
+        """The dpi parameter is forwarded as --export-dpi."""
+        with patch(
+            "specagent.retrieval.emf_converter.subprocess.run",
+            side_effect=_inkscape_side_effect(),
+        ) as mock_run:
             convert_emf_to_jpeg(b"fake-emf-content", dpi=300)
-        doc_mock = fitz_mock.open.return_value
-        page_mock = doc_mock[0]
-        page_mock.get_pixmap.assert_called_once_with(dpi=300)
+        cmd = mock_run.call_args[0][0]
+        assert "--export-dpi=300" in cmd
 
-    def test_fitz_error_raises_ingestion_error(self):
-        """A fitz exception is wrapped as IngestionError."""
-        fitz_mock = MagicMock()
-        fitz_mock.open.side_effect = RuntimeError("bad EMF data")
+    def test_inkscape_nonzero_exit_raises_ingestion_error(self):
+        """A non-zero Inkscape exit code raises IngestionError."""
         with (
-            patch.dict("sys.modules", {"fitz": fitz_mock}),
-            pytest.raises(IngestionError, match="EMF rasterization failed"),
+            patch(
+                "specagent.retrieval.emf_converter.subprocess.run",
+                return_value=_make_completed_process(returncode=1),
+            ),
+            pytest.raises(IngestionError, match="Inkscape exited 1"),
         ):
             convert_emf_to_jpeg(b"garbage")
 
-    def test_import_error_raises_ingestion_error(self):
-        """Missing PyMuPDF installation raises IngestionError."""
-        original = sys.modules.pop("fitz", None)
-        try:
-            with (
-                patch.dict("sys.modules", {"fitz": None}),
-                pytest.raises(IngestionError, match="PyMuPDF is not installed"),
-            ):
-                convert_emf_to_jpeg(b"fake-emf-content")
-        finally:
-            if original is not None:
-                sys.modules["fitz"] = original
+    def test_inkscape_not_found_raises_ingestion_error(self):
+        """Missing Inkscape binary raises IngestionError."""
+        with (
+            patch(
+                "specagent.retrieval.emf_converter.subprocess.run",
+                side_effect=FileNotFoundError("inkscape not found"),
+            ),
+            pytest.raises(IngestionError, match="not installed"),
+        ):
+            convert_emf_to_jpeg(b"fake-emf-content")
+
+    def test_inkscape_timeout_raises_ingestion_error(self):
+        """Inkscape hanging past the timeout raises IngestionError."""
+        with (
+            patch(
+                "specagent.retrieval.emf_converter.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="inkscape", timeout=60),
+            ),
+            pytest.raises(IngestionError, match="timed out"),
+        ):
+            convert_emf_to_jpeg(b"fake-emf-content")

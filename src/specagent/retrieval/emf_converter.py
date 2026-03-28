@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DPI = 150
 _INKSCAPE_BIN = "inkscape"
+_INKSCAPE_TIMEOUT = 60  # seconds; generous for large/complex EMF files
 
 # MIME types that identify Windows metafile formats handled by this module.
 # Includes both IANA-registered and commonly-emitted variants.
@@ -43,8 +44,8 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
         JPEG bytes of the rasterized image.
 
     Raises:
-        IngestionError: If Inkscape is not installed, fails to convert, or
-            Pillow cannot encode the result.
+        IngestionError: If Inkscape is not installed, fails to convert,
+            exceeds the timeout, or Pillow cannot encode the result.
     """
     suffix = f".{filetype.lstrip('.')}"
     try:
@@ -53,17 +54,23 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
             tmp_out = Path(tmpdir) / "output.png"
             tmp_in.write_bytes(emf_bytes)
 
-            result = subprocess.run(
-                [
-                    _INKSCAPE_BIN,
-                    "--export-type=png",
-                    f"--export-filename={tmp_out}",
-                    f"--export-dpi={dpi}",
-                    str(tmp_in),
-                ],
-                capture_output=True,
-                text=True,
-            )
+            try:
+                result = subprocess.run(
+                    [
+                        _INKSCAPE_BIN,
+                        "--export-type=png",
+                        f"--export-filename={tmp_out}",
+                        f"--export-dpi={dpi}",
+                        str(tmp_in),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=_INKSCAPE_TIMEOUT,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise IngestionError(
+                    f"Inkscape timed out after {_INKSCAPE_TIMEOUT}s converting {filetype} image"
+                ) from exc
             if result.returncode != 0 or not tmp_out.exists():
                 raise IngestionError(
                     f"Inkscape exited {result.returncode}: {result.stderr[:200]}"

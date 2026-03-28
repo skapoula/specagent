@@ -58,6 +58,9 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         source: Local Path or str path to ingest.
         library: Library name to index the document under.
         metadata: Optional user-supplied key-value metadata.
+        rebuild_fts: If True (default), rebuild the full-text search index after
+            writing. Pass False when bulk-ingesting many files and call
+            ``store.rebuild_fts_index()`` once afterwards to avoid O(N²) cost.
 
     Returns:
         IngestResult describing what happened (indexed / replaced / skipped).

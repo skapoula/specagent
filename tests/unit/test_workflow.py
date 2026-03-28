@@ -500,13 +500,18 @@ class TestShouldRegenerateLoopGuard:
         }
         assert should_regenerate(state) == "finish"
 
-    def test_not_grounded_count_1_routes_to_finish(self):
-        """regeneration_count=1 means regeneration already happened; must route to finish."""
+    def test_not_grounded_count_1_routes_to_regenerate(self):
+        """regeneration_count=1 is the first post-check value (node increments before routing).
+
+        hallucination_check_node increments regeneration_count before returning, so the
+        first time should_regenerate is called the count is already 1. The guard must
+        allow regeneration here (count <= 1) and only block on the second pass (count == 2).
+        """
         state: GraphState = {
             "hallucination_check": "not_grounded",
             "regeneration_count": 1,
         }
-        assert should_regenerate(state) == "finish"
+        assert should_regenerate(state) == "regenerate"
 
     def test_not_grounded_count_0_routes_to_regenerate(self):
         """regeneration_count=0 (first attempt) must trigger regeneration."""

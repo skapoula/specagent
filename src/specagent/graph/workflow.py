@@ -163,8 +163,10 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
     hallucination_result = state.get("hallucination_check", "grounded")
     regeneration_count = state.get("regeneration_count", 0)
 
-    # Allow exactly one regeneration attempt (count is already incremented by the node)
-    if hallucination_result == "not_grounded" and regeneration_count == 0:
+    # Allow exactly one regeneration attempt. hallucination_check_node increments
+    # regeneration_count before returning, so count == 1 on the first evaluation here.
+    # Guard fires when count <= 1 (first check); blocks when count >= 2 (after retry).
+    if hallucination_result == "not_grounded" and regeneration_count <= 1:
         return "regenerate"
 
     return "finish"
@@ -368,7 +370,7 @@ def run_query(
 
         log_report(build_query_report(final_state))
     except Exception:
-        logger.warning("Monitoring report failed", exc_info=True)
+        logger.error("Monitoring report failed", exc_info=True)
 
     return final_state
 

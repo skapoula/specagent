@@ -245,6 +245,9 @@ class Store:
 
         Args:
             chunks: Chunk records to insert.
+            rebuild_fts: If True (default), rebuild the full-text search index
+                after writing. Pass False during bulk ingest and call
+                ``rebuild_fts_index()`` once at the end.
 
         Raises:
             StoreError: If the write fails.

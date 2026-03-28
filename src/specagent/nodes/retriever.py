@@ -147,7 +147,7 @@ def retriever_node(state: "GraphState") -> "GraphState":
                 rewrite_index=state.get("rewrite_count", 0),
             )
         except Exception:
-            logger.warning("Tracing span emission failed", exc_info=True)
+            logger.error("Tracing span emission failed", exc_info=True)
 
         logger.info("Retrieved %d chunks for query", len(retrieved_chunks))
 
