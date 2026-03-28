@@ -136,27 +136,32 @@ def test_setup_tracing_success(mock_phoenix_modules):
 @pytest.mark.unit
 def test_setup_tracing_missing_dependencies():
     """Test graceful handling when Phoenix is not installed."""
-    with patch("specagent.config.settings") as mock_config:
+    import specagent.tracing.phoenix as phoenix_module
+
+    # Setting a sys.modules entry to None causes any `import` of that name to
+    # raise ImportError — the standard way to simulate an absent optional package.
+    absent: dict = {
+        "phoenix.otel": None,
+        "openinference.instrumentation.langchain": None,
+    }
+
+    with (
+        patch("specagent.config.settings") as mock_config,
+        patch.dict(sys.modules, absent),
+        warnings.catch_warnings(record=True) as w,
+    ):
         mock_config.enable_tracing = True
+        warnings.simplefilter("always")
+        phoenix_module.setup_tracing()
 
-        # Import and reload after mocking
-        import specagent.tracing.phoenix as phoenix_module
+        phoenix_warnings = [
+            warning
+            for warning in w
+            if "Phoenix tracing dependencies not installed" in str(warning.message)
+        ]
 
-        reload(phoenix_module)
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            phoenix_module.setup_tracing()
-
-            # Filter for our specific warning (ignore deprecation warnings, etc.)
-            phoenix_warnings = [
-                warning
-                for warning in w
-                if "Phoenix tracing dependencies not installed" in str(warning.message)
-            ]
-
-            assert len(phoenix_warnings) == 1
-            assert "Phoenix tracing dependencies not installed" in str(phoenix_warnings[0].message)
+        assert len(phoenix_warnings) == 1
+        assert "Phoenix tracing dependencies not installed" in str(phoenix_warnings[0].message)
 
 
 @pytest.mark.unit

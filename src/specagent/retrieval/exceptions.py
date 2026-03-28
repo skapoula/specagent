@@ -19,3 +19,7 @@ class EmbeddingError(Exception):
 
 class ConfigurationError(Exception):
     """Raised at startup when required settings are missing or inconsistent."""
+
+
+class VisionError(Exception):
+    """Raised when the Groq vision API call fails after all retries."""

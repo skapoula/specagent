@@ -324,6 +324,52 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================================
+    # Vision / OCR Configuration
+    # ==========================================================================
+    enable_docx_ocr: bool = Field(
+        default=False,
+        description=(
+            "Enable two-pass OCR for .docx files using Groq vision. "
+            "Requires GROQ_API_KEY. Set ENABLE_DOCX_OCR=true to activate."
+        ),
+    )
+    vision_model: str = Field(
+        default="meta-llama/llama-4-scout-17b-16e-instruct",
+        description="Groq vision model for image analysis.",
+    )
+    vision_rpm_limit: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Groq vision API requests-per-minute limit (free tier: 30).",
+    )
+    vision_rpd_limit: int = Field(
+        default=1000,
+        ge=1,
+        description="Groq vision API requests-per-day limit (free tier: 1000).",
+    )
+    vision_min_image_bytes: int = Field(
+        default=10 * 1024,  # 10 KB
+        ge=1,
+        description=(
+            "Minimum image size in bytes to send to the vision API. "
+            "Images smaller than this (logos, icons, decorative elements) are skipped. "
+            "Env var: VISION_MIN_IMAGE_BYTES. Default: 10 KB."
+        ),
+    )
+    vision_max_image_bytes: int = Field(
+        default=20 * 1024 * 1024,  # 20 MB
+        ge=1,
+        description="Maximum image size in bytes to send to vision API. Larger images are skipped.",
+    )
+    vision_max_retries: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum tenacity retries for transient Groq vision API errors.",
+    )
+
+    # ==========================================================================
     # Validators
     # ==========================================================================
     @field_validator("chunk_overlap_tokens")

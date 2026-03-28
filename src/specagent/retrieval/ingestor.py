@@ -10,8 +10,9 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from specagent.config import settings
 from specagent.retrieval.chunker import chunk_with_metadata
-from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert
+from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
 from specagent.retrieval.resources import get_embedder, get_store
 from specagent.retrieval.store import ChunkRecord
@@ -45,7 +46,7 @@ class BulkIngestResult(BaseModel):
     errors: list[dict]  # [{"file": str, "error": str}]
 
 
-async def ingest(
+async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipeline steps need a single function
     source: Path | str,
     library: str,
     metadata: dict | None = None,
@@ -101,7 +102,14 @@ async def ingest(
 
     # ── 3. Convert to Markdown ─────────────────────────────────────────────────
     try:
-        text = await asyncio.to_thread(convert, path)
+        if (
+            file_type == "docx"
+            and settings.enable_docx_ocr
+            and settings.groq_api_key
+        ):
+            text = await convert_docx_ocr(path, api_key=settings.groq_api_key)
+        else:
+            text = await asyncio.to_thread(convert, path)
     except UnsupportedFormatError:
         raise
     except Exception as e:

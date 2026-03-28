@@ -47,10 +47,32 @@ def _get_markitdown() -> "MarkItDown":
     """Return the MarkItDown singleton, initialising on first call."""
     global _md  # noqa: PLW0603
     if _md is None:
-        from markitdown import MarkItDown
+        from markitdown import MarkItDown  # noqa: PLC0415 — lazy import keeps MarkItDown optional
 
         _md = MarkItDown()
     return _md
+
+
+async def convert_docx_ocr(source: Path, api_key: str) -> str:
+    """Convert a .docx file to Markdown using the two-pass OCR pipeline.
+
+    Delegates to :func:`~specagent.retrieval.docx_ocr_converter.convert_docx_with_ocr`.
+    Imported here so that ``ingestor.py`` only needs to import from ``converter``.
+
+    Args:
+        source: Path to the ``.docx`` file.
+        api_key: Groq API key for vision calls.
+
+    Returns:
+        Enriched Markdown string with image placeholders replaced by OCR content.
+
+    Raises:
+        UnsupportedFormatError: If source is not a .docx file.
+        IngestionError: If the conversion fails entirely.
+    """
+    from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr  # noqa: PLC0415
+
+    return await convert_docx_with_ocr(source, api_key=api_key)
 
 
 def convert(source: Path) -> str:

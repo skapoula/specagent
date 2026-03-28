@@ -4587,6 +4587,8 @@ all = [
     { name = "langsmith" },
     { name = "mypy" },
     { name = "openinference-instrumentation-langchain" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-sdk" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -4616,6 +4618,8 @@ eval = [
     { name = "huggingface-hub" },
     { name = "langsmith" },
     { name = "openinference-instrumentation-langchain" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-sdk" },
     { name = "ragas" },
 ]
 ui = [
@@ -4642,6 +4646,8 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "openinference-instrumentation-langchain", marker = "extra == 'eval'", specifier = ">=0.1.0" },
+    { name = "openinference-semantic-conventions", marker = "extra == 'eval'", specifier = ">=0.1.9" },
+    { name = "opentelemetry-sdk", marker = "extra == 'eval'", specifier = ">=1.27.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.2.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
