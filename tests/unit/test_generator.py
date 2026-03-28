@@ -528,8 +528,8 @@ class TestGeneratorNode:
         assert "Chunk 4" in prompt  # All chunks included
 
     @patch("specagent.nodes.generator.create_llm")
-    def test_generator_no_limit_when_low_confidence(self, mock_create_llm):
-        """Test generator uses all chunks when average_confidence <= 0.8."""
+    def test_generator_passes_all_chunks_to_prompt(self, mock_create_llm):
+        """Test generator passes all chunks to the prompt regardless of confidence level."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Answer [TS 38.321 §5.4]"
         mock_create_llm.return_value = mock_llm
@@ -556,8 +556,8 @@ class TestGeneratorNode:
         assert "Chunk 4" in prompt
 
     @patch("specagent.nodes.generator.create_llm")
-    def test_generator_no_limit_when_exactly_2_chunks(self, mock_create_llm):
-        """Test generator uses all chunks when there are exactly 2 chunks."""
+    def test_generator_passes_all_chunks_with_exactly_2(self, mock_create_llm):
+        """Test generator passes all chunks when there are exactly 2 relevant chunks."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Answer [TS 38.321 §5.4]"
         mock_create_llm.return_value = mock_llm
@@ -608,8 +608,8 @@ class TestGeneratorNode:
         assert "STEP 5" not in prompt
 
     @patch("specagent.nodes.generator.create_llm")
-    def test_generator_limits_at_exactly_0_8_confidence(self, mock_create_llm):
-        """Test generator behavior at confidence boundary (0.8)."""
+    def test_generator_passes_high_confidence_chunks_without_truncation(self, mock_create_llm):
+        """Test generator passes all chunks without truncation at the 0.8 confidence boundary."""
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Answer [TS 38.321 §5.4]"
         mock_create_llm.return_value = mock_llm

@@ -34,6 +34,10 @@ def _normalize_spec_id(source: str) -> str:
     Strips version suffixes (e.g. -l00, -r17) and ensures the result
     starts with the 'TS' prefix.
 
+    Note: This function assumes TS-series 3GPP files only. TR-series filenames
+    (e.g., TR38.821) are not supported and would produce incorrect spec IDs
+    (e.g., "TSTR38.821" instead of "TR38.821").
+
     Examples:
         "/data/TS38.321.docx"   -> "TS38.321"
         "/data/38.321-l00.docx" -> "TS38.321"

@@ -613,6 +613,8 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_not_called()
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
+        # regeneration_count must NOT increment when check is skipped
+        assert result.get("regeneration_count", 0) == 0
 
     @patch("specagent.nodes.hallucination.create_llm")
     def test_run_check_low_confidence_no_numbers(self, mock_create_llm):
@@ -632,6 +634,8 @@ class TestHallucinationCheckConditional:
         # Should run check - LLM was called
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
+        # regeneration_count must increment by 1 when the LLM ran
+        assert result.get("regeneration_count", 0) == 1
 
     @patch("specagent.nodes.hallucination.create_llm")
     def test_run_check_high_confidence_with_numbers(self, mock_create_llm):
