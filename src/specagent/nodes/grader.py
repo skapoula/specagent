@@ -185,5 +185,7 @@ def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-
         state["error"] = f"Grader error: {e!s}"
         state["graded_chunks"] = []
         state["average_confidence"] = 0.0
+        state["grader_auto_count"] = 0
+        state["grader_llm_count"] = 0
 
     return state
