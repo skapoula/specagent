@@ -72,6 +72,9 @@ class _GroqAdapter:
                 inference_ms=inference_ms,
             )
         except Exception:
+            logger.warning(
+                "Failed to capture LLM call record; token usage unavailable", exc_info=True
+            )
             self._last_call = None
         content = response.content
         return content if isinstance(content, str) else str(content)

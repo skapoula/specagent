@@ -622,5 +622,5 @@ class TestFlushQueryJournal:
         with patch("specagent.observability.journal.get_journal", return_value=mock_journal):
             _flush_query_journal(state)
 
-        # 1 LLMCallRecord + 1 RetrievalRecord + 1 QueryEvent = 3 writes
-        assert mock_journal.write.call_count == 3
+        # Only 1 write: the QueryEvent (which embeds llm_calls and retrieval_events)
+        assert mock_journal.write.call_count == 1

@@ -284,11 +284,6 @@ def _flush_query_journal(state: "GraphState") -> None:
         from specagent.observability.models import QueryEvent  # noqa: PLC0415
 
         journal = get_journal()
-        for record in state.get("llm_calls", []):
-            journal.write(record)
-        for record in state.get("retrieval_events", []):
-            journal.write(record)
-
         graded = state.get("graded_chunks", [])
         relevant_count = sum(1 for g in graded if getattr(g, "relevant", None) == "yes")
         event = QueryEvent(
@@ -348,8 +343,6 @@ def run_query(
             with tracer.start_as_current_span("rag_pipeline") as span:
                 span.set_attribute("session.id", state.get("trace_id", ""))
                 final_state = graph.invoke(state)
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                final_state["processing_time_ms"] = elapsed_ms
                 emit_query_span(
                     query=question,
                     answer=final_state.get("generation"),
@@ -357,12 +350,11 @@ def run_query(
                 )
         except ImportError:
             final_state = graph.invoke(state)
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            final_state["processing_time_ms"] = elapsed_ms
     else:
         final_state = graph.invoke(state)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        final_state["processing_time_ms"] = elapsed_ms
+
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    final_state["processing_time_ms"] = elapsed_ms
 
     if settings.enable_query_journal:
         _flush_query_journal(final_state)
