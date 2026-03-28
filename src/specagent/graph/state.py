@@ -7,7 +7,7 @@ workflow. Each node reads from and writes to this shared state.
 
 import uuid
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 @dataclass
@@ -183,11 +183,21 @@ class GraphState(TypedDict, total=False):
     trace_id: str
     """UUID4 trace identifier correlating all events for this query run."""
 
-    llm_calls: list
-    """LLMCallRecord instances accumulated during this query. Typed as bare list to avoid circular import."""
+    llm_calls: list[Any]
+    """LLMCallRecord instances accumulated during this query.
 
-    retrieval_events: list
-    """RetrievalRecord instances accumulated during this query. Typed as bare list to avoid circular import."""
+    Typed as list[Any] to avoid importing observability.models into graph.state,
+    which would couple the state schema to the observability layer. The forward-
+    reference string approach (list["LLMCallRecord"]) cannot be used here because
+    LangGraph calls get_type_hints() on TypedDicts at runtime to build its state
+    schema, causing NameError when the name is not resolvable outside TYPE_CHECKING.
+    """
+
+    retrieval_events: list[Any]
+    """RetrievalRecord instances accumulated during this query.
+
+    Typed as list[Any] for the same reason as llm_calls above.
+    """
 
     grader_auto_count: int
     """Number of chunks graded automatically (high/low similarity bypass)."""

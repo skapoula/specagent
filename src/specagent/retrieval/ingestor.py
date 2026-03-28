@@ -13,13 +13,12 @@ from pydantic import BaseModel
 from specagent.config import settings
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
+from specagent.retrieval.embedder import embed_documents
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
-from specagent.retrieval.resources import get_embedder, get_store
+from specagent.retrieval.resources import get_store
 from specagent.retrieval.store import ChunkRecord
 
 logger = logging.getLogger(__name__)
-
-_DOC_PREFIX = "search_document: "
 
 
 class IngestResult(BaseModel):
@@ -102,11 +101,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
 
     # ── 3. Convert to Markdown ─────────────────────────────────────────────────
     try:
-        if (
-            file_type == "docx"
-            and settings.enable_docx_ocr
-            and settings.groq_api_key
-        ):
+        if file_type == "docx" and settings.enable_docx_ocr and settings.groq_api_key:
             text = await convert_docx_ocr(path, api_key=settings.groq_api_key)
         else:
             text = await asyncio.to_thread(convert, path)
@@ -134,9 +129,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
 
     # ── 5. Embed ───────────────────────────────────────────────────────────────
     try:
-        embedder = get_embedder()
-        prefixed = [_DOC_PREFIX + ct for ct in chunk_texts]
-        embeddings = list(await asyncio.to_thread(embedder.embed, prefixed))
+        embeddings = list(await asyncio.to_thread(embed_documents, chunk_texts))
     except Exception as e:
         raise IngestionError(f"Embedding failed for {source_str!r}") from e
 

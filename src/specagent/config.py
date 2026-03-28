@@ -224,10 +224,14 @@ class Settings(BaseSettings):
         description="Minimum average confidence to skip rewriting",
     )
     min_relevant_chunk_percentage: float = Field(
-        default=0.8,
+        default=0.5,
         ge=0.0,
         le=1.0,
-        description="Minimum percentage of relevant chunks required to skip rewriting",
+        description=(
+            "Minimum percentage of relevant chunks required to skip rewriting. "
+            "With grader capped at top-3 chunks, 0.5 requires at least 2/3 chunks "
+            "to be relevant before proceeding."
+        ),
     )
     high_similarity_threshold: float = Field(
         default=0.85,

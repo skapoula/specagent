@@ -144,3 +144,50 @@ def test_retriever_bad_json_metadata_uses_empty_section():
     ):
         result = retriever_node({"question": "test?", "rewritten_question": None})
     assert result["retrieved_chunks"][0].section == ""
+
+
+@pytest.mark.unit
+class TestNormalizeSpecId:
+    """Tests for the _normalize_spec_id helper function."""
+
+    def test_already_has_ts_prefix(self):
+        """Source files that already have a TS prefix pass through unchanged."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/TS38.321.docx") == "TS38.321"
+
+    def test_missing_ts_prefix_prepended(self):
+        """Source files without a TS prefix get TS prepended."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/38.321.docx") == "TS38.321"
+
+    def test_l_version_suffix_stripped(self):
+        """Trailing -lNN version suffixes (3GPP archive naming) are removed."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/38.321-l00.docx") == "TS38.321"
+
+    def test_r_release_suffix_stripped(self):
+        """Trailing -rNN release suffixes are removed."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/38.331-r17.docx") == "TS38.331"
+
+    def test_e_suffix_stripped(self):
+        """Trailing -eNN edition suffixes are removed."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/38.521-e15.pdf") == "TS38.521"
+
+    def test_full_path_with_deep_prefix(self):
+        """Stem is extracted correctly from a nested directory path."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/docs/archive/38.321-l00.docx") == "TS38.321"
+
+    def test_ts_prefix_uppercase_normalized(self):
+        """Lowercase ts prefix is normalized to uppercase TS."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/ts38.521.pdf") == "TS38.521"

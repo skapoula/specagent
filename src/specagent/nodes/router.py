@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -61,7 +61,7 @@ def router_node(state: "GraphState") -> "GraphState":
 
     try:
         # Initialize LLM (auto-selects based on config)
-        llm = create_llm()
+        llm = get_llm()
 
         # Format prompt with question
         prompt = ROUTER_PROMPT.format(question=question)

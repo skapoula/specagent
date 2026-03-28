@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -125,6 +125,9 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     Returns:
         Updated state with hallucination_check result
     """
+    # Tracks whether an LLM call was made; only increment regeneration_count if so.
+    _check_ran = False
+
     # Get generation and graded chunks from state
     generation = state.get("generation")
     graded_chunks = state.get("graded_chunks", [])
@@ -157,7 +160,8 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     if not relevant_chunks:
         try:
             # Initialize LLM (auto-selects based on config)
-            llm = create_llm()
+            llm = get_llm()
+            _check_ran = True
 
             # Format prompt with empty sources
             prompt = HALLUCINATION_PROMPT.format(
@@ -189,7 +193,8 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
             state["hallucination_check"] = "grounded"
             state["ungrounded_claims"] = []
 
-        state["regeneration_count"] = state.get("regeneration_count", 0) + 1
+        if _check_ran:
+            state["regeneration_count"] = state.get("regeneration_count", 0) + 1
         return state
 
     try:
@@ -203,7 +208,8 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         sources = "\n\n".join(source_parts)
 
         # Initialize LLM (auto-selects based on config)
-        llm = create_llm()
+        llm = get_llm()
+        _check_ran = True
 
         # Format prompt with sources and answer
         prompt = HALLUCINATION_PROMPT.format(sources=sources, answer=generation)
@@ -233,5 +239,6 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         state["hallucination_check"] = "grounded"
         state["ungrounded_claims"] = []
 
-    state["regeneration_count"] = state.get("regeneration_count", 0) + 1
+    if _check_ran:
+        state["regeneration_count"] = state.get("regeneration_count", 0) + 1
     return state

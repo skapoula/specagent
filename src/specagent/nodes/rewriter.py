@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from specagent.config import settings
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -60,8 +60,11 @@ def rewriter_node(state: "GraphState") -> "GraphState":
     question = state.get("question", "")
     rewrite_count = state.get("rewrite_count", 0)
 
-    # Check if we've reached the maximum number of rewrites
-    if rewrite_count >= settings.max_rewrites:
+    # Check if we've reached the maximum number of rewrites.
+    # Use the per-request override when present, otherwise fall back to the global setting.
+    _override = state.get("max_rewrites_override")
+    max_rewrites: int = _override if _override is not None else settings.max_rewrites
+    if rewrite_count >= max_rewrites:
         # Don't rewrite if at limit
         return state
 
@@ -83,7 +86,7 @@ def rewriter_node(state: "GraphState") -> "GraphState":
             chunks_summary = "(No chunks retrieved)"
 
         # Initialize LLM (auto-selects based on config)
-        llm = create_llm()
+        llm = get_llm()
 
         # Format prompt with question and chunk summary
         prompt = REWRITER_PROMPT.format(question=question, retrieved_chunks_summary=chunks_summary)

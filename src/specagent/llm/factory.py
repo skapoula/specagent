@@ -15,8 +15,10 @@ All returned objects implement :class:`LLMProtocol` — ``invoke(prompt) -> str`
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import warnings
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
@@ -47,10 +49,11 @@ class _GroqAdapter:
 
     def __init__(self, chat_model: Any) -> None:
         self._model = chat_model
-        self._last_call: LLMCallRecord | None = None
+        self._tls = threading.local()
 
     def invoke(self, prompt: str) -> str:
         """Send prompt to Groq, capture token usage, and return the response text."""
+        self._tls.last_call = None
         from langchain_core.messages import HumanMessage  # noqa: PLC0415
 
         start = time.perf_counter()
@@ -61,7 +64,7 @@ class _GroqAdapter:
             from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
 
             usage = response.usage_metadata
-            self._last_call = LLMCallRecord(
+            self._tls.last_call = LLMCallRecord(
                 node="",
                 trace_id="",
                 model=settings.groq_model,
@@ -72,13 +75,16 @@ class _GroqAdapter:
                 inference_ms=inference_ms,
             )
         except Exception:
-            self._last_call = None
+            logger.warning(
+                "Failed to capture LLM call record; token usage unavailable", exc_info=True
+            )
+            self._tls.last_call = None
         content = response.content
         return content if isinstance(content, str) else str(content)
 
     def get_last_call(self) -> LLMCallRecord | None:
         """Return the LLMCallRecord from the most recent invoke(), or None."""
-        return self._last_call
+        return getattr(self._tls, "last_call", None)
 
 
 def create_llm(temperature: float | None = None) -> LLMProtocol:
@@ -176,5 +182,12 @@ def check_llm_health(timeout: int = 30) -> tuple[bool, str]:
     return check_llm_endpoint_health(timeout=timeout)
 
 
-# Alias for backwards compatibility
-get_llm = create_llm
+@lru_cache(maxsize=8)
+def get_llm(temperature: float | None = None) -> LLMProtocol:
+    """Return a cached LLM instance for the given temperature.
+
+    Uses lru_cache so the underlying ChatOpenAI/CustomEndpointLLM and its
+    httpx client are created once per temperature value, not once per call.
+    Thread-safe via threading.local() storage for _last_call in each adapter.
+    """
+    return create_llm(temperature=temperature)

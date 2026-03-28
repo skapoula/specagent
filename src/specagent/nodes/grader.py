@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -124,7 +124,7 @@ def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-
 
         # If there are chunks requiring LLM grading, process them in batch
         if llm_chunks:
-            llm = create_llm()
+            llm = get_llm()
 
             # Format chunks for LLM grading
             documents_text = ""

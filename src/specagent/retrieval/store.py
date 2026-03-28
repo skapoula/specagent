@@ -207,7 +207,8 @@ def _build_where_clause(
 class Store:
     """Provides read/write access to the LanceDB documents table.
 
-    Each method opens a fresh connection — LanceDB is embedded and cheap to open.
+    Connections are cached: `_table()` opens LanceDB once and reuses the handle
+    for the Store instance lifetime.
     """
 
     def __init__(
@@ -224,13 +225,19 @@ class Store:
         self._uri: str = uri if uri is not None else str(settings.lancedb_uri)
         self._table_name = table_name or settings.lancedb_table_name
         self._indexes_created = False
+        self._is_empty: bool = True
+        self._cached_table: lancedb.table.Table | None = None
 
     def _table(self) -> lancedb.table.Table:
         """Open and return the LanceDB table, creating scalar indexes on first call."""
+        if self._cached_table is not None:
+            return self._cached_table
         table = _open_table(self._uri, self._table_name)
         if not self._indexes_created:
             _ensure_scalar_indexes(table)
             self._indexes_created = True
+        self._cached_table = table
+        self._is_empty = table.count_rows() == 0
         return table
 
     def upsert_chunks(self, chunks: list[ChunkRecord]) -> None:
@@ -254,6 +261,7 @@ class Store:
             for row in rows:
                 row["embedding"] = np.array(row["embedding"], dtype=np.float32)
             table.add(rows)
+            self._is_empty = False
             logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
             try:
                 table.create_fts_index("content", replace=True)
@@ -395,7 +403,7 @@ class Store:
         """
         try:
             table = self._table()
-            if table.count_rows() == 0:
+            if self._is_empty:
                 return []
 
             where = _build_where_clause(library, filter)
