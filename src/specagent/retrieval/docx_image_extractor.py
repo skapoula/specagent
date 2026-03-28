@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -154,10 +155,7 @@ def _read_image_bytes(
 def _rel_id_sort_key(rel_id: str) -> int:
     """Return the numeric suffix of a relationship Id for sorting.
 
-    ``rId3`` → 3.  Non-numeric suffixes fall back to 0.
+    ``rId3`` → 3.  Ids with no trailing digits fall back to 0.
     """
-    numeric = rel_id.lstrip("rRiIdD")  # strip leading "rId" case-insensitively
-    try:
-        return int(numeric)
-    except ValueError:
-        return 0
+    match = re.search(r"\d+$", rel_id)
+    return int(match.group()) if match else 0

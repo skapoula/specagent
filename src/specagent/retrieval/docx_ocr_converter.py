@@ -87,44 +87,9 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
     # ── Pass 2b: Analyse images (sequential — rate-limiter paces calls) ────
     results: dict[str, ImageAnalysisResult] = {}
     for raw_image in images:
-        img_size = len(raw_image.image_bytes)
-
-        if img_size < settings.vision_min_image_bytes:
-            logger.debug(
-                "Skipping %s in %s: %d bytes < min %d (likely logo/icon)",
-                raw_image.placeholder_name,
-                docx_path.name,
-                img_size,
-                settings.vision_min_image_bytes,
-            )
+        image = await _prepare_image(raw_image, docx_path.name)
+        if image is None:
             continue
-
-        if img_size > settings.vision_max_image_bytes:
-            logger.warning(
-                "Skipping %s in %s: %d bytes > max %d",
-                raw_image.placeholder_name,
-                docx_path.name,
-                img_size,
-                settings.vision_max_image_bytes,
-            )
-            continue
-
-        if raw_image.mime_type in EMF_MIME_TYPES:
-            image = await _convert_emf_image(raw_image, docx_path.name)
-            if image is None:
-                continue
-        else:
-            image = raw_image
-
-        if image.mime_type not in _VISION_SUPPORTED_MIME_TYPES:
-            logger.debug(
-                "Skipping %s in %s: mime_type %r not supported by vision API",
-                image.placeholder_name,
-                docx_path.name,
-                image.mime_type,
-            )
-            continue
-
         try:
             result = await analyze_image(image, api_key=api_key)
             results[image.placeholder_name] = result
@@ -145,6 +110,61 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
     return _stitch(raw_markdown, results)
 
 
+async def _prepare_image(raw_image: ExtractedImage, doc_name: str) -> ExtractedImage | None:
+    """Apply size filtering and EMF conversion, returning the image ready for vision API.
+
+    EMF/WMF images are converted to JPEG first because their raw vector bytes
+    are compact regardless of visual complexity — size filtering must run on
+    the JPEG output.  Raster images are size-filtered on their raw bytes.
+
+    Returns ``None`` when the image should be skipped.
+    """
+    if raw_image.mime_type in EMF_MIME_TYPES:
+        image = await _convert_emf_image(raw_image, doc_name)
+        if image is None:
+            return None
+        if len(image.image_bytes) > settings.vision_max_image_bytes:
+            logger.warning(
+                "Skipping %s in %s: %d bytes > max %d (post-conversion)",
+                image.placeholder_name,
+                doc_name,
+                len(image.image_bytes),
+                settings.vision_max_image_bytes,
+            )
+            return None
+    else:
+        img_size = len(raw_image.image_bytes)
+        if img_size < settings.vision_min_image_bytes:
+            logger.debug(
+                "Skipping %s in %s: %d bytes < min %d (likely logo/icon)",
+                raw_image.placeholder_name,
+                doc_name,
+                img_size,
+                settings.vision_min_image_bytes,
+            )
+            return None
+        if img_size > settings.vision_max_image_bytes:
+            logger.warning(
+                "Skipping %s in %s: %d bytes > max %d",
+                raw_image.placeholder_name,
+                doc_name,
+                img_size,
+                settings.vision_max_image_bytes,
+            )
+            return None
+        image = raw_image
+
+    if image.mime_type not in _VISION_SUPPORTED_MIME_TYPES:
+        logger.debug(
+            "Skipping %s in %s: mime_type %r not supported by vision API",
+            image.placeholder_name,
+            doc_name,
+            image.mime_type,
+        )
+        return None
+    return image
+
+
 async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedImage | None:
     """Rasterize an EMF/WMF ExtractedImage to JPEG via PyMuPDF.
 
@@ -152,7 +172,7 @@ async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedI
     and ``mime_type`` set to ``"image/jpeg"``, or ``None`` when conversion
     fails (in which case the caller should skip this image).
     """
-    filetype = "wmf" if "wmf" in image.mime_type else "emf"
+    filetype = "wmf" if image.mime_type in {"image/wmf", "image/x-wmf"} else "emf"
     try:
         jpeg_bytes = await asyncio.to_thread(convert_emf_to_jpeg, image.image_bytes, filetype)
         logger.debug(

@@ -42,10 +42,15 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
 
     try:
         doc = fitz.open(stream=emf_bytes, filetype=filetype)
+    except Exception as exc:
+        raise IngestionError(f"EMF rasterization failed: {exc}") from exc
+
+    try:
         page = doc[0]
         pixmap = page.get_pixmap(dpi=dpi)
         jpeg_bytes: bytes = pixmap.tobytes("jpeg")
-        doc.close()
         return jpeg_bytes
     except Exception as exc:
         raise IngestionError(f"EMF rasterization failed: {exc}") from exc
+    finally:
+        doc.close()

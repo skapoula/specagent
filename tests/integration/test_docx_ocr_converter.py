@@ -388,3 +388,87 @@ class TestConvertDocxWithOcr:
             await convert_docx_with_ocr(docx_three_images, api_key="key")
 
         assert call_order == ["image0.png", "image1.png", "image2.png"]
+
+    async def test_iana_emf_mime_type_converted(self, tmp_path: Path, large_png: bytes) -> None:
+        """IANA-registered 'image/emf' (without x- prefix) triggers conversion."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        emf_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.emf",
+            image_bytes=large_png,
+            mime_type="image/emf",
+        )
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+        analyze_mock = AsyncMock(
+            return_value=_make_result("image0.png", "IANA EMF content", "call_flow_diagram")
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[emf_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert_emf_to_jpeg",
+                return_value=fake_jpeg,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                analyze_mock,
+            ),
+        ):
+            p = tmp_path / "iana_emf.docx"
+            p.write_bytes(make_docx_zip())
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        analyze_mock.assert_called_once()
+        assert "IANA EMF content" in result
+
+    async def test_iana_wmf_mime_type_converted(self, tmp_path: Path, large_png: bytes) -> None:
+        """IANA-registered 'image/wmf' (without x- prefix) triggers conversion."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        wmf_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.wmf",
+            image_bytes=large_png,
+            mime_type="image/wmf",
+        )
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+        analyze_mock = AsyncMock(
+            return_value=_make_result("image0.png", "IANA WMF content", "table_figure")
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[wmf_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert_emf_to_jpeg",
+                return_value=fake_jpeg,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                analyze_mock,
+            ),
+        ):
+            p = tmp_path / "iana_wmf.docx"
+            p.write_bytes(make_docx_zip())
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        analyze_mock.assert_called_once()
+        assert "IANA WMF content" in result
