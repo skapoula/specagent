@@ -133,3 +133,33 @@ class TestExtractImages:
 
         result = extract_images(p)
         assert result == []
+
+    def test_emf_gets_emf_mime_type(self, tmp_path: Path, large_png: bytes) -> None:
+        """A .emf media file gets mime_type 'image/x-emf' (not 'image/jpeg')."""
+        p = tmp_path / "emf_doc.docx"
+        p.write_bytes(make_docx_zip(images=[("diagram.emf", large_png)]))
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(p)
+        assert len(result) == 1
+        assert result[0].mime_type == "image/x-emf"
+
+    def test_wmf_gets_wmf_mime_type(self, tmp_path: Path, large_png: bytes) -> None:
+        """A .wmf media file gets mime_type 'image/x-wmf'."""
+        p = tmp_path / "wmf_doc.docx"
+        p.write_bytes(make_docx_zip(images=[("chart.wmf", large_png)]))
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(p)
+        assert len(result) == 1
+        assert result[0].mime_type == "image/x-wmf"
+
+    def test_unknown_extension_defaults_to_octet_stream(self, tmp_path: Path, large_png: bytes) -> None:
+        """An unrecognised extension falls back to 'application/octet-stream'."""
+        p = tmp_path / "unknown_doc.docx"
+        p.write_bytes(make_docx_zip(images=[("figure.zzunknownzz", large_png)]))
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(p)
+        assert len(result) == 1
+        assert result[0].mime_type == "application/octet-stream"

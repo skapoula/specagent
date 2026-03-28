@@ -113,8 +113,10 @@ class TestConvertDocxWithOcr:
         # Original placeholder preserved
         assert "![image](image0.png)" in result
 
-    async def test_unsupported_mime_type_skipped(self, tmp_path: Path, large_png: bytes) -> None:
-        """Images with non-web-native MIME types (e.g. EMF) are not sent to the API."""
+    async def test_emf_image_converted_and_sent_to_vision_api(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """EMF images are rasterized to JPEG and passed to the vision API."""
         from tests.conftest import make_docx_zip
         from specagent.retrieval.docx_image_extractor import ExtractedImage
         from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
@@ -122,8 +124,97 @@ class TestConvertDocxWithOcr:
         emf_image = ExtractedImage(
             placeholder_name="image0.png",
             media_filename="image1.emf",
-            image_bytes=large_png,  # size is above min threshold — skip is MIME-driven
-            mime_type="image/emf",
+            image_bytes=large_png,
+            mime_type="image/x-emf",
+        )
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+        analyze_mock = AsyncMock(
+            return_value=_make_result("image0.png", "EMF diagram content", "call_flow_diagram")
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="Diagram\n\n![image](image0.png)\n\nCaption",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[emf_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert_emf_to_jpeg",
+                return_value=fake_jpeg,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                analyze_mock,
+            ),
+        ):
+            p = tmp_path / "emf_doc.docx"
+            p.write_bytes(make_docx_zip())
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        analyze_mock.assert_called_once()
+        assert "EMF diagram content" in result
+
+    async def test_wmf_image_converted_and_sent_to_vision_api(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """WMF images are rasterized to JPEG and passed to the vision API."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        wmf_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.wmf",
+            image_bytes=large_png,
+            mime_type="image/x-wmf",
+        )
+        fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+        analyze_mock = AsyncMock(
+            return_value=_make_result("image0.png", "WMF chart content", "table_figure")
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[wmf_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert_emf_to_jpeg",
+                return_value=fake_jpeg,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                analyze_mock,
+            ),
+        ):
+            p = tmp_path / "wmf_doc.docx"
+            p.write_bytes(make_docx_zip())
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        analyze_mock.assert_called_once()
+        assert "WMF chart content" in result
+
+    async def test_emf_conversion_failure_preserves_placeholder(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """When EMF→JPEG conversion fails, the placeholder is preserved and vision API not called."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+        from specagent.retrieval.exceptions import IngestionError
+
+        emf_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.emf",
+            image_bytes=large_png,
+            mime_type="image/x-emf",
         )
 
         analyze_mock = AsyncMock()
@@ -137,46 +228,15 @@ class TestConvertDocxWithOcr:
                 return_value=[emf_image],
             ),
             patch(
-                "specagent.retrieval.docx_ocr_converter.analyze_image",
-                analyze_mock,
-            ),
-        ):
-            p = tmp_path / "emf_doc.docx"
-            p.write_bytes(make_docx_zip())
-            result = await convert_docx_with_ocr(p, api_key="key")
-
-        analyze_mock.assert_not_called()
-        assert "![image](image0.png)" in result
-
-    async def test_wmf_mime_type_also_skipped(self, tmp_path: Path, large_png: bytes) -> None:
-        """WMF images (another Windows vector format) are also skipped."""
-        from tests.conftest import make_docx_zip
-        from specagent.retrieval.docx_image_extractor import ExtractedImage
-        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
-
-        wmf_image = ExtractedImage(
-            placeholder_name="image0.png",
-            media_filename="image1.wmf",
-            image_bytes=large_png,
-            mime_type="image/wmf",
-        )
-
-        analyze_mock = AsyncMock()
-        with (
-            patch(
-                "specagent.retrieval.docx_ocr_converter.convert",
-                return_value="![image](image0.png)",
-            ),
-            patch(
-                "specagent.retrieval.docx_ocr_converter.extract_images",
-                return_value=[wmf_image],
+                "specagent.retrieval.docx_ocr_converter.convert_emf_to_jpeg",
+                side_effect=IngestionError("bad EMF data"),
             ),
             patch(
                 "specagent.retrieval.docx_ocr_converter.analyze_image",
                 analyze_mock,
             ),
         ):
-            p = tmp_path / "wmf_doc.docx"
+            p = tmp_path / "bad_emf.docx"
             p.write_bytes(make_docx_zip())
             result = await convert_docx_with_ocr(p, api_key="key")
 

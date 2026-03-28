@@ -14,6 +14,11 @@ from specagent.retrieval.exceptions import IngestionError
 
 logger = logging.getLogger(__name__)
 
+# Register Windows metafile MIME types — Python's mimetypes module does not
+# know these on all platforms, causing EMF/WMF files to get a None MIME type.
+mimetypes.add_type("image/x-emf", ".emf")
+mimetypes.add_type("image/x-wmf", ".wmf")
+
 _REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 _IMAGE_TYPE_SUFFIX = "/image"
 _RELS_PATH = "word/_rels/document.xml.rels"
@@ -132,7 +137,7 @@ def _read_image_bytes(
         img_bytes = zf.read(zip_entry)
         mime_type, _ = mimetypes.guess_type(media_filename)
         if mime_type is None:
-            mime_type = "image/jpeg"
+            mime_type = "application/octet-stream"
 
         results.append(
             ExtractedImage(

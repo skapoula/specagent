@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from specagent.config import settings
 from specagent.retrieval.converter import convert
 from specagent.retrieval.docx_image_extractor import ExtractedImage, extract_images
+from specagent.retrieval.emf_converter import EMF_MIME_TYPES, convert_emf_to_jpeg
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError, VisionError
 from specagent.retrieval.groq_vision_client import ImageAnalysisResult, analyze_image
 
@@ -24,12 +25,14 @@ _IMAGE_PLACEHOLDER_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # MIME types accepted by the Groq vision API.
 # Windows vector formats (EMF, WMF) and other non-web-native types are excluded —
 # the API returns a 400 for them, which is non-retryable and wastes quota.
-_VISION_SUPPORTED_MIME_TYPES = frozenset([
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-])
+_VISION_SUPPORTED_MIME_TYPES = frozenset(
+    [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+    ]
+)
 
 
 async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
@@ -74,9 +77,7 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
     try:
         images: list[ExtractedImage] = await asyncio.to_thread(extract_images, docx_path)
     except IngestionError:
-        logger.warning(
-            "Image extraction failed for %s; using Pass 1 output only", docx_path.name
-        )
+        logger.warning("Image extraction failed for %s; using Pass 1 output only", docx_path.name)
         return raw_markdown
 
     if not images:
@@ -85,13 +86,13 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
 
     # ── Pass 2b: Analyse images (sequential — rate-limiter paces calls) ────
     results: dict[str, ImageAnalysisResult] = {}
-    for image in images:
-        img_size = len(image.image_bytes)
+    for raw_image in images:
+        img_size = len(raw_image.image_bytes)
 
         if img_size < settings.vision_min_image_bytes:
             logger.debug(
                 "Skipping %s in %s: %d bytes < min %d (likely logo/icon)",
-                image.placeholder_name,
+                raw_image.placeholder_name,
                 docx_path.name,
                 img_size,
                 settings.vision_min_image_bytes,
@@ -101,16 +102,23 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
         if img_size > settings.vision_max_image_bytes:
             logger.warning(
                 "Skipping %s in %s: %d bytes > max %d",
-                image.placeholder_name,
+                raw_image.placeholder_name,
                 docx_path.name,
                 img_size,
                 settings.vision_max_image_bytes,
             )
             continue
 
+        if raw_image.mime_type in EMF_MIME_TYPES:
+            image = await _convert_emf_image(raw_image, docx_path.name)
+            if image is None:
+                continue
+        else:
+            image = raw_image
+
         if image.mime_type not in _VISION_SUPPORTED_MIME_TYPES:
             logger.debug(
-                "Skipping %s in %s: mime_type %r not supported by vision API (EMF/WMF/etc.)",
+                "Skipping %s in %s: mime_type %r not supported by vision API",
                 image.placeholder_name,
                 docx_path.name,
                 image.mime_type,
@@ -135,6 +143,34 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
             )
 
     return _stitch(raw_markdown, results)
+
+
+async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedImage | None:
+    """Rasterize an EMF/WMF ExtractedImage to JPEG via PyMuPDF.
+
+    Returns a new ExtractedImage with ``image_bytes`` replaced by JPEG bytes
+    and ``mime_type`` set to ``"image/jpeg"``, or ``None`` when conversion
+    fails (in which case the caller should skip this image).
+    """
+    filetype = "wmf" if "wmf" in image.mime_type else "emf"
+    try:
+        jpeg_bytes = await asyncio.to_thread(convert_emf_to_jpeg, image.image_bytes, filetype)
+        logger.debug(
+            "Converted %s EMF→JPEG for %s (%d → %d bytes)",
+            image.placeholder_name,
+            doc_name,
+            len(image.image_bytes),
+            len(jpeg_bytes),
+        )
+        return image.model_copy(update={"image_bytes": jpeg_bytes, "mime_type": "image/jpeg"})
+    except IngestionError as exc:
+        logger.warning(
+            "EMF conversion failed for %s in %s: %s — keeping placeholder",
+            image.placeholder_name,
+            doc_name,
+            exc,
+        )
+        return None
 
 
 def _stitch(markdown: str, results: dict[str, ImageAnalysisResult]) -> str:
