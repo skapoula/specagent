@@ -84,4 +84,7 @@ def clear_resource_cache() -> None:
     """Clear all cached resources. Used in tests to reset state between cases."""
     get_store.cache_clear()
     get_embedder.cache_clear()
+    from specagent.llm.factory import get_llm  # noqa: PLC0415
+
+    get_llm.cache_clear()
     logger.debug("Resource cache cleared")
