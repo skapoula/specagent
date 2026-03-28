@@ -177,7 +177,7 @@ class TestQueryEndpoint:
             resp = client.post("/query", json={"question": "What is HARQ?"})
         detail = resp.json()["detail"]
         assert detail["error"] == "pipeline_error"
-        assert detail["message"] == "LLM call failed"
+        assert detail["message"] == "An internal error occurred."
 
     def test_unexpected_exception_returns_500(self, client):
         with patch(
@@ -195,7 +195,27 @@ class TestQueryEndpoint:
             resp = client.post("/query", json={"question": "What is HARQ?"})
         detail = resp.json()["detail"]
         assert detail["error"] == "internal_error"
-        assert "unexpected boom" in detail["message"]
+        assert detail["message"] == "An internal error occurred."
+
+    def test_pipeline_error_does_not_leak_exception_text(self, client):
+        result = self._make_result(error="DB password is hunter2")
+        with patch("specagent.api.main.run_query", return_value=result):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 500
+        body = str(resp.json())
+        assert "hunter2" not in body
+        assert "An internal error occurred." in body
+
+    def test_unhandled_exception_does_not_leak_exception_text(self, client):
+        with patch(
+            "specagent.api.main.run_query",
+            side_effect=RuntimeError("secret_api_key_xyz"),
+        ):
+            resp = client.post("/query", json={"question": "What is HARQ?"})
+        assert resp.status_code == 500
+        body = str(resp.json())
+        assert "secret_api_key_xyz" not in body
+        assert "An internal error occurred." in body
 
     def test_short_question_rejected_by_pydantic(self, client):
         resp = client.post("/query", json={"question": "Hi"})
