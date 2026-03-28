@@ -265,6 +265,13 @@ class TestCheckLlmHealth:
 class TestGetLlmCache:
     """Tests for get_llm() caching behaviour."""
 
+    @pytest.fixture(autouse=True)
+    def clear_llm_cache(self):
+        """Clear get_llm cache before and after every test to prevent bleed."""
+        get_llm.cache_clear()
+        yield
+        get_llm.cache_clear()
+
     @patch("langchain_openai.ChatOpenAI")
     @patch("specagent.config.settings")
     def test_get_llm_returns_same_instance_on_repeated_calls(self, mock_settings, mock_chat_openai):
@@ -277,11 +284,9 @@ class TestGetLlmCache:
         mock_settings.llm_temperature = 0.1
         mock_chat_openai.return_value = MagicMock()
 
-        get_llm.cache_clear()
         instance1 = get_llm()
         instance2 = get_llm()
         assert instance1 is instance2
-        get_llm.cache_clear()
 
     @patch("langchain_openai.ChatOpenAI")
     @patch("specagent.config.settings")
@@ -295,11 +300,9 @@ class TestGetLlmCache:
         mock_settings.llm_temperature = 0.1
         mock_chat_openai.return_value = MagicMock()
 
-        get_llm.cache_clear()
         default = get_llm()
         cold = get_llm(temperature=0.0)
         assert default is not cold
-        get_llm.cache_clear()
 
     def test_groq_adapter_last_call_thread_safe(self):  # noqa: PLC0415 — test-only local import
         """Each thread sees its own last_call via threading.local."""

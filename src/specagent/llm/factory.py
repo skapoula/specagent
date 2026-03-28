@@ -53,6 +53,7 @@ class _GroqAdapter:
 
     def invoke(self, prompt: str) -> str:
         """Send prompt to Groq, capture token usage, and return the response text."""
+        self._tls.last_call = None
         from langchain_core.messages import HumanMessage  # noqa: PLC0415
 
         start = time.perf_counter()

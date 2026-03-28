@@ -31,12 +31,13 @@ class TestTableCaching:
 class TestIsEmptyGuard:
     """Tests for Issue 14: _is_empty flag replaces count_rows() in search()."""
 
-    def test_search_returns_empty_without_calling_count_rows(self):
-        """When _is_empty is True, search() returns [] without calling count_rows."""
+    def test_search_returns_empty_for_empty_table(self):
+        """search() returns [] when the table is empty; count_rows called once at init."""
         store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
         assert store._is_empty is True  # default state
 
         mock_table = MagicMock()
+        mock_table.count_rows.return_value = 0  # empty table
 
         with patch("specagent.retrieval.store._open_table", return_value=mock_table):
             result = store.search(
@@ -48,7 +49,37 @@ class TestIsEmptyGuard:
             )
 
         assert result == []
-        mock_table.count_rows.assert_not_called()
+        # count_rows is called exactly once during _table() init, not per-search call
+        mock_table.count_rows.assert_called_once()
+
+    def test_is_empty_false_after_table_access_with_data(self):
+        """_is_empty is set from count_rows on first _table() access."""
+        # Simulate a pre-existing database: count_rows() returns > 0 on first open.
+        # A second Store instance pointing at the same URI must detect it is not empty
+        # after the first _table() call, without requiring upsert_chunks to be called.
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        assert store._is_empty is True  # default before any table access
+
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 42  # pre-existing rows
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            store._table()  # first access should call count_rows and flip the flag
+
+        assert store._is_empty is False
+        mock_table.count_rows.assert_called_once()
+
+    def test_is_empty_stays_true_for_empty_table_on_first_access(self):
+        """_is_empty remains True when count_rows returns 0 on first _table() access."""
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 0
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            store._table()
+
+        assert store._is_empty is True
 
     def test_is_empty_set_false_after_upsert(self):
         """_is_empty becomes False after upsert_chunks writes at least one chunk."""

@@ -88,6 +88,7 @@ class CustomEndpointLLM:
         Raises:
             requests.HTTPError: If the API request fails after all retries
         """
+        self._tls.last_call = None
         payload = {
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,

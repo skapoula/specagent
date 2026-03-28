@@ -207,7 +207,8 @@ def _build_where_clause(
 class Store:
     """Provides read/write access to the LanceDB documents table.
 
-    Each method opens a fresh connection — LanceDB is embedded and cheap to open.
+    Connections are cached: `_table()` opens LanceDB once and reuses the handle
+    for the Store instance lifetime.
     """
 
     def __init__(
@@ -236,6 +237,7 @@ class Store:
             _ensure_scalar_indexes(table)
             self._indexes_created = True
         self._cached_table = table
+        self._is_empty = table.count_rows() == 0
         return table
 
     def upsert_chunks(self, chunks: list[ChunkRecord]) -> None:
