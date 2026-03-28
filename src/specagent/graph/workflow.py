@@ -9,6 +9,7 @@ Defines the agentic RAG graph with conditional routing:
 Graph visualization can be exported via get_graph_visualization().
 """
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Literal
@@ -18,6 +19,8 @@ from langgraph.graph.state import CompiledStateGraph
 
 from specagent.config import settings
 from specagent.graph.state import GraphState, create_initial_state
+
+logger = logging.getLogger(__name__)
 from specagent.nodes import (
     generator_node,
     grader_node,
@@ -160,7 +163,9 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
     hallucination_result = state.get("hallucination_check", "grounded")
     regeneration_count = state.get("regeneration_count", 0)
 
-    # Allow exactly one regeneration attempt (count is already incremented by the node)
+    # Allow exactly one regeneration attempt. hallucination_check_node increments
+    # regeneration_count before returning, so count == 1 on the first evaluation here.
+    # Guard fires when count <= 1 (first check); blocks when count >= 2 (after retry).
     if hallucination_result == "not_grounded" and regeneration_count <= 1:
         return "regenerate"
 
@@ -365,7 +370,7 @@ def run_query(
 
         log_report(build_query_report(final_state))
     except Exception:
-        pass  # monitoring report must never break the pipeline
+        logger.error("Monitoring report failed", exc_info=True)
 
     return final_state
 

@@ -337,7 +337,7 @@ def sample_benchmark_questions():
 def benchmark_file(tmp_path: Path, sample_benchmark_questions) -> Path:
     """Create temporary benchmark file."""
     benchmark_path = tmp_path / "benchmark.json"
-    with open(benchmark_path, "w") as f:
+    with benchmark_path.open("w") as f:
         json.dump(sample_benchmark_questions, f)
     return benchmark_path
 

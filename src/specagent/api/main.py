@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from specagent.api.models import (
     ErrorResponse,
     HealthResponse,
+    QueryMetadata,
     QueryRequest,
     QueryResponse,
 )
@@ -112,9 +113,10 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
 
         # Check for errors
         if result.get("error"):
+            logger.error("Pipeline error: %s", result["error"])
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={"error": "pipeline_error", "message": result["error"]},
+                detail={"error": "pipeline_error", "message": "An internal error occurred."},
             )
 
         # Build response
@@ -131,25 +133,26 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
             confidence=_calculate_confidence(result),
             ungrounded_claims=result.get("ungrounded_claims", []),
             hallucination_status=result.get("hallucination_check", "unknown"),
-            metadata={
-                "rewrites": result.get("rewrite_count", 0),
-                "chunks_retrieved": len(result.get("retrieved_chunks", [])),
-                "chunks_used": len(
+            metadata=QueryMetadata(
+                rewrites=result.get("rewrite_count", 0),
+                chunks_retrieved=len(result.get("retrieved_chunks", [])),
+                chunks_used=len(
                     [c for c in result.get("graded_chunks", []) if c.relevant == "yes"]
                 ),
-                "latency_ms": result.get("processing_time_ms", 0),
-                "hallucination_check": result.get("hallucination_check", "unknown"),
-                "rewritten_question": result.get("rewritten_question"),
-                "node_timings": result.get("node_timings") if request.verbose else None,
-            },
+                latency_ms=result.get("processing_time_ms", 0),
+                hallucination_check=result.get("hallucination_check", "unknown"),
+                rewritten_question=result.get("rewritten_question"),
+                node_timings=result.get("node_timings") if request.verbose else None,
+            ),
         )
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Unhandled exception in query endpoint: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "internal_error", "message": str(e)},
+            detail={"error": "internal_error", "message": "An internal error occurred."},
         )
 
 

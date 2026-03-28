@@ -107,7 +107,7 @@ def generator_node(state: "GraphState") -> "GraphState":
 
                 emit_llm_usage_span(_call)
             except Exception:
-                pass  # tracing must never break generation
+                logger.error("Tracing span emission failed", exc_info=True)
 
         # Convert to string and strip whitespace
         generation = generation.strip() if isinstance(generation, str) else str(generation).strip()

@@ -8,11 +8,14 @@ Commands:
     benchmark - Run evaluation benchmark
 """
 
+import logging
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from specagent.tracing.langsmith import setup_langsmith_tracing
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="specagent",
@@ -102,7 +105,7 @@ def query(
             err_console = Console(stderr=True)
             err_console.print(format_report(build_query_report(result)))
         except Exception:
-            pass
+            logger.error("Failed to build query report", exc_info=True)
 
 
 @app.command()

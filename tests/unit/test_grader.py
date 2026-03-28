@@ -724,3 +724,32 @@ class TestGraderObservability:
         result = grader_node(state)
         assert result["grader_auto_count"] == 2
         assert result["grader_llm_count"] == 0
+
+
+@pytest.mark.unit
+def test_grader_error_path_sets_counter_fields():
+    """Error handler must set grader_auto_count and grader_llm_count to 0."""
+    from specagent.graph.state import RetrievedChunk, create_initial_state
+    from specagent.nodes.grader import grader_node
+
+    chunk = RetrievedChunk(
+        content="text",
+        chunk_id="c1",
+        doc_id="d1",
+        source="TS38.321.docx",
+        title="T",
+        chunk_index=0,
+        file_type="docx",
+        spec_id="TS38.321",
+        section="5",
+        similarity_score=0.7,
+    )
+    state = create_initial_state("test?")
+    state["retrieved_chunks"] = [chunk]
+
+    with patch("specagent.nodes.grader.get_llm", side_effect=RuntimeError("boom")):
+        result = grader_node(state)
+
+    assert result["grader_auto_count"] == 0
+    assert result["grader_llm_count"] == 0
+    assert result["graded_chunks"] == []

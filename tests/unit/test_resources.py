@@ -91,3 +91,24 @@ def test_initialize_resources_embedder_failure_raises_runtime_error():
     ):
         with pytest.raises(RuntimeError, match="Failed to load embedding model"):
             initialize_resources()
+
+
+@pytest.mark.unit
+def test_clear_resource_cache_also_clears_get_llm():
+    """clear_resource_cache() must also clear the get_llm LRU cache."""
+    from specagent.llm.factory import get_llm
+    from specagent.retrieval.resources import clear_resource_cache
+
+    with (
+        patch("specagent.retrieval.resources.Store"),
+        patch("specagent.retrieval.resources.TextEmbedding"),
+        patch("specagent.llm.factory.create_llm", return_value=MagicMock()) as mock_create,
+    ):
+        clear_resource_cache()
+        get_llm(temperature=0.0)
+        get_llm(temperature=0.0)  # second call must hit cache
+        assert mock_create.call_count == 1
+
+        clear_resource_cache()
+        get_llm(temperature=0.0)  # after clear, must call create_llm again
+        assert mock_create.call_count == 2

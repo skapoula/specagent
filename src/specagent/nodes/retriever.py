@@ -31,23 +31,25 @@ _VERSION_SUFFIX_RE = re.compile(r"-[ler]\d+$", re.IGNORECASE)
 def _normalize_spec_id(source: str) -> str:
     """Derive a normalized spec ID from a source file path.
 
-    Strips version suffixes (e.g. -l00, -r17) and ensures the result
-    starts with the 'TS' prefix.
-
-    Note: This function assumes TS-series 3GPP files only. TR-series filenames
-    (e.g., TR38.821) are not supported and would produce incorrect spec IDs
-    (e.g., "TSTR38.821" instead of "TR38.821").
+    Strips version suffixes (e.g. -l00, -r17) and normalizes the series prefix.
+    Supports both TS-series and TR-series 3GPP files.
 
     Examples:
         "/data/TS38.321.docx"   -> "TS38.321"
         "/data/38.321-l00.docx" -> "TS38.321"
         "/data/38.331-r17.docx" -> "TS38.331"
         "/data/TS38.521.pdf"    -> "TS38.521"
+        "/data/TR38.821.docx"   -> "TR38.821"
+        "/data/tr38.821-l00.docx" -> "TR38.821"
     """
     stem = Path(source).stem
     stem = _VERSION_SUFFIX_RE.sub("", stem)
-    stem = "TS" + stem if not stem.upper().startswith("TS") else "TS" + stem[2:]
-    return stem
+    upper = stem.upper()
+    if upper.startswith("TR"):
+        return "TR" + stem[2:]
+    if upper.startswith("TS"):
+        return "TS" + stem[2:]
+    return "TS" + stem  # no prefix → default to TS series
 
 
 def retriever_node(state: "GraphState") -> "GraphState":
@@ -145,7 +147,7 @@ def retriever_node(state: "GraphState") -> "GraphState":
                 rewrite_index=state.get("rewrite_count", 0),
             )
         except Exception:
-            pass  # tracing must never break retrieval
+            logger.error("Tracing span emission failed", exc_info=True)
 
         logger.info("Retrieved %d chunks for query", len(retrieved_chunks))
 

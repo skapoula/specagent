@@ -49,6 +49,8 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     source: Path | str,
     library: str,
     metadata: dict | None = None,
+    *,
+    rebuild_fts: bool = True,
 ) -> IngestResult:
     """Run the full ingestion pipeline for a local file.
 
@@ -56,6 +58,9 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         source: Local Path or str path to ingest.
         library: Library name to index the document under.
         metadata: Optional user-supplied key-value metadata.
+        rebuild_fts: If True (default), rebuild the full-text search index after
+            writing. Pass False when bulk-ingesting many files and call
+            ``store.rebuild_fts_index()`` once afterwards to avoid O(N²) cost.
 
     Returns:
         IngestResult describing what happened (indexed / replaced / skipped).
@@ -164,7 +169,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         )
 
     try:
-        await asyncio.to_thread(store.upsert_chunks, records)
+        await asyncio.to_thread(store.upsert_chunks, records, rebuild_fts=rebuild_fts)
     except Exception as e:
         raise IngestionError(f"Store write failed for {source_str!r}") from e
 
@@ -211,7 +216,7 @@ async def _ingest_one(
 ) -> IngestResult:
     """Ingest one file under a concurrency semaphore."""
     async with sem:
-        return await ingest(source=file_path, library=library, metadata=metadata)
+        return await ingest(source=file_path, library=library, metadata=metadata, rebuild_fts=False)
 
 
 async def ingest_folder(
@@ -271,8 +276,9 @@ async def ingest_folder(
             results.append(outcome)
 
     # Rebuild FTS index once after all writes/deletes are complete
-    # (avoids O(N²) rebuilds for bulk ingest)
-    if results:
+    # (avoids O(N²) rebuilds for bulk ingest; runs even on all-skip runs
+    # so that external deletes are reflected in hybrid search)
+    if candidates:
         try:
             await asyncio.to_thread(get_store().rebuild_fts_index)
         except Exception as fts_err:
