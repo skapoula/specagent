@@ -229,7 +229,7 @@ def load_benchmark_questions(path: str | Path) -> list[BenchmarkQuestion]:
         List of BenchmarkQuestion objects
     """
     path = Path(path)
-    with open(path) as f:
+    with path.open() as f:
         data = json.load(f)
 
     questions = []
@@ -702,13 +702,13 @@ def run_benchmark(
     # Save JSON
     json_filename = f"benchmark_{timestamp.replace(':', '-').split('.')[0]}.json"
     json_path = output_path / json_filename
-    with open(json_path, "w") as f:
+    with json_path.open("w") as f:
         json.dump(report.to_dict(), f, indent=2)
 
     # Save Markdown
     md_filename = f"benchmark_{timestamp.replace(':', '-').split('.')[0]}.md"
     md_path = output_path / md_filename
-    with open(md_path, "w") as f:
+    with md_path.open("w") as f:
         f.write(report.to_markdown())
 
     # Log output file paths

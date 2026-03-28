@@ -9,6 +9,7 @@ Defines the agentic RAG graph with conditional routing:
 Graph visualization can be exported via get_graph_visualization().
 """
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Literal
@@ -18,6 +19,8 @@ from langgraph.graph.state import CompiledStateGraph
 
 from specagent.config import settings
 from specagent.graph.state import GraphState, create_initial_state
+
+logger = logging.getLogger(__name__)
 from specagent.nodes import (
     generator_node,
     grader_node,
@@ -365,7 +368,7 @@ def run_query(
 
         log_report(build_query_report(final_state))
     except Exception:
-        pass  # monitoring report must never break the pipeline
+        logger.warning("Monitoring report failed", exc_info=True)
 
     return final_state
 

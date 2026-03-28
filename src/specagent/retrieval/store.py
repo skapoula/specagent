@@ -240,7 +240,7 @@ class Store:
         self._is_empty = table.count_rows() == 0
         return table
 
-    def upsert_chunks(self, chunks: list[ChunkRecord]) -> None:
+    def upsert_chunks(self, chunks: list[ChunkRecord], *, rebuild_fts: bool = True) -> None:
         """Write a list of chunk records to the store.
 
         Args:
@@ -263,11 +263,12 @@ class Store:
             table.add(rows)
             self._is_empty = False
             logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
-            try:
-                table.create_fts_index("content", replace=True)
-                logger.debug("FTS index rebuilt on 'content'")
-            except Exception as fts_err:
-                logger.warning("FTS index rebuild failed (hybrid search degraded): %s", fts_err)
+            if rebuild_fts:
+                try:
+                    table.create_fts_index("content", replace=True)
+                    logger.debug("FTS index rebuilt on 'content'")
+                except Exception as fts_err:
+                    logger.warning("FTS index rebuild failed (hybrid search degraded): %s", fts_err)
         except Exception as e:
             raise StoreError(f"Failed to upsert {len(chunks)} chunks") from e
 
