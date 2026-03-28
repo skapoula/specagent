@@ -9,7 +9,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -89,7 +89,7 @@ def generator_node(state: "GraphState") -> "GraphState":
 
         # Initialize LLM (auto-selects based on config)
         # Use temperature=0.0 for deterministic outputs
-        llm = create_llm(temperature=0.0)
+        llm = get_llm(temperature=0.0)
 
         # Format prompt with question and context
         prompt = GENERATOR_PROMPT.format(question=question, context=context)

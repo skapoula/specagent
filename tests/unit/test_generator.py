@@ -44,7 +44,7 @@ class TestGeneratorNode:
         ]
         return state
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_with_relevant_chunks(self, mock_create_llm):
         """Test generator creates answer from relevant chunks."""
         # Mock LLM to return answer with citations
@@ -81,7 +81,7 @@ class TestGeneratorNode:
         assert result["citations"][0].spec_id == "TS38.321"
         assert result["citations"][0].section == "5.4"
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_filters_irrelevant_chunks(self, mock_create_llm):
         """Test generator only uses relevant chunks."""
         mock_llm = MagicMock()
@@ -126,7 +126,7 @@ class TestGeneratorNode:
         # Irrelevant chunk should NOT be in prompt
         assert "PDCCH" not in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_multiple_citations(self, mock_create_llm):
         """Test generator extracts multiple citations."""
         mock_llm = MagicMock()
@@ -159,7 +159,7 @@ class TestGeneratorNode:
         assert result["citations"][2].spec_id == "TS38.331"
         assert result["citations"][2].section == "5.3.7"
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_no_citations(self, mock_create_llm):
         """Test generator handles response with no citations."""
         mock_llm = MagicMock()
@@ -179,7 +179,7 @@ class TestGeneratorNode:
         assert "don't have enough information" in result["generation"]
         assert result["citations"] == []
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_empty_graded_chunks(self, mock_create_llm):
         """Test generator handles empty graded chunks."""
         mock_llm = MagicMock()
@@ -198,7 +198,7 @@ class TestGeneratorNode:
         # LLM should not be called when there are no chunks
         mock_llm.invoke.assert_not_called()
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_all_irrelevant_chunks(self, mock_create_llm):
         """Test generator handles case where all chunks are irrelevant."""
         mock_llm = MagicMock()
@@ -220,7 +220,7 @@ class TestGeneratorNode:
         # LLM should not be called when all chunks are irrelevant
         mock_llm.invoke.assert_not_called()
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_context_formatting(self, mock_create_llm):
         """Test generator formats context with source citations."""
         mock_llm = MagicMock()
@@ -257,7 +257,7 @@ class TestGeneratorNode:
         assert "38.321" in prompt or "TS38.321" in prompt
         assert "38.331" in prompt or "TS38.331" in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_includes_question_in_prompt(self, mock_create_llm):
         """Test generator includes question in prompt."""
         mock_llm = MagicMock()
@@ -275,7 +275,7 @@ class TestGeneratorNode:
         prompt = invoke_call_args[0][0]
         assert question in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_citation_with_spaces(self, mock_create_llm):
         """Test generator extracts citations with various spacing."""
         mock_llm = MagicMock()
@@ -292,7 +292,7 @@ class TestGeneratorNode:
         # Should extract all citations despite spacing variations
         assert len(result["citations"]) == 3
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_citation_formats(self, mock_create_llm):
         """Test generator handles different citation formats."""
         mock_llm = MagicMock()
@@ -313,7 +313,7 @@ class TestGeneratorNode:
         assert any(c.section == "5.3.7.1" for c in result["citations"])
         assert any(c.section == "4.2.8.2.3" for c in result["citations"])
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_handles_llm_error(self, mock_create_llm):
         """Test generator handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -330,7 +330,7 @@ class TestGeneratorNode:
         assert result["error"] is not None
         assert "error" in result["error"].lower()
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_preserves_other_state_fields(self, mock_create_llm):
         """Test that generator only modifies generation fields."""
         mock_llm = MagicMock()
@@ -351,7 +351,7 @@ class TestGeneratorNode:
         assert result["rewrite_count"] == 1
         assert result["average_confidence"] == 0.85
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_citation_raw_format(self, mock_create_llm):
         """Test that citations preserve raw format."""
         mock_llm = MagicMock()
@@ -367,7 +367,7 @@ class TestGeneratorNode:
         assert len(result["citations"]) == 1
         assert result["citations"][0].raw_citation == "[TS 38.321 §5.4]"
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_uses_correct_settings(self, mock_create_llm):
         """Test that generator uses correct LLM settings from config."""
         mock_llm = MagicMock()
@@ -382,7 +382,7 @@ class TestGeneratorNode:
         # Verify create_llm was called with temperature=0.0 for deterministic outputs
         mock_create_llm.assert_called_once_with(temperature=0.0)
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_duplicate_citations(self, mock_create_llm):
         """Test generator handles duplicate citations."""
         mock_llm = MagicMock()
@@ -403,7 +403,7 @@ class TestGeneratorNode:
         assert all(c.spec_id == "TS38.321" for c in result["citations"])
         assert all(c.section == "5.4" for c in result["citations"])
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_strips_whitespace(self, mock_create_llm):
         """Test generator strips whitespace from LLM output."""
         mock_llm = MagicMock()
@@ -418,7 +418,7 @@ class TestGeneratorNode:
         # Should strip leading/trailing whitespace
         assert result["generation"] == "Answer with spacing [TS 38.321 §5.4]"
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_spec_id_normalization(self, mock_create_llm):
         """Test generator normalizes spec IDs (removes spaces/dots)."""
         mock_llm = MagicMock()
@@ -433,7 +433,7 @@ class TestGeneratorNode:
         # Spec ID should be normalized (no spaces)
         assert result["citations"][0].spec_id == "TS38.321"
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_handles_non_string_llm_response(self, mock_create_llm):
         """Test generator handles non-string LLM response."""
         mock_llm = MagicMock()
@@ -452,7 +452,7 @@ class TestGeneratorNode:
         # Should still extract citations from the string representation
         assert len(result["citations"]) >= 0
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_sorts_chunks_by_similarity(self, mock_create_llm):
         """Test generator sorts chunks by similarity score descending."""
         mock_llm = MagicMock()
@@ -499,7 +499,7 @@ class TestGeneratorNode:
         assert high_pos < medium_pos
         assert medium_pos < low_pos
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_includes_all_chunks_when_high_confidence(self, mock_create_llm):
         """Test generator includes all chunks regardless of confidence level."""
         mock_llm = MagicMock()
@@ -527,7 +527,7 @@ class TestGeneratorNode:
         assert "Chunk 3" in prompt  # All chunks included
         assert "Chunk 4" in prompt  # All chunks included
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_passes_all_chunks_to_prompt(self, mock_create_llm):
         """Test generator passes all chunks to the prompt regardless of confidence level."""
         mock_llm = MagicMock()
@@ -555,7 +555,7 @@ class TestGeneratorNode:
         assert "Chunk 3" in prompt
         assert "Chunk 4" in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_passes_all_chunks_with_exactly_2(self, mock_create_llm):
         """Test generator passes all chunks when there are exactly 2 relevant chunks."""
         mock_llm = MagicMock()
@@ -579,7 +579,7 @@ class TestGeneratorNode:
         assert "Chunk 1" in prompt
         assert "Chunk 2" in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_uses_shortened_prompt(self, mock_create_llm):
         """Test generator uses the new shortened prompt format."""
         mock_llm = MagicMock()
@@ -607,7 +607,7 @@ class TestGeneratorNode:
         assert "STEP 4" not in prompt
         assert "STEP 5" not in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_passes_high_confidence_chunks_without_truncation(self, mock_create_llm):
         """Test generator passes all chunks without truncation at the 0.8 confidence boundary."""
         mock_llm = MagicMock()
@@ -633,7 +633,7 @@ class TestGeneratorNode:
         assert "Chunk 2" in prompt
         assert "Chunk 3" in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_handles_missing_average_confidence(self, mock_create_llm):
         """Test generator handles missing average_confidence field."""
         mock_llm = MagicMock()
@@ -659,7 +659,7 @@ class TestGeneratorNode:
         assert "Chunk 2" in prompt
         assert "Chunk 3" in prompt
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_prompt_includes_exact_units_guidance(self, mock_create_llm):
         """Test that generator prompt includes guidance for extracting exact units."""
         mock_llm = MagicMock()

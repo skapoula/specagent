@@ -38,7 +38,7 @@ class TestRouteDecision:
 class TestRouterNode:
     """Tests for router_node function."""
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_retrieve_decision(self, mock_create_llm):
         """Test router node with retrieve decision."""
         # Mock LLM response as JSON string
@@ -60,7 +60,7 @@ class TestRouterNode:
         assert result["route_reasoning"] == "This question is about 5G NR HARQ processes"
         assert result["question"] == "What is the maximum number of HARQ processes in NR?"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_reject_decision(self, mock_create_llm):
         """Test router node with reject decision."""
         # Mock LLM response
@@ -78,7 +78,7 @@ class TestRouterNode:
         assert result["route_decision"] == "reject"
         assert result["route_reasoning"] == "This question is about cooking, not telecommunications"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_with_3gpp_question(self, mock_create_llm):
         """Test router correctly routes 3GPP-related questions."""
         mock_llm = MagicMock()
@@ -92,7 +92,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_with_5g_question(self, mock_create_llm):
         """Test router correctly routes 5G questions."""
         mock_llm = MagicMock()
@@ -106,7 +106,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_with_off_topic_question(self, mock_create_llm):
         """Test router correctly rejects off-topic questions."""
         mock_llm = MagicMock()
@@ -120,7 +120,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "reject"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_preserves_other_state_fields(self, mock_create_llm):
         """Test that router only modifies routing fields."""
         mock_llm = MagicMock()
@@ -139,7 +139,7 @@ class TestRouterNode:
         assert result["error"] is None
         assert result["question"] == "Test question"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_llm_call_format(self, mock_create_llm):
         """Test that LLM is called with correct format."""
         mock_llm = MagicMock()
@@ -157,7 +157,7 @@ class TestRouterNode:
         prompt = invoke_call_args[0][0]
         assert "Test question" in prompt
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_handles_llm_error(self, mock_create_llm):
         """Test router handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -174,7 +174,7 @@ class TestRouterNode:
         # Defaults to retrieve when LLM is unavailable (avoid silent failure)
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_uses_hf_hub_settings(self, mock_create_llm):
         """Test that router calls create_llm and uses the returned LLM."""
         mock_llm = MagicMock()
@@ -187,7 +187,7 @@ class TestRouterNode:
         # Verify create_llm was called
         mock_create_llm.assert_called_once()
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_with_telecom_terminology(self, mock_create_llm):
         """Test router recognizes various telecom terminology."""
         mock_llm = MagicMock()
@@ -209,7 +209,7 @@ class TestRouterNode:
             result = router_node(state)
             assert result["route_decision"] == "retrieve", f"Failed for: {question}"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_empty_question(self, mock_create_llm):
         """Test router handles empty questions."""
         mock_llm = MagicMock()
@@ -221,7 +221,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "reject"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_whitespace_only_question(self, mock_create_llm):
         """Test router handles whitespace-only questions."""
         mock_llm = MagicMock()
@@ -233,7 +233,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "reject"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_very_long_question(self, mock_create_llm):
         """Test router handles very long questions."""
         mock_llm = MagicMock()
@@ -250,7 +250,7 @@ class TestRouterNode:
         assert result["route_decision"] == "retrieve"
         assert result["question"] == long_question
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_unicode_question(self, mock_create_llm):
         """Test router handles questions with unicode characters."""
         mock_llm = MagicMock()
@@ -264,7 +264,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_special_characters(self, mock_create_llm):
         """Test router handles questions with special characters."""
         mock_llm = MagicMock()
@@ -278,7 +278,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_mixed_content_question(self, mock_create_llm):
         """Test router with mixed telecom and non-telecom content."""
         mock_llm = MagicMock()
@@ -294,7 +294,7 @@ class TestRouterNode:
 
         assert result["route_decision"] == "retrieve"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_error_sets_correct_fields(self, mock_create_llm):
         """Test router error handling sets all expected fields."""
         mock_llm = MagicMock()
@@ -311,7 +311,7 @@ class TestRouterNode:
         assert "Router LLM error" in result["error"]
         assert "API rate limit exceeded" in result["error"]
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_initialization_error(self, mock_create_llm):
         """Test router handles LLM initialization errors."""
         mock_create_llm.side_effect = Exception("Failed to initialize LLM")
@@ -322,7 +322,7 @@ class TestRouterNode:
         assert result["route_decision"] == "retrieve"
         assert "error" in result
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_structured_output_error(self, mock_create_llm):
         """Test router handles structured output parsing errors."""
         mock_llm = MagicMock()
@@ -335,7 +335,7 @@ class TestRouterNode:
         assert result["route_decision"] == "retrieve"
         assert "error" in result
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_uses_settings_correctly(self, mock_create_llm):
         """Test router uses configuration from settings."""
         mock_llm = MagicMock()
@@ -348,7 +348,7 @@ class TestRouterNode:
         # Verify create_llm was called
         mock_create_llm.assert_called_once()
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_prompt_contains_question(self, mock_create_llm):
         """Router prompt passed to the LLM includes the user's question."""
         mock_llm = MagicMock()
@@ -364,7 +364,7 @@ class TestRouterNode:
         prompt_used = mock_llm.invoke.call_args[0][0]
         assert test_question in prompt_used
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_state_not_modified_on_error(self, mock_create_llm):
         """Test that original question is preserved even on error."""
         mock_llm = MagicMock()
@@ -381,7 +381,7 @@ class TestRouterNode:
         assert result["question"] == original_question
         assert result["rewrite_count"] == 0
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_multiple_calls_independent(self, mock_create_llm):
         """Test that multiple router calls don't interfere with each other."""
         mock_llm = MagicMock()
@@ -405,7 +405,7 @@ class TestRouterNode:
         assert result2["route_decision"] == "reject"
         assert result2["route_reasoning"] == "Second call"
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_missing_question_key(self, mock_create_llm):
         """Test router handles state without question key."""
         mock_llm = MagicMock()
@@ -424,7 +424,7 @@ class TestRouterNode:
 class TestRouterNTNQuestions:
     """Test router correctly handles NTN/satellite questions."""
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_geostationary_satellite_doppler(self, mock_create_llm):
         """Test Question 3: geostationary satellite Doppler shift."""
         mock_llm = MagicMock()
@@ -439,7 +439,7 @@ class TestRouterNTNQuestions:
         assert result["route_decision"] == "retrieve"
         assert "NTN" in result["route_reasoning"] or "satellite" in result["route_reasoning"]
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_leo_orbit_parameters(self, mock_create_llm):
         """Test Question 5: LEO-600 orbit antenna aperture."""
         mock_llm = MagicMock()
@@ -454,7 +454,7 @@ class TestRouterNTNQuestions:
         assert result["route_decision"] == "retrieve"
         assert "satellite" in result["route_reasoning"] or "LEO" in result["route_reasoning"]
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_aerial_vehicle_question(self, mock_create_llm):
         """Test router accepts aerial vehicle/UAV questions."""
         mock_llm = MagicMock()
@@ -469,7 +469,7 @@ class TestRouterNTNQuestions:
         assert result["route_decision"] == "retrieve"
         assert "UAV" in result["route_reasoning"] or "aerial" in result["route_reasoning"]
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_vsat_terminal(self, mock_create_llm):
         """Test router accepts VSAT terminal questions."""
         mock_llm = MagicMock()
@@ -486,7 +486,7 @@ class TestRouterNTNQuestions:
         assert result["route_decision"] == "retrieve"
         assert "VSAT" in result["route_reasoning"] or "satellite" in result["route_reasoning"]
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_geo_beam_footprint(self, mock_create_llm):
         """Test router accepts GEO satellite beam footprint questions."""
         mock_llm = MagicMock()
@@ -505,7 +505,7 @@ class TestRouterNTNQuestions:
             or "beam" in result["route_reasoning"]
         )
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_router_json_loads_fallback(self, mock_create_llm):
         """Test router falls back to json.loads when re.search finds no JSON block."""
         import re

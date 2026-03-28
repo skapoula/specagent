@@ -42,9 +42,9 @@ def _make_chunk(
 class TestRunQueryE2E:
     """Full pipeline E2E tests with mocked LLM and store."""
 
-    @patch("specagent.nodes.hallucination.create_llm")
-    @patch("specagent.nodes.generator.create_llm")
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
+    @patch("specagent.nodes.generator.get_llm")
+    @patch("specagent.nodes.router.get_llm")
     @patch("specagent.nodes.retriever.get_store")
     @patch("specagent.nodes.retriever.get_embedder")
     def test_happy_path_full_pipeline(
@@ -113,7 +113,7 @@ class TestRunQueryE2E:
         assert state.get("hallucination_check") in ("grounded", "not_grounded", "partial")
         assert state.get("error") is None
 
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.router.get_llm")
     def test_rejection_path(self, mock_router_llm_factory):
         """Off-topic question is rejected by the router — graph ends at router."""
         mock_router_llm = MagicMock()
@@ -128,9 +128,9 @@ class TestRunQueryE2E:
         assert state.get("generation") is None
         assert state.get("retrieved_chunks", []) == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
-    @patch("specagent.nodes.generator.create_llm")
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
+    @patch("specagent.nodes.generator.get_llm")
+    @patch("specagent.nodes.router.get_llm")
     @patch("specagent.nodes.retriever.get_store")
     @patch("specagent.nodes.retriever.get_embedder")
     def test_node_timings_populated(
@@ -178,10 +178,10 @@ class TestRunQueryE2E:
             assert isinstance(ms, float), f"Timing for {node!r} should be float, got {type(ms)}"
             assert ms >= 0.0
 
-    @patch("specagent.nodes.hallucination.create_llm")
-    @patch("specagent.nodes.generator.create_llm")
-    @patch("specagent.nodes.grader.create_llm")
-    @patch("specagent.nodes.router.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
+    @patch("specagent.nodes.generator.get_llm")
+    @patch("specagent.nodes.grader.get_llm")
+    @patch("specagent.nodes.router.get_llm")
     @patch("specagent.nodes.retriever.get_store")
     @patch("specagent.nodes.retriever.get_embedder")
     def test_grader_llm_path(

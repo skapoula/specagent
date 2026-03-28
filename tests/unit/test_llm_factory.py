@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specagent.llm.factory import LLMProtocol, _GroqAdapter, create_llm
+from specagent.llm.factory import LLMProtocol, _GroqAdapter, create_llm, get_llm
 
 
 @pytest.mark.unit
@@ -218,6 +218,7 @@ class TestCheckLlmHealth:
     def test_groq_with_api_key_returns_healthy(self, mock_settings):
         """Groq provider with API key set → healthy, no network call."""
         from specagent.llm.factory import check_llm_health
+
         mock_settings.llm_provider = "groq"
         mock_settings.groq_api_key = "gsk_test_key"
         is_healthy, message = check_llm_health()
@@ -228,6 +229,7 @@ class TestCheckLlmHealth:
     def test_groq_without_api_key_returns_unhealthy(self, mock_settings):
         """Groq provider with no API key → unhealthy."""
         from specagent.llm.factory import check_llm_health
+
         mock_settings.llm_provider = "groq"
         mock_settings.groq_api_key = ""
         is_healthy, message = check_llm_health()
@@ -239,6 +241,7 @@ class TestCheckLlmHealth:
     def test_custom_endpoint_delegates_to_endpoint_health(self, mock_health, mock_settings):
         """custom_endpoint provider delegates to check_llm_endpoint_health."""
         from specagent.llm.factory import check_llm_health
+
         mock_settings.llm_provider = "custom_endpoint"
         mock_health.return_value = (True, "Endpoint healthy (responded in 0.12s)")
         is_healthy, message = check_llm_health(timeout=5)
@@ -250,8 +253,79 @@ class TestCheckLlmHealth:
     def test_custom_endpoint_unhealthy_propagates(self, mock_health, mock_settings):
         """Unhealthy custom_endpoint result propagates correctly."""
         from specagent.llm.factory import check_llm_health
+
         mock_settings.llm_provider = "custom_endpoint"
         mock_health.return_value = (False, "Connection failed: timeout")
         is_healthy, message = check_llm_health()
         assert is_healthy is False
         assert "Connection failed" in message
+
+
+@pytest.mark.unit
+class TestGetLlmCache:
+    """Tests for get_llm() caching behaviour."""
+
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
+    def test_get_llm_returns_same_instance_on_repeated_calls(self, mock_settings, mock_chat_openai):
+        """get_llm() should return the same object on subsequent calls."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = ""
+        mock_settings.llm_temperature = 0.1
+        mock_chat_openai.return_value = MagicMock()
+
+        get_llm.cache_clear()
+        instance1 = get_llm()
+        instance2 = get_llm()
+        assert instance1 is instance2
+        get_llm.cache_clear()
+
+    @patch("langchain_openai.ChatOpenAI")
+    @patch("specagent.config.settings")
+    def test_get_llm_cache_keys_by_temperature(self, mock_settings, mock_chat_openai):
+        """Different temperatures produce different cached instances."""
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = "gsk_test"
+        mock_settings.groq_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        mock_settings.groq_max_tokens = 1024
+        mock_settings.groq_reasoning_effort = ""
+        mock_settings.llm_temperature = 0.1
+        mock_chat_openai.return_value = MagicMock()
+
+        get_llm.cache_clear()
+        default = get_llm()
+        cold = get_llm(temperature=0.0)
+        assert default is not cold
+        get_llm.cache_clear()
+
+    def test_groq_adapter_last_call_thread_safe(self):  # noqa: PLC0415 — test-only local import
+        """Each thread sees its own last_call via threading.local."""
+        import threading
+
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content="hello", usage_metadata=None)
+        adapter = _GroqAdapter(mock_model)
+
+        results: dict[str, object] = {}
+        barrier = threading.Barrier(2)
+
+        def thread_fn(name: str, record: object) -> None:
+            barrier.wait()
+            adapter._tls.last_call = record
+            barrier.wait()
+            results[name] = adapter.get_last_call()
+
+        sentinel_a = object()
+        sentinel_b = object()
+        t1 = threading.Thread(target=thread_fn, args=("a", sentinel_a))
+        t2 = threading.Thread(target=thread_fn, args=("b", sentinel_b))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert results["a"] is sentinel_a
+        assert results["b"] is sentinel_b

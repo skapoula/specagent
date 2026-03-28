@@ -42,7 +42,7 @@ class TestRoutingDecisions:
 class TestRetrievalPipeline:
     """Tests for the retrieval pipeline (retriever -> grader)."""
 
-    @patch("specagent.nodes.grader.create_llm")
+    @patch("specagent.nodes.grader.get_llm")
     def test_retriever_to_grader_flow(self, mock_create_llm, state_after_retrieval):
         """Retrieved chunks should flow to grader correctly."""
         from specagent.nodes import grader_node
@@ -67,7 +67,7 @@ class TestRetrievalPipeline:
 class TestGenerationPipeline:
     """Tests for the generation pipeline (generator -> hallucination check)."""
 
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_generator_produces_citations(self, mock_create_llm, state_after_retrieval):
         """Generator should include citations in output."""
         from specagent.graph.state import GradedChunk, RetrievedChunk
@@ -106,8 +106,8 @@ class TestGenerationPipeline:
         assert "citations" in result
         assert len(result["citations"]) > 0
 
-    @patch("specagent.nodes.hallucination.create_llm")
-    @patch("specagent.nodes.generator.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
+    @patch("specagent.nodes.generator.get_llm")
     def test_grounded_answer_passes_check(self, mock_gen_llm, mock_hall_llm, state_after_retrieval):
         """Grounded answer should pass hallucination check."""
         from specagent.nodes import generator_node, hallucination_check_node

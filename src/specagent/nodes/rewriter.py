@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from specagent.config import settings
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -86,7 +86,7 @@ def rewriter_node(state: "GraphState") -> "GraphState":
             chunks_summary = "(No chunks retrieved)"
 
         # Initialize LLM (auto-selects based on config)
-        llm = create_llm()
+        llm = get_llm()
 
         # Format prompt with question and chunk summary
         prompt = REWRITER_PROMPT.format(question=question, retrieved_chunks_summary=chunks_summary)

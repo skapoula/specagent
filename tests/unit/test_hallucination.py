@@ -96,7 +96,7 @@ class TestHallucinationCheckNode:
 
         return state
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_fully_grounded(self, mock_create_llm):
         """Test hallucination check with fully grounded answer."""
         # Mock LLM to return grounded result
@@ -122,7 +122,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_not_grounded(self, mock_create_llm):
         """Test hallucination check with ungrounded answer."""
         # Mock LLM to return not grounded result
@@ -152,7 +152,7 @@ class TestHallucinationCheckNode:
         assert len(result["ungrounded_claims"]) == 2
         assert "32 HARQ processes" in result["ungrounded_claims"][0]
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_partial(self, mock_create_llm):
         """Test hallucination check with partially grounded answer."""
         # Mock LLM to return partial result
@@ -180,7 +180,7 @@ class TestHallucinationCheckNode:
         assert len(result["ungrounded_claims"]) == 1
         assert "vendor" in result["ungrounded_claims"][0].lower()
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_generation(self, mock_create_llm):
         """Test hallucination check when generation is None."""
         mock_llm = MagicMock()
@@ -197,7 +197,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_empty_generation(self, mock_create_llm):
         """Test hallucination check with empty string generation."""
         mock_llm = MagicMock()
@@ -213,7 +213,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_chunks_grounded(self, mock_create_llm):
         """Test hallucination check with no chunks - grounded result."""
         mock_llm = MagicMock()
@@ -230,7 +230,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_chunks_not_grounded(self, mock_create_llm):
         """Test hallucination check with no chunks - not grounded result."""
         mock_llm = MagicMock()
@@ -248,7 +248,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "not_grounded"
         assert len(result["ungrounded_claims"]) > 0
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_chunks_partial(self, mock_create_llm):
         """Test hallucination check with no chunks - partial result."""
         mock_llm = MagicMock()
@@ -268,7 +268,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "partial"
         assert len(result["ungrounded_claims"]) > 0
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_chunks_llm_error(self, mock_create_llm):
         """Test hallucination check handles LLM errors when no chunks."""
         mock_llm = MagicMock()
@@ -289,7 +289,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_llm_call_format(self, mock_create_llm):
         """Test that LLM is called with correct format."""
         mock_llm = MagicMock()
@@ -311,7 +311,7 @@ class TestHallucinationCheckNode:
         assert "The maximum number of HARQ processes is 16" in prompt
         assert "The answer is 16 HARQ processes" in prompt
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_handles_llm_error(self, mock_create_llm):
         """Test hallucination check handles LLM errors gracefully."""
         mock_llm = MagicMock()
@@ -329,7 +329,7 @@ class TestHallucinationCheckNode:
         assert result["error"] is not None
         assert "error" in result["error"].lower()
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_preserves_other_state_fields(self, mock_create_llm):
         """Test that hallucination check only modifies hallucination fields."""
         mock_llm = MagicMock()
@@ -351,7 +351,7 @@ class TestHallucinationCheckNode:
         assert result["rewrite_count"] == 1
         assert result["average_confidence"] == 0.9
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_with_multiple_chunks(self, mock_create_llm):
         """Test hallucination check with multiple source chunks."""
         mock_llm = MagicMock()
@@ -378,7 +378,7 @@ class TestHallucinationCheckNode:
         assert "Both FDD and TDD supported" in prompt
         assert "MAC layer handles HARQ" in prompt
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_grounded_to_state_mapping(self, mock_create_llm):
         """Test correct mapping from HallucinationResult.grounded to state values."""
         mock_llm = MagicMock()
@@ -407,7 +407,7 @@ class TestHallucinationCheckNode:
         result = hallucination_check_node(state)
         assert result["hallucination_check"] == "partial"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_insufficient_info_response(self, mock_create_llm):
         """Test hallucination check with 'I don't have enough information' response."""
         mock_llm = MagicMock()
@@ -425,7 +425,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_no_chunks_grounded_direct_json(self, mock_create_llm):
         """Test hallucination check with no chunks and direct JSON response (no regex match)."""
         mock_llm = MagicMock()
@@ -443,7 +443,7 @@ class TestHallucinationCheckNode:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_hallucination_with_chunks_direct_json(self, mock_create_llm):
         """Test hallucination check with chunks and direct JSON response (no regex match)."""
         mock_llm = MagicMock()
@@ -596,7 +596,7 @@ class TestHallucinationCheckConditional:
 
         return state
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_skip_check_high_confidence_no_numbers(self, mock_create_llm):
         """Test that hallucination check is skipped when confidence is high and no numbers."""
         mock_llm = MagicMock()
@@ -616,7 +616,7 @@ class TestHallucinationCheckConditional:
         # regeneration_count must NOT increment when check is skipped
         assert result.get("regeneration_count", 0) == 0
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_low_confidence_no_numbers(self, mock_create_llm):
         """Test that hallucination check runs when confidence is low even without numbers."""
         mock_llm = MagicMock()
@@ -637,7 +637,7 @@ class TestHallucinationCheckConditional:
         # regeneration_count must increment by 1 when the LLM ran
         assert result.get("regeneration_count", 0) == 1
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_high_confidence_with_numbers(self, mock_create_llm):
         """Test that hallucination check runs when generation has numbers with mid confidence."""
         mock_llm = MagicMock()
@@ -657,7 +657,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_high_confidence_with_table(self, mock_create_llm):
         """Test that hallucination check runs when generation has table with mid confidence."""
         mock_llm = MagicMock()
@@ -681,7 +681,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_boundary_confidence_no_numbers(self, mock_create_llm):
         """Test hallucination check runs at confidence boundary (0.7) without numbers."""
         mock_llm = MagicMock()
@@ -698,7 +698,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_not_called()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_below_boundary_confidence(self, mock_create_llm):
         """Test hallucination check runs just below confidence boundary."""
         mock_llm = MagicMock()
@@ -717,7 +717,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_skip_check_missing_confidence_defaults_high(self, mock_create_llm):
         """Test that missing confidence defaults to 1.0 and skips check if no numbers."""
         mock_llm = MagicMock()
@@ -734,7 +734,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_not_called()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_with_units(self, mock_create_llm):
         """Test that numbers with units trigger hallucination check with mid confidence."""
         mock_llm = MagicMock()
@@ -754,7 +754,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     @patch("specagent.nodes.hallucination.re.search")
     def test_no_chunks_json_parse_fallback(self, mock_re_search, mock_create_llm):
         """Test fallback to direct json.loads when regex doesn't match (no chunks)."""
@@ -776,7 +776,7 @@ class TestHallucinationCheckConditional:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     @patch("specagent.nodes.hallucination.re.search")
     def test_with_chunks_json_parse_fallback(self, mock_re_search, mock_create_llm):
         """Test fallback to direct json.loads when regex doesn't match (with chunks)."""
@@ -831,7 +831,7 @@ class TestHallucinationCheckConditional:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_skip_check_numerical_content_confidence_0_65(self, mock_create_llm):
         """Test that hallucination check is skipped for numerical content with confidence >= 0.65."""
         mock_llm = MagicMock()
@@ -850,7 +850,7 @@ class TestHallucinationCheckConditional:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_numerical_content_confidence_below_0_65(self, mock_create_llm):
         """Test that hallucination check runs for numerical content with confidence < 0.65."""
         mock_llm = MagicMock()
@@ -869,7 +869,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_skip_check_non_numerical_confidence_0_70(self, mock_create_llm):
         """Test that hallucination check is skipped for non-numerical content with confidence >= 0.70."""
         mock_llm = MagicMock()
@@ -887,7 +887,7 @@ class TestHallucinationCheckConditional:
         assert result["hallucination_check"] == "grounded"
         assert result["ungrounded_claims"] == []
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_run_check_non_numerical_confidence_below_0_70(self, mock_create_llm):
         """Test that hallucination check runs for non-numerical content with confidence < 0.70."""
         mock_llm = MagicMock()
@@ -906,7 +906,7 @@ class TestHallucinationCheckConditional:
         mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
-    @patch("specagent.nodes.hallucination.create_llm")
+    @patch("specagent.nodes.hallucination.get_llm")
     def test_skip_check_numerical_confidence_between_0_65_and_0_70(self, mock_create_llm):
         """Test skip for numerical content with confidence in range [0.65, 0.70)."""
         mock_llm = MagicMock()
@@ -951,7 +951,7 @@ def test_hallucination_no_json_braces_falls_to_json_loads():
         "average_confidence": 0.0,
     }
 
-    with patch("specagent.nodes.hallucination.create_llm", return_value=mock_llm):
+    with patch("specagent.nodes.hallucination.get_llm", return_value=mock_llm):
         result = hallucination_check_node(state)
 
     # json.loads("grounded: yes no braces") raises JSONDecodeError

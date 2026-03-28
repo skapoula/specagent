@@ -8,6 +8,7 @@ the OpenAI chat completions API format.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -49,7 +50,7 @@ class CustomEndpointLLM:
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self._last_call: LLMCallRecord | None = None
+        self._tls = threading.local()
 
     def invoke(self, prompt: str) -> str:
         """
@@ -107,7 +108,7 @@ class CustomEndpointLLM:
                     from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
 
                     usage = result.get("usage", {})
-                    self._last_call = LLMCallRecord(
+                    self._tls.last_call = LLMCallRecord(
                         node="",
                         trace_id="",
                         model=result.get("model", "unknown"),
@@ -118,7 +119,7 @@ class CustomEndpointLLM:
                         inference_ms=inference_ms,
                     )
                 except Exception:
-                    self._last_call = None
+                    self._tls.last_call = None
                 return result_text, inference_ms
 
             except requests.HTTPError as e:
@@ -161,7 +162,7 @@ class CustomEndpointLLM:
 
     def get_last_call(self) -> LLMCallRecord | None:
         """Return the LLMCallRecord from the most recent successful invoke(), or None."""
-        return self._last_call
+        return getattr(self._tls, "last_call", None)
 
     def health_check(self, timeout: int = 30) -> tuple[bool, str]:
         """

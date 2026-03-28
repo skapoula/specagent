@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from specagent.llm import create_llm
+from specagent.llm import get_llm
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -160,7 +160,7 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     if not relevant_chunks:
         try:
             # Initialize LLM (auto-selects based on config)
-            llm = create_llm()
+            llm = get_llm()
             _check_ran = True
 
             # Format prompt with empty sources
@@ -208,7 +208,7 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         sources = "\n\n".join(source_parts)
 
         # Initialize LLM (auto-selects based on config)
-        llm = create_llm()
+        llm = get_llm()
         _check_ran = True
 
         # Format prompt with sources and answer
