@@ -74,6 +74,10 @@ class TestQueryRequest:
         with pytest.raises(ValidationError):
             QueryRequest(question="Valid question here", max_rewrites=-1)
 
+    def test_max_rewrites_none_is_valid(self):
+        req = QueryRequest(question="Valid question?", max_rewrites=None)
+        assert req.max_rewrites is None
+
     def test_missing_question_raises_validation_error(self):
         with pytest.raises(ValidationError):
             QueryRequest()  # type: ignore[call-arg]

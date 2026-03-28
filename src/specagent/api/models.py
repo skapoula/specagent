@@ -4,6 +4,8 @@ Pydantic models for API request and response schemas.
 These models provide automatic validation and OpenAPI documentation.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -100,7 +102,7 @@ class QueryResponse(BaseModel):
         default_factory=list,
         description="Claims in the answer not fully supported by retrieved sources.",
     )
-    hallucination_status: str = Field(
+    hallucination_status: Literal["grounded", "partial", "not_grounded", "skipped", "unknown"] = Field(
         default="unknown",
         description="Hallucination check result: grounded | partial | not_grounded | skipped | unknown.",
     )

@@ -109,7 +109,8 @@ def should_rewrite(state: GraphState) -> Literal["rewrite", "generate"]:
         "rewrite" to reformulate query, "generate" to proceed
     """
     rewrite_count = state.get("rewrite_count", 0)
-    max_rewrites = state.get("max_rewrites_override") or settings.max_rewrites
+    _override = state.get("max_rewrites_override")
+    max_rewrites = _override if _override is not None else settings.max_rewrites
     retrieved_chunks = state.get("retrieved_chunks", [])
 
     # Fast heuristic: Skip rewriting if top-3 chunks have high similarity

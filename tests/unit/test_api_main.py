@@ -287,6 +287,14 @@ class TestQueryEndpoint:
         assert resp.status_code == 200
         assert resp.json()["hallucination_status"] == "unknown"
 
+    def test_query_passes_max_rewrites_to_run_query(self, client):
+        result = self._make_result()
+        with patch("specagent.api.main.run_query", return_value=result) as mock_run_query:
+            client.post("/query", json={"question": "What is HARQ?", "max_rewrites": 0})
+        mock_run_query.assert_called_once()
+        _, kwargs = mock_run_query.call_args
+        assert kwargs.get("max_rewrites") == 0
+
     def test_generation_none_triggers_response_error(self, client):
         # generation=None is present in the dict so dict.get() returns None,
         # not the fallback string.  Pydantic rejects None for a required str field,
