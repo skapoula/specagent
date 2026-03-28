@@ -191,3 +191,15 @@ class TestNormalizeSpecId:
         from specagent.nodes.retriever import _normalize_spec_id
 
         assert _normalize_spec_id("/data/ts38.521.pdf") == "TS38.521"
+
+    def test_tr_prefix_preserved(self):
+        """TR-series files keep their TR prefix."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/TR38.821.docx") == "TR38.821"
+
+    def test_tr_lowercase_prefix_normalized(self):
+        """Lowercase tr prefix is normalized to uppercase TR."""
+        from specagent.nodes.retriever import _normalize_spec_id
+
+        assert _normalize_spec_id("/data/tr38.821-l00.docx") == "TR38.821"
