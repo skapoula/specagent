@@ -61,6 +61,8 @@ dependencies = [
     "structlog>=24.4.0",
     "rich>=13.9.0",
     "typer>=0.13.0",
+    # Image conversion
+    "pymupdf>=1.24.0",
     # Tracing
     "langsmith>=0.6.0,<1.0.0",
 ]
@@ -245,6 +247,8 @@ module = [
     "gradio.*",
     "markitdown",
     "tantivy",
+    "fitz",
+    "pymupdf",
 ]
 ignore_missing_imports = true
 

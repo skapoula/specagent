@@ -6,9 +6,14 @@ Provides common fixtures for:
     - Mock LLM API responses
     - Sample document chunks
     - Temporary directories for indexes
+    - Docx ZIP helpers for OCR pipeline tests
 """
 
+import io
 import json
+import struct
+import zipfile
+import zlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -335,3 +340,120 @@ def benchmark_file(tmp_path: Path, sample_benchmark_questions) -> Path:
     with open(benchmark_path, "w") as f:
         json.dump(sample_benchmark_questions, f)
     return benchmark_path
+
+
+# =============================================================================
+# Docx / OCR fixtures
+# =============================================================================
+
+
+def _make_png_bytes(n_bytes: int | None = None) -> bytes:
+    """Return a valid minimal PNG (1×1 red pixel).
+
+    If n_bytes is given the PNG is padded with a tEXt chunk so that
+    ``len(result) >= n_bytes``.  Used to simulate large/small images.
+    """
+
+    def chunk(name: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(name + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + name + data + struct.pack(">I", crc)
+
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    ihdr = chunk(b"IHDR", ihdr_data)
+    raw_row = b"\x00\xff\x00\x00"  # filter + R G B
+    compressed = zlib.compress(raw_row)
+    idat = chunk(b"IDAT", compressed)
+    iend = chunk(b"IEND", b"")
+    base = signature + ihdr + idat + iend
+
+    if n_bytes is not None and len(base) < n_bytes:
+        padding = b"x" * (n_bytes - len(base))
+        text_chunk = chunk(b"tEXt", b"Comment\x00" + padding)
+        base = signature + ihdr + idat + text_chunk + iend
+
+    return base
+
+
+def make_docx_zip(images: list[tuple[str, bytes]] | None = None) -> bytes:
+    """Build a minimal in-memory .docx ZIP.
+
+    Args:
+        images: List of (media_filename, image_bytes) pairs in relationship order.
+
+    Returns:
+        Raw bytes of a valid .docx ZIP archive.
+    """
+    _IMAGE_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "word/document.xml",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:body><w:p/></w:body></w:document>",
+        )
+        if images:
+            rels = [
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+            ]
+            for idx, (media_filename, img_bytes) in enumerate(images, start=1):
+                rels.append(
+                    f'  <Relationship Id="rId{idx}" Type="{_IMAGE_NS}"'
+                    f' Target="media/{media_filename}"/>'
+                )
+                zf.writestr(f"word/media/{media_filename}", img_bytes)
+            rels.append("</Relationships>")
+            zf.writestr("word/_rels/document.xml.rels", "\n".join(rels))
+        else:
+            zf.writestr(
+                "word/_rels/document.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>',
+            )
+    return buf.getvalue()
+
+
+@pytest.fixture
+def small_png() -> bytes:
+    """PNG well below the 10 KB default min threshold (~100 bytes)."""
+    return _make_png_bytes()
+
+
+@pytest.fixture
+def large_png() -> bytes:
+    """PNG padded to 15 KB — above default min threshold of 10 KB."""
+    return _make_png_bytes(n_bytes=15 * 1024)
+
+
+@pytest.fixture
+def docx_no_images(tmp_path: Path) -> Path:
+    """A .docx file containing no embedded images."""
+    p = tmp_path / "no_images.docx"
+    p.write_bytes(make_docx_zip())
+    return p
+
+
+@pytest.fixture
+def docx_one_image(tmp_path: Path, large_png: bytes) -> Path:
+    """A .docx file containing one PNG image (15 KB)."""
+    p = tmp_path / "one_image.docx"
+    p.write_bytes(make_docx_zip(images=[("image1.png", large_png)]))
+    return p
+
+
+@pytest.fixture
+def docx_three_images(tmp_path: Path, large_png: bytes) -> Path:
+    """A .docx file with three PNG images."""
+    p = tmp_path / "three_images.docx"
+    p.write_bytes(
+        make_docx_zip(
+            images=[
+                ("image1.png", large_png),
+                ("image2.png", large_png),
+                ("image3.png", large_png),
+            ]
+        )
+    )
+    return p
