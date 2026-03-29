@@ -112,7 +112,8 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
                 exc,
             )
 
-    return _stitch(raw_markdown, results)
+    captions = {i: images[i].caption for i in range(len(images)) if images[i].caption}
+    return _stitch(raw_markdown, results, captions)
 
 
 async def _prepare_image(raw_image: ExtractedImage, doc_name: str) -> ExtractedImage | None:
@@ -198,35 +199,38 @@ async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedI
         return None
 
 
-def _stitch(markdown: str, results: dict[int, ImageAnalysisResult]) -> str:
-    """Replace image placeholders with their analysed Markdown content.
+def _stitch(
+    markdown: str,
+    results: dict[int, ImageAnalysisResult],
+    captions: dict[int, str] | None = None,
+) -> str:
+    """Replace image placeholders with analysed Markdown content.
 
-    Matching is done by **sequential counter** rather than by the placeholder
-    URL.  MarkItDown may embed images as data URIs (``data:image/x-emf;...``)
-    rather than filenames (``image0.png``), so the URL cannot be used as a
-    reliable key.  Instead, the N-th ``![...](...)`` in the Markdown
-    corresponds to the N-th image extracted from the ZIP archive, and
-    ``results`` is keyed by that zero-based integer index.
-
-    Placeholders whose index has no entry in ``results`` (skipped or failed
-    images) are preserved verbatim so downstream tools can still reference
-    the original image.
+    Matching is done by sequential counter. Optionally prepends a
+    ``**Figure: <caption>**`` heading when a caption is available.
 
     Args:
-        markdown: Raw Markdown string containing ``![alt](url)`` placeholders.
+        markdown: Raw Markdown with ``![alt](url)`` placeholders.
         results: Mapping of sequential image index → analysis result.
+        captions: Optional mapping of sequential image index → caption text.
 
     Returns:
         Markdown with analysed placeholders replaced by their content.
     """
+    if captions is None:
+        captions = {}
     counter = 0
 
-    def _replace(match: re.Match) -> str:  # type: ignore[type-arg]
+    def _replace(match: re.Match[str]) -> str:
         nonlocal counter
         idx = counter
         counter += 1
         if idx in results and not results[idx].skipped:
-            return results[idx].markdown_content
+            content = results[idx].markdown_content
+            caption = captions.get(idx, "")
+            if caption:
+                return f"\n**Figure: {caption}**\n\n{content}"
+            return content
         return match.group(0)
 
     return _IMAGE_PLACEHOLDER_RE.sub(_replace, markdown)

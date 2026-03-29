@@ -555,6 +555,62 @@ class TestConvertDocxWithOcr:
         assert "second image content" in result
         assert "data:image/png;base64,LARGE" not in result
 
+    async def test_caption_appears_in_stitched_output(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """When ExtractedImage.caption is non-empty, **Figure: ...** heading is prepended."""
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        captioned_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.png",
+            image_bytes=large_png,
+            mime_type="image/png",
+            caption="Figure 3: Network Architecture",
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="Before\n\n![image](image0.png)\n\nAfter",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[captioned_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=_make_result("image0.png", "diagram content")),
+            ),
+        ):
+            p = tmp_path / "captioned.docx"
+            p.write_bytes(b"placeholder")
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        assert "**Figure: Figure 3: Network Architecture**" in result
+        assert "diagram content" in result
+
+    async def test_no_caption_stitches_without_label(
+        self, docx_one_image: Path
+    ) -> None:
+        """When ExtractedImage.caption is empty, no Figure: heading is emitted."""
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=_make_result("image0.png", "content")),
+            ),
+        ):
+            result = await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        assert "**Figure:" not in result
+        assert "content" in result
+
     async def test_index_matching_independent_of_placeholder_url(
         self, tmp_path: Path, large_png: bytes
     ) -> None:
