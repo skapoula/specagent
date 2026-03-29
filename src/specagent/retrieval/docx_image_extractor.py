@@ -124,6 +124,45 @@ def _parse_image_relationships(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     return image_rels
 
 
+def _caption_for_drawing_para(
+    para: ET.Element,
+    next_para: ET.Element,
+    embed_attr: str,
+    ppr_tag: str,
+    pstyle_tag: str,
+    wordml_ns: str,
+    r_tag: str,
+    t_tag: str,
+) -> tuple[str, str] | None:
+    """Return (rel_id, caption_text) if para has a drawing followed by a Caption paragraph.
+
+    Returns None if the drawing has no r:embed, next_para is not a Caption, or caption is empty.
+    """
+    drawing_tag = f"{{{wordml_ns}}}drawing"
+    drawing = para.find(f".//{drawing_tag}")
+    if drawing is None:
+        return None
+    blip = drawing.find(f".//*[@{embed_attr}]")
+    if blip is None:
+        return None
+    rel_id = blip.get(embed_attr)
+    if not rel_id:
+        return None
+    ppr = next_para.find(ppr_tag)
+    if ppr is None:
+        return None
+    pstyle = ppr.find(pstyle_tag)
+    if pstyle is None or pstyle.get(f"{{{wordml_ns}}}val") != "Caption":
+        return None
+    texts = [
+        t.text or ""
+        for r in next_para.findall(f".//{r_tag}")
+        for t in r.findall(t_tag)
+    ]
+    caption_text = "".join(texts).strip()
+    return (rel_id, caption_text) if caption_text else None
+
+
 def _extract_caption_map(zf: zipfile.ZipFile) -> dict[str, str]:
     """Return a mapping of relationship-ID → caption text from word/document.xml.
 
@@ -138,45 +177,25 @@ def _extract_caption_map(zf: zipfile.ZipFile) -> dict[str, str]:
         logger.warning("Failed to parse %s; captions unavailable", _DOCUMENT_XML_PATH)
         return {}
 
-    caption_map: dict[str, str] = {}
-    body_tag = f"{{{_WORDML_NS}}}body"
+    body = root.find(f"{{{_WORDML_NS}}}body")
+    if body is None:
+        return {}
+
     p_tag = f"{{{_WORDML_NS}}}p"
     ppr_tag = f"{{{_WORDML_NS}}}pPr"
     pstyle_tag = f"{{{_WORDML_NS}}}pStyle"
-    drawing_tag = f"{{{_WORDML_NS}}}drawing"
     r_tag = f"{{{_WORDML_NS}}}r"
     t_tag = f"{{{_WORDML_NS}}}t"
     embed_attr = f"{{{_DRAWING_REL_NS}}}embed"
 
-    body = root.find(body_tag)
-    if body is None:
-        return {}
-
     paragraphs = [child for child in body if child.tag == p_tag]
-    for idx, para in enumerate(paragraphs):
-        drawing = para.find(f".//{drawing_tag}")
-        if drawing is None:
-            continue
-        blip = drawing.find(f".//*[@{embed_attr}]")
-        if blip is None:
-            continue
-        rel_id = blip.get(embed_attr)
-        if not rel_id or idx + 1 >= len(paragraphs):
-            continue
-        next_para = paragraphs[idx + 1]
-        ppr = next_para.find(ppr_tag)
-        if ppr is None:
-            continue
-        pstyle = ppr.find(pstyle_tag)
-        if pstyle is None or pstyle.get(f"{{{_WORDML_NS}}}val") != "Caption":
-            continue
-        texts = [
-            t.text or ""
-            for r in next_para.findall(f".//{r_tag}")
-            for t in r.findall(t_tag)
-        ]
-        caption_text = "".join(texts).strip()
-        if caption_text:
+    caption_map: dict[str, str] = {}
+    for idx, para in enumerate(paragraphs[:-1]):
+        result = _caption_for_drawing_para(
+            para, paragraphs[idx + 1], embed_attr, ppr_tag, pstyle_tag, _WORDML_NS, r_tag, t_tag
+        )
+        if result is not None:
+            rel_id, caption_text = result
             caption_map[rel_id] = caption_text
 
     return caption_map
