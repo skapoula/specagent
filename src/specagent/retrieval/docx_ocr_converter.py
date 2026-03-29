@@ -85,24 +85,29 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
         return raw_markdown
 
     # ── Pass 2b: Analyse images (sequential — rate-limiter paces calls) ────
-    results: dict[str, ImageAnalysisResult] = {}
-    for raw_image in images:
+    # Results are keyed by the image's sequential index in the extracted list.
+    # This matches MarkItDown's placeholder order regardless of the URL format
+    # it uses (filename-based or data-URI-based) — see _stitch() for details.
+    results: dict[int, ImageAnalysisResult] = {}
+    for idx, raw_image in enumerate(images):
         image = await _prepare_image(raw_image, docx_path.name)
         if image is None:
             continue
         try:
             result = await analyze_image(image, api_key=api_key)
-            results[image.placeholder_name] = result
+            results[idx] = result
             logger.info(
-                "Analysed %s in %s: type=%s",
+                "Analysed %s (index %d) in %s: type=%s",
                 image.placeholder_name,
+                idx,
                 docx_path.name,
                 result.image_type,
             )
         except VisionError as exc:
             logger.warning(
-                "Vision analysis failed for %s in %s: %s — keeping placeholder",
+                "Vision analysis failed for %s (index %d) in %s: %s — keeping placeholder",
                 image.placeholder_name,
+                idx,
                 docx_path.name,
                 exc,
             )
@@ -193,17 +198,35 @@ async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedI
         return None
 
 
-def _stitch(markdown: str, results: dict[str, ImageAnalysisResult]) -> str:
+def _stitch(markdown: str, results: dict[int, ImageAnalysisResult]) -> str:
     """Replace image placeholders with their analysed Markdown content.
 
-    Placeholders with no corresponding result (skipped, failed) are kept
-    verbatim so downstream tools can still reference the original image.
+    Matching is done by **sequential counter** rather than by the placeholder
+    URL.  MarkItDown may embed images as data URIs (``data:image/x-emf;...``)
+    rather than filenames (``image0.png``), so the URL cannot be used as a
+    reliable key.  Instead, the N-th ``![...](...)`` in the Markdown
+    corresponds to the N-th image extracted from the ZIP archive, and
+    ``results`` is keyed by that zero-based integer index.
+
+    Placeholders whose index has no entry in ``results`` (skipped or failed
+    images) are preserved verbatim so downstream tools can still reference
+    the original image.
+
+    Args:
+        markdown: Raw Markdown string containing ``![alt](url)`` placeholders.
+        results: Mapping of sequential image index → analysis result.
+
+    Returns:
+        Markdown with analysed placeholders replaced by their content.
     """
+    counter = 0
 
     def _replace(match: re.Match) -> str:  # type: ignore[type-arg]
-        placeholder_name = match.group(1)
-        if placeholder_name in results and not results[placeholder_name].skipped:
-            return results[placeholder_name].markdown_content
+        nonlocal counter
+        idx = counter
+        counter += 1
+        if idx in results and not results[idx].skipped:
+            return results[idx].markdown_content
         return match.group(0)
 
     return _IMAGE_PLACEHOLDER_RE.sub(_replace, markdown)
