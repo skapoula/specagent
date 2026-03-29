@@ -73,7 +73,8 @@ def extract_images(docx_path: Path) -> list[ExtractedImage]:
     try:
         with zipfile.ZipFile(docx_path, "r") as zf:
             image_rels = _parse_image_relationships(zf)
-            return _read_image_bytes(zf, image_rels)
+            caption_map = _extract_caption_map(zf)
+            return _read_image_bytes(zf, image_rels, caption_map)
     except zipfile.BadZipFile as exc:
         raise IngestionError(
             f"Cannot open {docx_path.name!r} as a ZIP archive — "
@@ -204,10 +205,12 @@ def _extract_caption_map(zf: zipfile.ZipFile) -> dict[str, str]:
 def _read_image_bytes(
     zf: zipfile.ZipFile,
     image_rels: list[tuple[str, str]],
+    caption_map: dict[str, str] | None = None,
 ) -> list[ExtractedImage]:
     """Build an ExtractedImage list from sorted relationship pairs and ZIP contents."""
+    if caption_map is None:
+        caption_map = {}
     zip_names = set(zf.namelist())
-    caption_map = _extract_caption_map(zf)
     results: list[ExtractedImage] = []
 
     for index, (rel_id, media_filename) in enumerate(image_rels):
