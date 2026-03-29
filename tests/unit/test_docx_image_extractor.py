@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import make_docx_zip, _make_png_bytes
 from specagent.retrieval.exceptions import IngestionError
+from tests.conftest import _make_png_bytes, make_docx_zip
 
 
 @pytest.mark.unit
@@ -173,8 +173,8 @@ class TestCaptionExtraction:
         self, tmp_path: Path, large_png: bytes
     ) -> None:
         """Caption text from a Caption-style paragraph populates ExtractedImage.caption."""
-        from tests.conftest import make_docx_zip_with_caption
         from specagent.retrieval.docx_image_extractor import extract_images
+        from tests.conftest import make_docx_zip_with_caption
 
         p = tmp_path / "captioned.docx"
         p.write_bytes(
