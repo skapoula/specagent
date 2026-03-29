@@ -163,3 +163,102 @@ class TestExtractImages:
         result = extract_images(p)
         assert len(result) == 1
         assert result[0].mime_type == "application/octet-stream"
+
+
+@pytest.mark.unit
+class TestCaptionExtraction:
+    """Tests for caption metadata populated on ExtractedImage."""
+
+    def test_caption_extracted_for_single_image(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """Caption text from a Caption-style paragraph populates ExtractedImage.caption."""
+        from tests.conftest import make_docx_zip_with_caption
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        p = tmp_path / "captioned.docx"
+        p.write_bytes(
+            make_docx_zip_with_caption(
+                image_filename="image1.png",
+                image_bytes=large_png,
+                caption_text="Figure 3: Network Architecture",
+            )
+        )
+        result = extract_images(p)
+        assert len(result) == 1
+        assert result[0].caption == "Figure 3: Network Architecture"
+
+    def test_no_caption_returns_empty_string(
+        self, docx_one_image: Path
+    ) -> None:
+        """Image in a docx with no Caption paragraph gets caption=''."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(docx_one_image)
+        assert len(result) == 1
+        assert result[0].caption == ""
+
+    def test_malformed_document_xml_returns_empty_caption(
+        self, tmp_path: Path, large_png: bytes, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Unparseable word/document.xml logs WARNING and leaves caption=''."""
+        import logging
+
+        buf = io.BytesIO()
+        _IMAGE_NS = (
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+        )
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("word/document.xml", "<<<not xml>>>")
+            zf.writestr(
+                "word/_rels/document.xml.rels",
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                f'<Relationship Id="rId1" Type="{_IMAGE_NS}" Target="media/image1.png"/>'
+                "</Relationships>",
+            )
+            zf.writestr("word/media/image1.png", large_png)
+        p = tmp_path / "bad_xml.docx"
+        p.write_bytes(buf.getvalue())
+
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        with caplog.at_level(logging.WARNING, logger="specagent.retrieval.docx_image_extractor"):
+            result = extract_images(p)
+
+        assert result[0].caption == ""
+        assert any("captions unavailable" in r.message for r in caplog.records)
+
+    def test_caption_map_ignores_non_caption_paragraphs(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """Paragraphs without Caption style are not mistaken for captions."""
+        _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        _R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        _PKG = "http://schemas.openxmlformats.org/package/2006/relationships"
+        _IMAGE_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+        document_xml = (
+            f'<w:document xmlns:w="{_W}" xmlns:r="{_R}"><w:body>'
+            f'<w:p><w:r><w:drawing><a:blip xmlns:a="{_A}" r:embed="rId1"/></w:drawing></w:r></w:p>'
+            "<w:p><w:pPr><w:pStyle w:val=\"Normal\"/></w:pPr>"
+            "<w:r><w:t>Not a caption</w:t></w:r></w:p>"
+            "</w:body></w:document>"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("word/document.xml", document_xml)
+            zf.writestr(
+                "word/_rels/document.xml.rels",
+                f'<Relationships xmlns="{_PKG}">'
+                f'<Relationship Id="rId1" Type="{_IMAGE_REL}" Target="media/image1.png"/>'
+                "</Relationships>",
+            )
+            zf.writestr("word/media/image1.png", large_png)
+        p = tmp_path / "no_caption_style.docx"
+        p.write_bytes(buf.getvalue())
+
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(p)
+        assert result[0].caption == ""
