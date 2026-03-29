@@ -15,6 +15,7 @@ from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
 from specagent.retrieval.embedder import embed_documents
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
+from specagent.retrieval.markdown_postprocessor import postprocess
 from specagent.retrieval.resources import get_store
 from specagent.retrieval.store import ChunkRecord
 
@@ -118,6 +119,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     if not text.strip():
         raise IngestionError(f"No text could be extracted from {source_str!r}")
 
+    text = postprocess(text)
     title = _extract_title(text, source_str)
 
     # ── 4. Chunk, extracting section headers per chunk ─────────────────────────

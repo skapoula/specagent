@@ -472,3 +472,134 @@ class TestConvertDocxWithOcr:
 
         analyze_mock.assert_called_once()
         assert "IANA WMF content" in result
+
+    # ── Sequential index-based matching (P0 fix) ───────────────────────────
+
+    async def test_data_uri_placeholder_replaced_by_index(
+        self, docx_one_image: Path
+    ) -> None:
+        """data:image/... URI placeholders are replaced using sequential index."""
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        analyze_mock = AsyncMock(
+            return_value=_make_result("image0.png", "OCR content from data URI", "call_flow_diagram")
+        )
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="Before\n\n![](data:image/x-emf;base64,AAAA)\n\nAfter",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                analyze_mock,
+            ),
+        ):
+            result = await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        assert "OCR content from data URI" in result
+        assert "data:image/x-emf" not in result
+        assert "Before" in result
+        assert "After" in result
+
+    async def test_skipped_image_slot_preserved_in_counter(
+        self, tmp_path: Path, small_png: bytes, large_png: bytes
+    ) -> None:
+        """Skipped image at index 0 preserves its placeholder; index 1 is still replaced."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        small_image = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.png",
+            image_bytes=small_png,  # too small → skipped
+            mime_type="image/png",
+        )
+        large_image = ExtractedImage(
+            placeholder_name="image1.png",
+            media_filename="image2.png",
+            image_bytes=large_png,
+            mime_type="image/png",
+        )
+
+        p = tmp_path / "two_images.docx"
+        p.write_bytes(make_docx_zip())
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value=(
+                    "![](data:image/png;base64,SMALL)\n\n"
+                    "![](data:image/png;base64,LARGE)\n"
+                ),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[small_image, large_image],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.settings.vision_min_image_bytes",
+                10 * 1024,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(
+                    return_value=_make_result("image1.png", "second image content", "other")
+                ),
+            ),
+        ):
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        # First placeholder (small, skipped) is preserved verbatim
+        assert "data:image/png;base64,SMALL" in result
+        # Second placeholder (large, analysed) is replaced
+        assert "second image content" in result
+        assert "data:image/png;base64,LARGE" not in result
+
+    async def test_index_matching_independent_of_placeholder_url(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """Stitch correctly handles data-URI URL formats using only sequential position."""
+        from tests.conftest import make_docx_zip
+        from specagent.retrieval.docx_image_extractor import ExtractedImage
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        img_a = ExtractedImage(
+            placeholder_name="image0.png",
+            media_filename="image1.png",
+            image_bytes=large_png,
+            mime_type="image/png",
+        )
+        img_b = ExtractedImage(
+            placeholder_name="image1.png",
+            media_filename="image2.png",
+            image_bytes=large_png,
+            mime_type="image/png",
+        )
+
+        async def recording_analyze(image, *, api_key, model=None):
+            return _make_result(image.placeholder_name, f"content-{image.placeholder_name}")
+
+        p = tmp_path / "two_emf.docx"
+        p.write_bytes(make_docx_zip())
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value=(
+                    "![](data:image/x-emf;base64,FIRST)\n"
+                    "![](data:image/x-emf;base64,SECOND)\n"
+                ),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.extract_images",
+                return_value=[img_a, img_b],
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                side_effect=recording_analyze,
+            ),
+        ):
+            result = await convert_docx_with_ocr(p, api_key="key")
+
+        assert "content-image0.png" in result
+        assert "content-image1.png" in result
+        assert "data:image/x-emf" not in result
