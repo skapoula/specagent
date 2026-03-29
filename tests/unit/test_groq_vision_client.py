@@ -52,8 +52,8 @@ class TestAnalyzeImage:
 
     async def test_returns_mermaid_for_call_flow_diagram(self, httpx_mock) -> None:
         """Call flow diagrams produce a mermaid fenced block."""
-        mermaid_content = "```mermaid\ngraph TD\n  A-->B\n```"
-        httpx_mock.add_response(json=_groq_response("call_flow_diagram", mermaid_content))
+        mermaid_content = "```mermaid\nsequenceDiagram\n  A->>B: message\n```"
+        httpx_mock.add_response(json=_groq_response("call_flow", mermaid_content))
 
         from specagent.retrieval.groq_vision_client import analyze_image
 
@@ -63,7 +63,7 @@ class TestAnalyzeImage:
         ):
             result = await analyze_image(_make_image(), api_key="test-key")
 
-        assert result.image_type == "call_flow_diagram"
+        assert result.image_type == "call_flow"
         assert "mermaid" in result.markdown_content
         assert result.skipped is False
 

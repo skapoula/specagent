@@ -20,19 +20,42 @@ logger = logging.getLogger(__name__)
 
 _GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-_KNOWN_IMAGE_TYPES = frozenset(["call_flow_diagram", "table", "screenshot_text", "other"])
+_KNOWN_DIAGRAM_TYPES = frozenset([
+    "call_flow",
+    "state_machine",
+    "block_diagram",
+    "flowchart",
+    "network_topology",
+    "table",
+    "screenshot_text",
+    "other",
+])
+
+_MERMAID_SUBTYPE: dict[str, str] = {
+    "call_flow": "sequenceDiagram",
+    "state_machine": "stateDiagram-v2",
+    "block_diagram": "graph LR",
+    "flowchart": "flowchart TD",
+    "network_topology": "graph LR",
+}
 
 _VISION_PROMPT = (
     "Analyze this image and respond with JSON only — no markdown wrapper, no explanation. "
     "Classify it as exactly one of these types: "
-    "call_flow_diagram (a sequence diagram or call flow showing message exchanges between "
+    "call_flow (a sequence diagram or call flow showing message exchanges between "
     "network entities), "
+    "state_machine (a state diagram showing state transitions), "
+    "block_diagram (a block or box diagram), "
+    "flowchart (a flowchart showing process flow), "
+    "network_topology (a network topology diagram), "
     "table (a table of data or parameters), "
     "screenshot_text (a screenshot containing readable text), "
     "or other (anything else). "
     'Respond as a JSON object: {"type": "<class>", "content": "<extracted content>"}. '
-    "For call_flow_diagram: content MUST be a Mermaid DAG fenced code block: "
-    "```mermaid\\ngraph TD\\n  A[Entity A] -->|message| B[Entity B]\\n```. "
+    "For call_flow: content MUST be a Mermaid sequenceDiagram fenced code block: "
+    "```mermaid\\nsequenceDiagram\\n  participant A\\n  participant B\\n  A->>B: message\\n```. "
+    "For state_machine: content must be a Mermaid stateDiagram-v2 code block. "
+    "For block_diagram, flowchart, network_topology: content must be a Mermaid graph. "
     "For table: content must be a Markdown table. "
     "For screenshot_text: content must be the extracted text as Markdown. "
     "For other: content is a one-sentence plain-English description."
@@ -49,7 +72,7 @@ class ImageAnalysisResult(BaseModel):
     """Extracted content: Mermaid DAG, Markdown table, plain text, or description."""
 
     image_type: str
-    """One of: ``call_flow_diagram``, ``table``, ``screenshot_text``, ``other``."""
+    """One of: call_flow, state_machine, block_diagram, flowchart, network_topology, table, screenshot_text, other."""
 
     skipped: bool = False
     """``True`` when the image was not sent to the API (size filter, unsupported type…)."""
@@ -147,7 +170,7 @@ def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisRes
     try:
         data = json.loads(raw_content)
         image_type = data.get("type", "other")
-        if image_type not in _KNOWN_IMAGE_TYPES:
+        if image_type not in _KNOWN_DIAGRAM_TYPES:
             image_type = "other"
         content = str(data.get("content", raw_content))
     except (json.JSONDecodeError, AttributeError):

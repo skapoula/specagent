@@ -61,7 +61,7 @@ class TestConvertDocxWithOcr:
 
     async def test_placeholder_replaced_with_mermaid(self, docx_one_image: Path) -> None:
         """Call flow diagram placeholder is replaced with Mermaid block."""
-        mermaid = "```mermaid\ngraph TD\n  UE-->gNB\n```"
+        mermaid = "```mermaid\nsequenceDiagram\n  A->>B: message\n```"
         from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
 
         with (
@@ -71,7 +71,7 @@ class TestConvertDocxWithOcr:
             ),
             patch(
                 "specagent.retrieval.docx_ocr_converter.analyze_image",
-                AsyncMock(return_value=_make_result("image0.png", mermaid, "call_flow_diagram")),
+                AsyncMock(return_value=_make_result("image0.png", mermaid, "call_flow")),
             ),
         ):
             result = await convert_docx_with_ocr(docx_one_image, api_key="key")
@@ -130,7 +130,7 @@ class TestConvertDocxWithOcr:
         fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
 
         analyze_mock = AsyncMock(
-            return_value=_make_result("image0.png", "EMF diagram content", "call_flow_diagram")
+            return_value=_make_result("image0.png", "EMF diagram content", "call_flow")
         )
         with (
             patch(
@@ -404,7 +404,7 @@ class TestConvertDocxWithOcr:
         fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
 
         analyze_mock = AsyncMock(
-            return_value=_make_result("image0.png", "IANA EMF content", "call_flow_diagram")
+            return_value=_make_result("image0.png", "IANA EMF content", "call_flow")
         )
         with (
             patch(
@@ -482,7 +482,7 @@ class TestConvertDocxWithOcr:
         from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
 
         analyze_mock = AsyncMock(
-            return_value=_make_result("image0.png", "OCR content from data URI", "call_flow_diagram")
+            return_value=_make_result("image0.png", "OCR content from data URI", "call_flow")
         )
         with (
             patch(
