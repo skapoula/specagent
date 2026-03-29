@@ -21,9 +21,13 @@ mimetypes.add_type("image/x-emf", ".emf")
 mimetypes.add_type("image/x-wmf", ".wmf")
 
 _REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+_WORDML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_DRAWINGML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_DRAWING_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _IMAGE_TYPE_SUFFIX = "/image"
 _RELS_PATH = "word/_rels/document.xml.rels"
 _MEDIA_PREFIX = "word/media/"
+_DOCUMENT_XML_PATH = "word/document.xml"
 
 
 class ExtractedImage(BaseModel):
@@ -40,6 +44,9 @@ class ExtractedImage(BaseModel):
 
     mime_type: str
     """MIME type inferred from media_filename, e.g. ``image/png``."""
+
+    caption: str = ""
+    """Caption text from a Caption-style paragraph following the image, if any."""
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -117,15 +124,74 @@ def _parse_image_relationships(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
     return image_rels
 
 
+def _extract_caption_map(zf: zipfile.ZipFile) -> dict[str, str]:
+    """Return a mapping of relationship-ID → caption text from word/document.xml.
+
+    Parses Caption-style paragraphs that immediately follow drawing paragraphs.
+    Returns an empty dict if the document XML is missing or malformed.
+    """
+    if _DOCUMENT_XML_PATH not in zf.namelist():
+        return {}
+    try:
+        root = ET.fromstring(zf.read(_DOCUMENT_XML_PATH))
+    except ET.ParseError:
+        logger.warning("Failed to parse %s; captions unavailable", _DOCUMENT_XML_PATH)
+        return {}
+
+    caption_map: dict[str, str] = {}
+    body_tag = f"{{{_WORDML_NS}}}body"
+    p_tag = f"{{{_WORDML_NS}}}p"
+    ppr_tag = f"{{{_WORDML_NS}}}pPr"
+    pstyle_tag = f"{{{_WORDML_NS}}}pStyle"
+    drawing_tag = f"{{{_WORDML_NS}}}drawing"
+    r_tag = f"{{{_WORDML_NS}}}r"
+    t_tag = f"{{{_WORDML_NS}}}t"
+    embed_attr = f"{{{_DRAWING_REL_NS}}}embed"
+
+    body = root.find(body_tag)
+    if body is None:
+        return {}
+
+    paragraphs = [child for child in body if child.tag == p_tag]
+    for idx, para in enumerate(paragraphs):
+        drawing = para.find(f".//{drawing_tag}")
+        if drawing is None:
+            continue
+        blip = drawing.find(f".//*[@{embed_attr}]")
+        if blip is None:
+            continue
+        rel_id = blip.get(embed_attr)
+        if not rel_id or idx + 1 >= len(paragraphs):
+            continue
+        next_para = paragraphs[idx + 1]
+        ppr = next_para.find(ppr_tag)
+        if ppr is None:
+            continue
+        pstyle = ppr.find(pstyle_tag)
+        if pstyle is None or pstyle.get(f"{{{_WORDML_NS}}}val") != "Caption":
+            continue
+        texts = [
+            t.text or ""
+            for r in next_para.findall(f".//{r_tag}")
+            for t in r.findall(t_tag)
+        ]
+        caption_text = "".join(texts).strip()
+        if caption_text:
+            caption_map[rel_id] = caption_text
+
+    return caption_map
+
+
 def _read_image_bytes(
     zf: zipfile.ZipFile,
     image_rels: list[tuple[str, str]],
 ) -> list[ExtractedImage]:
     """Build an ExtractedImage list from sorted relationship pairs and ZIP contents."""
     zip_names = set(zf.namelist())
+    caption_map = _extract_caption_map(zf)
     results: list[ExtractedImage] = []
 
-    for index, (_, media_filename) in enumerate(image_rels):
+    for index, (rel_id, media_filename) in enumerate(image_rels):
         zip_entry = f"{_MEDIA_PREFIX}{media_filename}"
         if zip_entry not in zip_names:
             logger.warning(
@@ -146,6 +212,7 @@ def _read_image_bytes(
                 media_filename=media_filename,
                 image_bytes=img_bytes,
                 mime_type=mime_type,
+                caption=caption_map.get(rel_id, ""),
             )
         )
 
