@@ -372,6 +372,41 @@ class Settings(BaseSettings):
         le=10,
         description="Maximum tenacity retries for transient Groq vision API errors.",
     )
+    vision_diagram_types: list[str] = Field(
+        default=[
+            "call_flow",
+            "state_machine",
+            "block_diagram",
+            "flowchart",
+            "network_topology",
+        ],
+        description=(
+            "Diagram types for which Mermaid output is requested from the vision model. "
+            "Env var: VISION_DIAGRAM_TYPES (comma-separated)."
+        ),
+    )
+
+    # ==========================================================================
+    # Mermaid Validation Configuration
+    # ==========================================================================
+    mermaid_validate_with_mmdc: bool = Field(
+        default=False,
+        description=(
+            "Enable Tier 2 Mermaid validation via mmdc subprocess. "
+            "Requires @mermaid-js/mermaid-cli to be installed on PATH. "
+            "Env var: MERMAID_VALIDATE_WITH_MMDC."
+        ),
+    )
+    mermaid_mmdc_timeout: int = Field(
+        default=10,
+        ge=1,
+        le=120,
+        description=(
+            "Timeout in seconds for mmdc subprocess validation. "
+            "Timeouts are treated as valid (tool absence must not fail pipeline). "
+            "Env var: MERMAID_MMDC_TIMEOUT."
+        ),
+    )
 
     # ==========================================================================
     # Validators

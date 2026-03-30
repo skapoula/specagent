@@ -15,7 +15,12 @@ from specagent.retrieval.converter import convert
 from specagent.retrieval.docx_image_extractor import ExtractedImage, extract_images
 from specagent.retrieval.emf_converter import EMF_MIME_TYPES, convert_emf_to_jpeg
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError, VisionError
-from specagent.retrieval.groq_vision_client import ImageAnalysisResult, analyze_image
+from specagent.retrieval.groq_vision_client import (
+    ImageAnalysisResult,
+    analyze_image,
+    correct_mermaid_diagram,
+)
+from specagent.retrieval.mermaid_validator import validate_mermaid
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +30,72 @@ _IMAGE_PLACEHOLDER_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # MIME types accepted by the Groq vision API.
 # Windows vector formats (EMF, WMF) and other non-web-native types are excluded —
 # the API returns a 400 for them, which is non-retryable and wastes quota.
-_VISION_SUPPORTED_MIME_TYPES = frozenset(
-    [
-        "image/png",
-        "image/jpeg",
-        "image/gif",
-        "image/webp",
-    ]
-)
+_VISION_SUPPORTED_MIME_TYPES = frozenset([
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+])
+
+_DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
+    "call_flow",
+    "state_machine",
+    "block_diagram",
+    "flowchart",
+    "network_topology",
+])
+
+
+def _prose_fallback_result(
+    result: ImageAnalysisResult, placeholder_name: str
+) -> ImageAnalysisResult:
+    """Return result with markdown_content replaced by prose_fallback or a marker."""
+    fallback = (
+        result.prose_fallback
+        or f"_[Diagram: {placeholder_name} — validation failed]_"
+    )
+    return result.model_copy(update={"markdown_content": fallback})
+
+
+async def _apply_mermaid_validation(
+    result: ImageAnalysisResult,
+    image: ExtractedImage,
+    api_key: str,
+) -> ImageAnalysisResult:
+    """Validate and optionally correct Mermaid content; fall back to prose on failure."""
+    if result.image_type not in _DIAGRAM_TYPES_REQUIRING_VALIDATION:
+        return result
+
+    valid, reason = validate_mermaid(result.markdown_content)
+    if valid:
+        return result
+
+    logger.warning(
+        "Mermaid validation failed for %s: %s — requesting correction from VLM",
+        image.placeholder_name,
+        reason,
+    )
+
+    try:
+        corrected = await correct_mermaid_diagram(
+            image=image,
+            prior_attempt=result.markdown_content,
+            validation_errors=reason,
+            diagram_type=result.image_type,
+            api_key=api_key,
+        )
+    except VisionError as exc:
+        logger.warning("Correction API call failed for %s: %s — using prose fallback",
+                       image.placeholder_name, exc)
+        return _prose_fallback_result(result, image.placeholder_name)
+
+    valid2, reason2 = validate_mermaid(corrected.markdown_content)
+    if valid2:
+        return corrected
+
+    logger.warning("Corrected Mermaid still invalid for %s: %s — using prose fallback",
+                   image.placeholder_name, reason2)
+    return _prose_fallback_result(corrected, image.placeholder_name)
 
 
 async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
@@ -95,6 +158,7 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
             continue
         try:
             result = await analyze_image(image, api_key=api_key)
+            result = await _apply_mermaid_validation(result, image, api_key)
             results[idx] = result
             logger.info(
                 "Analysed %s (index %d) in %s: type=%s",
@@ -112,7 +176,8 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
                 exc,
             )
 
-    return _stitch(raw_markdown, results)
+    captions = {i: images[i].caption for i in range(len(images)) if images[i].caption}
+    return _stitch(raw_markdown, results, captions)
 
 
 async def _prepare_image(raw_image: ExtractedImage, doc_name: str) -> ExtractedImage | None:
@@ -198,35 +263,38 @@ async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedI
         return None
 
 
-def _stitch(markdown: str, results: dict[int, ImageAnalysisResult]) -> str:
-    """Replace image placeholders with their analysed Markdown content.
+def _stitch(
+    markdown: str,
+    results: dict[int, ImageAnalysisResult],
+    captions: dict[int, str] | None = None,
+) -> str:
+    """Replace image placeholders with analysed Markdown content.
 
-    Matching is done by **sequential counter** rather than by the placeholder
-    URL.  MarkItDown may embed images as data URIs (``data:image/x-emf;...``)
-    rather than filenames (``image0.png``), so the URL cannot be used as a
-    reliable key.  Instead, the N-th ``![...](...)`` in the Markdown
-    corresponds to the N-th image extracted from the ZIP archive, and
-    ``results`` is keyed by that zero-based integer index.
-
-    Placeholders whose index has no entry in ``results`` (skipped or failed
-    images) are preserved verbatim so downstream tools can still reference
-    the original image.
+    Matching is done by sequential counter. Optionally prepends a
+    ``**Figure: <caption>**`` heading when a caption is available.
 
     Args:
-        markdown: Raw Markdown string containing ``![alt](url)`` placeholders.
+        markdown: Raw Markdown with ``![alt](url)`` placeholders.
         results: Mapping of sequential image index → analysis result.
+        captions: Optional mapping of sequential image index → caption text.
 
     Returns:
         Markdown with analysed placeholders replaced by their content.
     """
+    if captions is None:
+        captions = {}
     counter = 0
 
-    def _replace(match: re.Match) -> str:  # type: ignore[type-arg]
+    def _replace(match: re.Match[str]) -> str:
         nonlocal counter
         idx = counter
         counter += 1
         if idx in results and not results[idx].skipped:
-            return results[idx].markdown_content
+            content = results[idx].markdown_content
+            caption = captions.get(idx, "")
+            if caption:
+                return f"\n**Figure: {caption}**\n\n{content}"
+            return content
         return match.group(0)
 
     return _IMAGE_PLACEHOLDER_RE.sub(_replace, markdown)

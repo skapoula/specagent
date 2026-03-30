@@ -13,6 +13,17 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 if TYPE_CHECKING:
     from specagent.retrieval.docx_image_extractor import ExtractedImage
+from specagent.retrieval._vision_helpers import (
+    _KNOWN_DIAGRAM_TYPES,
+    _MERMAID_SUBTYPE,
+    _fix_mermaid_header,
+    _is_retryable,
+)
+from specagent.retrieval._vision_prompts import (
+    _RESPONSE_JSON_SCHEMA,
+    _SYSTEM_PROMPT,
+    _USER_MESSAGE_TEXT,
+)
 from specagent.retrieval.exceptions import ConfigurationError, VisionError
 from specagent.retrieval.groq_rate_limiter import _get_rate_limiter
 
@@ -20,23 +31,6 @@ logger = logging.getLogger(__name__)
 
 _GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-_KNOWN_IMAGE_TYPES = frozenset(["call_flow_diagram", "table", "screenshot_text", "other"])
-
-_VISION_PROMPT = (
-    "Analyze this image and respond with JSON only — no markdown wrapper, no explanation. "
-    "Classify it as exactly one of these types: "
-    "call_flow_diagram (a sequence diagram or call flow showing message exchanges between "
-    "network entities), "
-    "table (a table of data or parameters), "
-    "screenshot_text (a screenshot containing readable text), "
-    "or other (anything else). "
-    'Respond as a JSON object: {"type": "<class>", "content": "<extracted content>"}. '
-    "For call_flow_diagram: content MUST be a Mermaid DAG fenced code block: "
-    "```mermaid\\ngraph TD\\n  A[Entity A] -->|message| B[Entity B]\\n```. "
-    "For table: content must be a Markdown table. "
-    "For screenshot_text: content must be the extracted text as Markdown. "
-    "For other: content is a one-sentence plain-English description."
-)
 
 
 class ImageAnalysisResult(BaseModel):
@@ -49,13 +43,17 @@ class ImageAnalysisResult(BaseModel):
     """Extracted content: Mermaid DAG, Markdown table, plain text, or description."""
 
     image_type: str
-    """One of: ``call_flow_diagram``, ``table``, ``screenshot_text``, ``other``."""
+    """One of: call_flow, state_machine, block_diagram, flowchart, network_topology, table, screenshot_text, other."""
 
     skipped: bool = False
     """``True`` when the image was not sent to the API (size filter, unsupported type…)."""
 
     skip_reason: str = ""
     """Human-readable reason when ``skipped=True``."""
+
+    prose_fallback: str = ""
+    """One-sentence plain-English description of the image, always populated
+    for diagram types. Used as fallback when Mermaid validation fails."""
 
 
 async def analyze_image(
@@ -90,6 +88,10 @@ async def analyze_image(
 
     encoded = base64.b64encode(image.image_bytes).decode("ascii")
     data_url = f"data:{image.mime_type};base64,{encoded}"
+    _headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
 
     @retry(
         retry=retry_if_exception(_is_retryable),
@@ -99,30 +101,43 @@ async def analyze_image(
     )
     async def _call() -> ImageAnalysisResult:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            body: dict = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _USER_MESSAGE_TEXT},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url},
+                            },
+                        ],
+                    },
+                ],
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": _RESPONSE_JSON_SCHEMA,
+                },
+                "max_tokens": 1024,
+                "temperature": 0.0,
+            }
             response = await client.post(
-                _GROQ_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": _VISION_PROMPT},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": data_url},
-                                },
-                            ],
-                        }
-                    ],
-                    "max_tokens": 1024,
-                    "temperature": 0.0,
-                },
+                _GROQ_CHAT_URL, headers=_headers, json=body
             )
+            # Fallback: if Groq rejects response_format, retry without it
+            if (
+                response.status_code == 400
+                and "response_format" in response.text
+            ):
+                logger.warning(
+                    "response_format not supported by model; retrying without it"
+                )
+                body = {k: v for k, v in body.items() if k != "response_format"}
+                response = await client.post(
+                    _GROQ_CHAT_URL, headers=_headers, json=body
+                )
             response.raise_for_status()
 
         raw_content = response.json()["choices"][0]["message"]["content"]
@@ -138,6 +153,109 @@ async def analyze_image(
         ) from exc
 
 
+async def correct_mermaid_diagram(
+    image: ExtractedImage,
+    prior_attempt: str,
+    validation_errors: str,
+    diagram_type: str,
+    api_key: str,
+    model: str = _DEFAULT_MODEL,
+) -> ImageAnalysisResult:
+    """Re-submit an image with validation errors to obtain a corrected Mermaid diagram.
+
+    Sends a two-message conversation: system prompt + user message containing
+    the original image, the prior failed attempt, and the validation errors.
+    The diagram_type is locked — the model cannot reclassify the image.
+
+    Args:
+        image: The original ExtractedImage (re-sent for visual context).
+        prior_attempt: The Mermaid block that failed validation.
+        validation_errors: Human-readable description of the failures.
+        diagram_type: Locked image_type from the first analysis attempt.
+        api_key: Groq API key. Never logged.
+        model: Groq vision model identifier.
+
+    Returns:
+        ImageAnalysisResult with image_type locked to diagram_type.
+
+    Raises:
+        ConfigurationError: If api_key is empty.
+        VisionError: If the API call fails after retries.
+    """
+    if not api_key:
+        raise ConfigurationError(
+            "api_key must be non-empty to call the Groq vision API."
+        )
+
+    await _get_rate_limiter().acquire()
+
+    encoded = base64.b64encode(image.image_bytes).decode("ascii")
+    data_url = f"data:{image.mime_type};base64,{encoded}"
+
+    correction_text = (
+        f"This image was previously classified as '{diagram_type}'. "
+        f"A Mermaid diagram was generated but failed validation with these errors:\n\n"
+        f"{validation_errors}\n\n"
+        f"Previous attempt:\n{prior_attempt}\n\n"
+        f"Re-analyze the image and return a corrected Mermaid diagram of type "
+        f"'{diagram_type}'. Return the same JSON schema as before."
+    )
+
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        reraise=True,
+    )
+    async def _call() -> ImageAnalysisResult:
+        _headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        body: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": correction_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": data_url},
+                        },
+                    ],
+                },
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": _RESPONSE_JSON_SCHEMA,
+            },
+            "max_tokens": 1024,
+            "temperature": 0.0,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(_GROQ_CHAT_URL, headers=_headers, json=body)
+            if response.status_code == 400 and "response_format" in response.text:
+                body = {k: v for k, v in body.items() if k != "response_format"}
+                response = await client.post(_GROQ_CHAT_URL, headers=_headers, json=body)
+            response.raise_for_status()
+
+        raw_content = response.json()["choices"][0]["message"]["content"]
+        result = _parse_response(image.placeholder_name, raw_content)
+        # Lock diagram_type — correction cannot reclassify
+        return result.model_copy(update={"image_type": diagram_type})
+
+    try:
+        return await _call()
+    except (ConfigurationError, VisionError):
+        raise
+    except Exception as exc:
+        raise VisionError(
+            f"Correction API failed for {image.placeholder_name!r} after retries: {exc}"
+        ) from exc
+
+
 def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisResult:
     """Parse the model's text response into an ImageAnalysisResult.
 
@@ -147,9 +265,15 @@ def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisRes
     try:
         data = json.loads(raw_content)
         image_type = data.get("type", "other")
-        if image_type not in _KNOWN_IMAGE_TYPES:
+        if image_type not in _KNOWN_DIAGRAM_TYPES:
             image_type = "other"
         content = str(data.get("content", raw_content))
+        prose_fallback = str(data.get("prose_fallback", ""))
+
+        # For diagram types: ensure the Mermaid block uses the correct header keyword
+        if image_type in _MERMAID_SUBTYPE:
+            content = _fix_mermaid_header(content, _MERMAID_SUBTYPE[image_type])
+
     except (json.JSONDecodeError, AttributeError):
         logger.warning(
             "Non-JSON response from vision API for %r; treating as 'other'",
@@ -157,16 +281,11 @@ def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisRes
         )
         image_type = "other"
         content = raw_content
+        prose_fallback = ""
 
     return ImageAnalysisResult(
         placeholder_name=placeholder_name,
         markdown_content=content,
         image_type=image_type,
+        prose_fallback=prose_fallback,
     )
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    """Return ``True`` for transient HTTP errors that warrant a retry."""
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in (429, 503, 504)
-    return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError))

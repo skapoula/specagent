@@ -23,9 +23,9 @@ def _make_image(placeholder: str = "image0.png", n_bytes: int = 15 * 1024) -> "E
     )
 
 
-def _groq_response(image_type: str, content: str) -> dict:
+def _groq_response(image_type: str, content: str, prose_fallback: str = "") -> dict:
     """Build a minimal Groq chat completion response dict."""
-    payload = {"type": image_type, "content": content}
+    payload = {"type": image_type, "content": content, "prose_fallback": prose_fallback}
     return {
         "choices": [
             {
@@ -52,8 +52,8 @@ class TestAnalyzeImage:
 
     async def test_returns_mermaid_for_call_flow_diagram(self, httpx_mock) -> None:
         """Call flow diagrams produce a mermaid fenced block."""
-        mermaid_content = "```mermaid\ngraph TD\n  A-->B\n```"
-        httpx_mock.add_response(json=_groq_response("call_flow_diagram", mermaid_content))
+        mermaid_content = "```mermaid\nsequenceDiagram\n  A->>B: message\n```"
+        httpx_mock.add_response(json=_groq_response("call_flow", mermaid_content))
 
         from specagent.retrieval.groq_vision_client import analyze_image
 
@@ -63,7 +63,7 @@ class TestAnalyzeImage:
         ):
             result = await analyze_image(_make_image(), api_key="test-key")
 
-        assert result.image_type == "call_flow_diagram"
+        assert result.image_type == "call_flow"
         assert "mermaid" in result.markdown_content
         assert result.skipped is False
 
@@ -173,6 +173,98 @@ class TestAnalyzeImage:
 
         assert call_order[0] == "acquire"
 
+    async def test_api_request_uses_system_message(self, httpx_mock) -> None:
+        """analyze_image sends a system role message as the first messages entry."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured_body: list[dict] = []
+
+        def capture(request):
+            captured_body.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response("other", "A diagram.", "A diagram."),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import analyze_image
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await analyze_image(_make_image(), api_key="test-key")
+
+        assert captured_body[0]["messages"][0]["role"] == "system"
+
+    async def test_api_request_includes_response_format(self, httpx_mock) -> None:
+        """analyze_image includes response_format json_schema in request body."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured_body: list[dict] = []
+
+        def capture(request):
+            captured_body.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response("other", "A diagram.", "A diagram."),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import analyze_image
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await analyze_image(_make_image(), api_key="test-key")
+
+        assert captured_body[0]["response_format"]["type"] == "json_schema"
+
+    async def test_parse_response_populates_prose_fallback(self) -> None:
+        """prose_fallback field is extracted from JSON response."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({
+            "type": "call_flow",
+            "content": "```mermaid\nsequenceDiagram\n  A->>B: msg\n```",
+            "prose_fallback": "A call flow between A and B.",
+        })
+        result = _parse_response("image0.png", raw)
+        assert result.prose_fallback == "A call flow between A and B."
+
+    async def test_parse_response_prose_fallback_defaults_to_empty(self) -> None:
+        """prose_fallback is empty string when key absent from JSON."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({"type": "other", "content": "A logo."})
+        result = _parse_response("image0.png", raw)
+        assert result.prose_fallback == ""
+
+    async def test_parse_response_state_machine_returns_statediagram(self) -> None:
+        """state_machine type is recognised and returned as-is."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        content = "```mermaid\nstateDiagram-v2\n  [*] --> Idle\n```"
+        raw = json.dumps({"type": "state_machine", "content": content, "prose_fallback": "A state machine."})
+        result = _parse_response("image0.png", raw)
+        assert result.image_type == "state_machine"
+        assert "stateDiagram-v2" in result.markdown_content
+
+    async def test_parse_response_unknown_type_falls_back_to_other(self) -> None:
+        """Unrecognised type value is normalised to 'other'."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({"type": "banana", "content": "weird", "prose_fallback": ""})
+        result = _parse_response("image0.png", raw)
+        assert result.image_type == "other"
+
 
 @pytest.mark.unit
 class TestIsRetryable:
@@ -212,3 +304,130 @@ class TestIsRetryable:
         from specagent.retrieval.groq_vision_client import _is_retryable
 
         assert _is_retryable(ValueError("nope")) is False
+
+
+@pytest.mark.unit
+class TestCorrectMermaidDiagram:
+    """Tests for correct_mermaid_diagram()."""
+
+    async def test_correction_sends_system_message(self, httpx_mock) -> None:
+        """correct_mermaid_diagram sends a system role message."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured: list[dict] = []
+
+        def capture(request):
+            captured.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response(
+                    "call_flow",
+                    "```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```",
+                    "A corrected call flow.",
+                ),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        image = _make_image()
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await correct_mermaid_diagram(
+                image=image,
+                prior_attempt="```mermaid\nbadContent\n```",
+                validation_errors="Unknown diagram type.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        assert captured[0]["messages"][0]["role"] == "system"
+
+    async def test_correction_locks_diagram_type(self, httpx_mock) -> None:
+        """correct_mermaid_diagram does not reclassify — diagram_type is locked."""
+        httpx_mock.add_response(
+            json=_groq_response(
+                "other",  # model says "other"
+                "```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```",
+                "A call flow.",
+            )
+        )
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            result = await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="bad mermaid",
+                validation_errors="Missing fence.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        # Locked to call_flow regardless of what model returned
+        assert result.image_type == "call_flow"
+
+    async def test_correction_raises_configuration_error_for_empty_key(self) -> None:
+        """correct_mermaid_diagram raises ConfigurationError for empty api_key."""
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with pytest.raises(ConfigurationError, match="api_key"):
+            await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="bad",
+                validation_errors="error",
+                diagram_type="call_flow",
+                api_key="",
+            )
+
+    async def test_correction_includes_prior_attempt_in_user_message(
+        self, httpx_mock
+    ) -> None:
+        """The user message contains the prior_attempt text."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured: list[dict] = []
+
+        def capture(request):
+            captured.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response(
+                    "call_flow",
+                    "```mermaid\nsequenceDiagram\n  A->>B: ok\n  B-->>A: done\n```",
+                    "A fixed call flow.",
+                ),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="```mermaid\nBAD_DIAGRAM\n```",
+                validation_errors="Unknown type.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        user_content = captured[0]["messages"][1]["content"]
+        user_text = next(
+            (c["text"] for c in user_content if c.get("type") == "text"), ""
+        )
+        assert "BAD_DIAGRAM" in user_text
+        assert "Unknown type." in user_text

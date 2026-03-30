@@ -415,6 +415,67 @@ def make_docx_zip(images: list[tuple[str, bytes]] | None = None) -> bytes:
     return buf.getvalue()
 
 
+def make_docx_zip_with_caption(
+    image_filename: str,
+    image_bytes: bytes,
+    caption_text: str,
+) -> bytes:
+    """Build a minimal .docx ZIP with one image followed by a Caption paragraph.
+
+    word/document.xml contains a paragraph with a DrawingML a:blip (r:embed="rId1")
+    followed immediately by a Caption-style paragraph containing caption_text.
+
+    Args:
+        image_filename: Filename for the image in word/media/.
+        image_bytes: Raw bytes of the image file.
+        caption_text: Text content of the Caption-style paragraph.
+
+    Returns:
+        Raw bytes of a valid .docx ZIP archive.
+    """
+    _IMAGE_REL_TYPE = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    )
+    _PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+    _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    _R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<w:document xmlns:w="{_W}" xmlns:r="{_R}">'
+        "<w:body>"
+        "<w:p>"
+        "<w:r>"
+        f'<w:drawing><a:blip xmlns:a="{_A}" r:embed="rId1"/></w:drawing>'
+        "</w:r>"
+        "</w:p>"
+        "<w:p>"
+        "<w:pPr>"
+        '<w:pStyle w:val="Caption"/>'
+        "</w:pPr>"
+        "<w:r>"
+        f"<w:t>{caption_text}</w:t>"
+        "</w:r>"
+        "</w:p>"
+        "</w:body>"
+        "</w:document>"
+    )
+    rels_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<Relationships xmlns="{_PKG_REL_NS}">'
+        f'<Relationship Id="rId1" Type="{_IMAGE_REL_TYPE}"'
+        f' Target="media/{image_filename}"/>'
+        "</Relationships>"
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", document_xml)
+        zf.writestr("word/_rels/document.xml.rels", rels_xml)
+        zf.writestr(f"word/media/{image_filename}", image_bytes)
+    return buf.getvalue()
+
+
 @pytest.fixture
 def small_png() -> bytes:
     """PNG well below the 10 KB default min threshold (~100 bytes)."""

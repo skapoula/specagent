@@ -10,7 +10,7 @@
 
 Three improvements to the two-pass docx-to-Markdown OCR pipeline:
 
-1. **Caption-based image labeling** — extract MS Word caption text from docx XML and attach it to each image in the Markdown output.
+1. **Caption-based image labeling** — extract MS Word caption text from docx XML and attach it to each diagram's name when reinserted into the final Markdown output.
 2. **Structured Mermaid generation** — enforce JSON schema output from Groq VLM, expand diagram classification from 1 type to 5, use per-type few-shot examples.
 3. **Mermaid validation + correction loop** — validate generated Mermaid structurally before insertion; on failure, re-send to Groq with the original image and error details for one correction attempt before falling back to prose.
 
