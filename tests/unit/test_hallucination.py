@@ -718,20 +718,22 @@ class TestHallucinationCheckConditional:
         assert result["hallucination_check"] == "grounded"
 
     @patch("specagent.nodes.hallucination.get_llm")
-    def test_skip_check_missing_confidence_defaults_high(self, mock_create_llm):
-        """Test that missing confidence defaults to 1.0 and skips check if no numbers."""
+    def test_run_check_missing_confidence_defaults_low(self, mock_create_llm):
+        """Test that missing confidence defaults to 0.0 and triggers the check."""
         mock_llm = MagicMock()
+        mock_llm.invoke.return_value = '{"grounded": "yes", "ungrounded_claims": []}'
+        mock_llm.get_last_call.return_value = None
         mock_create_llm.return_value = mock_llm
 
         state = create_initial_state("Test question")
         state["generation"] = "Descriptive answer without numbers."
-        # Don't set average_confidence - should default to 1.0
+        # Don't set average_confidence — should default to 0.0 and force a check
         state["graded_chunks"] = []
 
         result = hallucination_check_node(state)
 
-        # Should skip check with default high confidence
-        mock_llm.invoke.assert_not_called()
+        # Default 0.0 is below all skip thresholds, so the LLM check must run.
+        mock_llm.invoke.assert_called_once()
         assert result["hallucination_check"] == "grounded"
 
     @patch("specagent.nodes.hallucination.get_llm")

@@ -19,8 +19,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from specagent.config import settings
 from specagent.graph.state import GraphState, create_initial_state
-
-logger = logging.getLogger(__name__)
 from specagent.nodes import (
     generator_node,
     grader_node,
@@ -29,6 +27,8 @@ from specagent.nodes import (
     rewriter_node,
     router_node,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_timed_node(
@@ -169,6 +169,12 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
     if hallucination_result == "not_grounded" and regeneration_count <= 1:
         return "regenerate"
 
+    # "partial" is intentionally not retried here. Retrying partial answers tends
+    # to produce marginally different outputs at higher token cost without reliably
+    # fixing the ungrounded claims. The "partial" status is surfaced to the caller
+    # via QueryResponse.hallucination_status so the user can judge. Do not "fix"
+    # this to also regenerate on "partial" — that risks an infinite loop if the
+    # model repeatedly returns "partial" on borderline content.
     return "finish"
 
 

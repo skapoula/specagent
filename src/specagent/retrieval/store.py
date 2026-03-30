@@ -241,7 +241,17 @@ class Store:
         return table
 
     def upsert_chunks(self, chunks: list[ChunkRecord], *, rebuild_fts: bool = True) -> None:
-        """Write a list of chunk records to the store.
+        """Append a list of chunk records to the store.
+
+        Despite the name, this method is **append-only** (``table.add``), not a
+        true upsert. Deduplication is the caller's responsibility — ``ingest()``
+        handles it via content-hash checks before calling this method. Calling
+        this method directly with duplicate ``id`` values will insert duplicate rows.
+
+        Thread safety: LanceDB does not support concurrent writes to the same table.
+        Do not call this method from multiple threads/coroutines simultaneously.
+        When using ``ingest_folder``, set ``max_concurrency=1`` or ensure external
+        serialisation to avoid write races during initial table creation.
 
         Args:
             chunks: Chunk records to insert.
