@@ -132,7 +132,7 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
         )
         return _GroqAdapter(chat_model)
 
-    elif provider == "custom_endpoint" or settings.use_custom_endpoint:
+    if provider == "custom_endpoint" or settings.use_custom_endpoint:
         if settings.use_custom_endpoint and provider != "custom_endpoint":
             warnings.warn(
                 "use_custom_endpoint=True is deprecated. Set llm_provider='custom_endpoint' instead.",
@@ -151,11 +151,10 @@ def create_llm(temperature: float | None = None) -> LLMProtocol:
             retry_delay=5.0,
         )
 
-    else:
-        raise ValueError(
-            f"Unknown llm_provider {provider!r}. "
-            "Set llm_provider='groq' or llm_provider='custom_endpoint'."
-        )
+    raise ValueError(
+        f"Unknown llm_provider {provider!r}. "
+        "Set llm_provider='groq' or llm_provider='custom_endpoint'."
+    )
 
 
 def check_llm_health(timeout: int = 30) -> tuple[bool, str]:

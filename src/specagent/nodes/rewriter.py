@@ -72,16 +72,13 @@ def rewriter_node(state: "GraphState") -> "GraphState":
     retrieved_chunks = state.get("retrieved_chunks", [])
 
     try:
-        # Build summary of retrieved chunks
+        # Build summary of retrieved chunks (first 5, truncated to 200 chars)
         if retrieved_chunks:
-            chunks_summary = "\n".join(
-                [
-                    f"- {chunk.content[:200]}..."
-                    if len(chunk.content) > 200
-                    else f"- {chunk.content}"
-                    for chunk in retrieved_chunks[:5]  # Limit to first 5 chunks
-                ]
-            )
+            lines = []
+            for chunk in retrieved_chunks[:5]:
+                preview = chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content
+                lines.append(f"- {preview}")
+            chunks_summary = "\n".join(lines)
         else:
             chunks_summary = "(No chunks retrieved)"
 

@@ -9,6 +9,7 @@ import json
 import logging
 import statistics
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -466,12 +467,9 @@ def run_benchmark(
         trace.info(f"  Difficulty: {question.difficulty}")
 
         try:
-            # Execute pipeline
-            import time
-
-            start_time = time.time()
+            start_time = time.perf_counter()
             state = run_query(question.question)
-            elapsed_ms = (time.time() - start_time) * 1000
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
 
             # Log router decision
             route_decision = state.get("route_decision", "unknown")
@@ -481,7 +479,7 @@ def run_benchmark(
                 trace.info(f"    Reasoning: {route_reasoning}")
 
             # Extract generated answer
-            generated_answer = state.get("generation", "")
+            generated_answer = state.get("generation") or ""
 
             # Handle errors or rejections
             if state.get("error"):
@@ -695,10 +693,6 @@ def run_benchmark(
         average_node_timings=average_node_timings,
     )
 
-    # Save results (output_path already created earlier)
-    # output_path = Path(output_dir)  # Already created above
-    # output_path.mkdir(parents=True, exist_ok=True)  # Already done
-
     # Save JSON
     json_filename = f"benchmark_{timestamp.replace(':', '-').split('.')[0]}.json"
     json_path = output_path / json_filename
@@ -809,11 +803,7 @@ Response:"""
         llm = get_llm()
         response = llm.invoke(prompt)
 
-        # Extract text from response
-        if hasattr(response, "content"):
-            response_text = response.content
-        else:
-            response_text = str(response)
+        response_text = str(response)
 
         # Check if response contains "yes"
         return "yes" in response_text.lower().strip()

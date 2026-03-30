@@ -99,15 +99,34 @@ def _contains_numerical_or_tabular_content(text: str) -> bool:
     # Pattern for markdown tables (lines with multiple | characters)
     table_pattern = re.compile(r"^[\s]*\|[^|]*\|[^|]*\|", re.MULTILINE)
 
-    # Check for numerical content (after removing citations)
     if number_pattern.search(text_without_citations):
         return True
 
-    # Check for table structures
-    if table_pattern.search(text):
-        return True
+    return bool(table_pattern.search(text))
 
-    return False
+
+_GROUNDED_MAP: dict[str, Literal["grounded", "not_grounded", "partial"]] = {
+    "yes": "grounded",
+    "no": "not_grounded",
+    "partial": "partial",
+}
+
+_NUMERICAL_SKIP_THRESHOLD = 0.65
+_NON_NUMERICAL_SKIP_THRESHOLD = 0.70
+
+
+def _format_sources(graded_chunks: list) -> str:
+    """Build the sources text for the hallucination prompt."""
+    relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
+    if not relevant_chunks:
+        return "(No source documents provided)"
+
+    source_parts = []
+    for chunk in relevant_chunks:
+        prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
+        spec_num = chunk.spec_id[len(prefix) :]
+        source_parts.append(f"[{prefix} {spec_num} §{chunk.section}]: {chunk.content}")
+    return "\n\n".join(source_parts)
 
 
 def hallucination_check_node(state: "GraphState") -> "GraphState":
@@ -125,12 +144,7 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     Returns:
         Updated state with hallucination_check result
     """
-    # Tracks whether an LLM call was made; only increment regeneration_count if so.
-    _check_ran = False
-
-    # Get generation and graded chunks from state
     generation = state.get("generation")
-    graded_chunks = state.get("graded_chunks", [])
 
     # Handle case where generation is None or empty
     if not generation or generation.strip() == "":
@@ -138,103 +152,36 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         state["ungrounded_claims"] = []
         return state
 
-    # Check if hallucination check should be skipped.
     # Default to 0.0 (force a check) — NOT 1.0, which would silently certify every
     # answer as grounded whenever average_confidence was never set by the grader.
     average_confidence = state.get("average_confidence", 0.0)
     has_numerical_content = _contains_numerical_or_tabular_content(generation)
+    skip_threshold = (
+        _NUMERICAL_SKIP_THRESHOLD if has_numerical_content else _NON_NUMERICAL_SKIP_THRESHOLD
+    )
 
-    # Determine skip threshold based on content type
-    # Lower threshold (0.65) for numerical claims, higher (0.7) for non-numerical
-    skip_threshold = 0.65 if has_numerical_content else 0.70
-
-    # Skip hallucination check if confidence is high enough
     if average_confidence >= skip_threshold:
         state["hallucination_check"] = "grounded"
         state["ungrounded_claims"] = []
         return state
 
-    # Get relevant chunks only
-    relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
-
-    # Handle case where no relevant chunks are available
-    # If there's a generation but no sources, it's likely ungrounded
-    if not relevant_chunks:
-        try:
-            # Initialize LLM (auto-selects based on config)
-            llm = get_llm()
-            _check_ran = True
-
-            # Format prompt with empty sources
-            prompt = HALLUCINATION_PROMPT.format(
-                sources="(No source documents provided)", answer=generation
-            )
-
-            # Call LLM to check for hallucinations
-            response = llm.invoke(prompt)
-            _call = llm.get_last_call()
-            if _call is not None:
-                _call.node = "hallucination_check"
-                _call.trace_id = state.get("trace_id", "")
-                state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
-            check_result = _parse_hallucination_json(response)
-
-            # Map HallucinationResult.grounded to state hallucination_check values
-            if check_result.grounded == "yes":
-                state["hallucination_check"] = "grounded"
-            elif check_result.grounded == "no":
-                state["hallucination_check"] = "not_grounded"
-            else:  # partial
-                state["hallucination_check"] = "partial"
-
-            state["ungrounded_claims"] = check_result.ungrounded_claims
-
-        except Exception as e:
-            logger.error("Hallucination check error (no sources path): %s", e)
-            state["error"] = f"Hallucination check error: {e!s}"
-            state["hallucination_check"] = "grounded"
-            state["ungrounded_claims"] = []
-
-        if _check_ran:
-            state["regeneration_count"] = state.get("regeneration_count", 0) + 1
-        return state
-
+    check_ran = False
     try:
-        # Format chunks into sources string
-        source_parts = []
-        for chunk in relevant_chunks:
-            # Format: [TS XX.XXX §Y.Z] or [TR XX.XXX §Y.Z]: content
-            prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
-            spec_num = chunk.spec_id[len(prefix):]
-            source_ref = f"[{prefix} {spec_num} §{chunk.section}]"
-            source_parts.append(f"{source_ref}: {chunk.content}")
-
-        sources = "\n\n".join(source_parts)
-
-        # Initialize LLM (auto-selects based on config)
-        llm = get_llm()
-        _check_ran = True
-
-        # Format prompt with sources and answer
+        sources = _format_sources(state.get("graded_chunks", []))
         prompt = HALLUCINATION_PROMPT.format(sources=sources, answer=generation)
 
-        # Call LLM to check for hallucinations
+        llm = get_llm()
+        check_ran = True
+
         response = llm.invoke(prompt)
         _call = llm.get_last_call()
         if _call is not None:
             _call.node = "hallucination_check"
             _call.trace_id = state.get("trace_id", "")
             state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+
         result = _parse_hallucination_json(response)
-
-        # Map HallucinationResult.grounded to state hallucination_check values
-        if result.grounded == "yes":
-            state["hallucination_check"] = "grounded"
-        elif result.grounded == "no":
-            state["hallucination_check"] = "not_grounded"
-        else:  # partial
-            state["hallucination_check"] = "partial"
-
+        state["hallucination_check"] = _GROUNDED_MAP[result.grounded]
         state["ungrounded_claims"] = result.ungrounded_claims
 
     except Exception as e:
@@ -243,6 +190,6 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         state["hallucination_check"] = "grounded"
         state["ungrounded_claims"] = []
 
-    if _check_ran:
+    if check_ran:
         state["regeneration_count"] = state.get("regeneration_count", 0) + 1
     return state
