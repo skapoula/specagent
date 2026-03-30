@@ -30,14 +30,12 @@ _IMAGE_PLACEHOLDER_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # MIME types accepted by the Groq vision API.
 # Windows vector formats (EMF, WMF) and other non-web-native types are excluded —
 # the API returns a 400 for them, which is non-retryable and wastes quota.
-_VISION_SUPPORTED_MIME_TYPES = frozenset(
-    [
-        "image/png",
-        "image/jpeg",
-        "image/gif",
-        "image/webp",
-    ]
-)
+_VISION_SUPPORTED_MIME_TYPES = frozenset([
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+])
 
 _DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
     "call_flow",
