@@ -304,3 +304,130 @@ class TestIsRetryable:
         from specagent.retrieval.groq_vision_client import _is_retryable
 
         assert _is_retryable(ValueError("nope")) is False
+
+
+@pytest.mark.unit
+class TestCorrectMermaidDiagram:
+    """Tests for correct_mermaid_diagram()."""
+
+    async def test_correction_sends_system_message(self, httpx_mock) -> None:
+        """correct_mermaid_diagram sends a system role message."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured: list[dict] = []
+
+        def capture(request):
+            captured.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response(
+                    "call_flow",
+                    "```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```",
+                    "A corrected call flow.",
+                ),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        image = _make_image()
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await correct_mermaid_diagram(
+                image=image,
+                prior_attempt="```mermaid\nbadContent\n```",
+                validation_errors="Unknown diagram type.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        assert captured[0]["messages"][0]["role"] == "system"
+
+    async def test_correction_locks_diagram_type(self, httpx_mock) -> None:
+        """correct_mermaid_diagram does not reclassify — diagram_type is locked."""
+        httpx_mock.add_response(
+            json=_groq_response(
+                "other",  # model says "other"
+                "```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```",
+                "A call flow.",
+            )
+        )
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            result = await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="bad mermaid",
+                validation_errors="Missing fence.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        # Locked to call_flow regardless of what model returned
+        assert result.image_type == "call_flow"
+
+    async def test_correction_raises_configuration_error_for_empty_key(self) -> None:
+        """correct_mermaid_diagram raises ConfigurationError for empty api_key."""
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with pytest.raises(ConfigurationError, match="api_key"):
+            await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="bad",
+                validation_errors="error",
+                diagram_type="call_flow",
+                api_key="",
+            )
+
+    async def test_correction_includes_prior_attempt_in_user_message(
+        self, httpx_mock
+    ) -> None:
+        """The user message contains the prior_attempt text."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured: list[dict] = []
+
+        def capture(request):
+            captured.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response(
+                    "call_flow",
+                    "```mermaid\nsequenceDiagram\n  A->>B: ok\n  B-->>A: done\n```",
+                    "A fixed call flow.",
+                ),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import correct_mermaid_diagram
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await correct_mermaid_diagram(
+                image=_make_image(),
+                prior_attempt="```mermaid\nBAD_DIAGRAM\n```",
+                validation_errors="Unknown type.",
+                diagram_type="call_flow",
+                api_key="test-key",
+            )
+
+        user_content = captured[0]["messages"][1]["content"]
+        user_text = next(
+            (c["text"] for c in user_content if c.get("type") == "text"), ""
+        )
+        assert "BAD_DIAGRAM" in user_text
+        assert "Unknown type." in user_text
