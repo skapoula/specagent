@@ -372,6 +372,19 @@ class Settings(BaseSettings):
         le=10,
         description="Maximum tenacity retries for transient Groq vision API errors.",
     )
+    vision_diagram_types: list[str] = Field(
+        default=[
+            "call_flow",
+            "state_machine",
+            "block_diagram",
+            "flowchart",
+            "network_topology",
+        ],
+        description=(
+            "Diagram types for which Mermaid output is requested from the vision model. "
+            "Env var: VISION_DIAGRAM_TYPES (comma-separated)."
+        ),
+    )
 
     # ==========================================================================
     # Validators
