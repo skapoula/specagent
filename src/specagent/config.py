@@ -387,6 +387,28 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================================
+    # Mermaid Validation Configuration
+    # ==========================================================================
+    mermaid_validate_with_mmdc: bool = Field(
+        default=False,
+        description=(
+            "Enable Tier 2 Mermaid validation via mmdc subprocess. "
+            "Requires @mermaid-js/mermaid-cli to be installed on PATH. "
+            "Env var: MERMAID_VALIDATE_WITH_MMDC."
+        ),
+    )
+    mermaid_mmdc_timeout: int = Field(
+        default=10,
+        ge=1,
+        le=120,
+        description=(
+            "Timeout in seconds for mmdc subprocess validation. "
+            "Timeouts are treated as valid (tool absence must not fail pipeline). "
+            "Env var: MERMAID_MMDC_TIMEOUT."
+        ),
+    )
+
+    # ==========================================================================
     # Validators
     # ==========================================================================
     @field_validator("chunk_overlap_tokens")
