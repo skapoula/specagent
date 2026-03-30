@@ -48,6 +48,17 @@ _DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
 ])
 
 
+def _prose_fallback_result(
+    result: ImageAnalysisResult, placeholder_name: str
+) -> ImageAnalysisResult:
+    """Return result with markdown_content replaced by prose_fallback or a marker."""
+    fallback = (
+        result.prose_fallback
+        or f"_[Diagram: {placeholder_name} — validation failed]_"
+    )
+    return result.model_copy(update={"markdown_content": fallback})
+
+
 async def _apply_mermaid_validation(
     result: ImageAnalysisResult,
     image: ExtractedImage,
@@ -67,10 +78,6 @@ async def _apply_mermaid_validation(
         reason,
     )
 
-    def _prose_fallback() -> ImageAnalysisResult:
-        fb = result.prose_fallback or f"_[Diagram: {image.placeholder_name} — validation failed]_"
-        return result.model_copy(update={"markdown_content": fb})
-
     try:
         corrected = await correct_mermaid_diagram(
             image=image,
@@ -82,7 +89,7 @@ async def _apply_mermaid_validation(
     except VisionError as exc:
         logger.warning("Correction API call failed for %s: %s — using prose fallback",
                        image.placeholder_name, exc)
-        return _prose_fallback()
+        return _prose_fallback_result(result, image.placeholder_name)
 
     valid2, reason2 = validate_mermaid(corrected.markdown_content)
     if valid2:
@@ -90,7 +97,7 @@ async def _apply_mermaid_validation(
 
     logger.warning("Corrected Mermaid still invalid for %s: %s — using prose fallback",
                    image.placeholder_name, reason2)
-    return _prose_fallback()
+    return _prose_fallback_result(corrected, image.placeholder_name)
 
 
 async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
