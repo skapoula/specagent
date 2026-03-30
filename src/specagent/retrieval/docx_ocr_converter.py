@@ -15,7 +15,12 @@ from specagent.retrieval.converter import convert
 from specagent.retrieval.docx_image_extractor import ExtractedImage, extract_images
 from specagent.retrieval.emf_converter import EMF_MIME_TYPES, convert_emf_to_jpeg
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError, VisionError
-from specagent.retrieval.groq_vision_client import ImageAnalysisResult, analyze_image
+from specagent.retrieval.groq_vision_client import (
+    ImageAnalysisResult,
+    analyze_image,
+    correct_mermaid_diagram,
+)
+from specagent.retrieval.mermaid_validator import validate_mermaid
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,59 @@ _VISION_SUPPORTED_MIME_TYPES = frozenset(
         "image/webp",
     ]
 )
+
+_DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
+    "call_flow",
+    "state_machine",
+    "block_diagram",
+    "flowchart",
+    "network_topology",
+])
+
+
+async def _apply_mermaid_validation(
+    result: ImageAnalysisResult,
+    image: ExtractedImage,
+    api_key: str,
+) -> ImageAnalysisResult:
+    """Validate and optionally correct Mermaid content; fall back to prose on failure."""
+    if result.image_type not in _DIAGRAM_TYPES_REQUIRING_VALIDATION:
+        return result
+
+    valid, reason = validate_mermaid(result.markdown_content)
+    if valid:
+        return result
+
+    logger.warning(
+        "Mermaid validation failed for %s: %s — requesting correction from VLM",
+        image.placeholder_name,
+        reason,
+    )
+
+    def _prose_fallback() -> ImageAnalysisResult:
+        fb = result.prose_fallback or f"_[Diagram: {image.placeholder_name} — validation failed]_"
+        return result.model_copy(update={"markdown_content": fb})
+
+    try:
+        corrected = await correct_mermaid_diagram(
+            image=image,
+            prior_attempt=result.markdown_content,
+            validation_errors=reason,
+            diagram_type=result.image_type,
+            api_key=api_key,
+        )
+    except VisionError as exc:
+        logger.warning("Correction API call failed for %s: %s — using prose fallback",
+                       image.placeholder_name, exc)
+        return _prose_fallback()
+
+    valid2, reason2 = validate_mermaid(corrected.markdown_content)
+    if valid2:
+        return corrected
+
+    logger.warning("Corrected Mermaid still invalid for %s: %s — using prose fallback",
+                   image.placeholder_name, reason2)
+    return _prose_fallback()
 
 
 async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
@@ -95,6 +153,7 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
             continue
         try:
             result = await analyze_image(image, api_key=api_key)
+            result = await _apply_mermaid_validation(result, image, api_key)
             results[idx] = result
             logger.info(
                 "Analysed %s (index %d) in %s: type=%s",

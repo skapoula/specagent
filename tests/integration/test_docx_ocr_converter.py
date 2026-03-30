@@ -149,6 +149,16 @@ class TestConvertDocxWithOcr:
                 "specagent.retrieval.docx_ocr_converter.analyze_image",
                 analyze_mock,
             ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                AsyncMock(
+                    return_value=_make_result(
+                        "image0.png",
+                        "```mermaid\nsequenceDiagram\n  A->>B: EMF diagram content\n```",
+                        "call_flow",
+                    )
+                ),
+            ),
         ):
             p = tmp_path / "emf_doc.docx"
             p.write_bytes(make_docx_zip())
@@ -423,6 +433,16 @@ class TestConvertDocxWithOcr:
                 "specagent.retrieval.docx_ocr_converter.analyze_image",
                 analyze_mock,
             ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                AsyncMock(
+                    return_value=_make_result(
+                        "image0.png",
+                        "```mermaid\nsequenceDiagram\n  A->>B: IANA EMF content\n```",
+                        "call_flow",
+                    )
+                ),
+            ),
         ):
             p = tmp_path / "iana_emf.docx"
             p.write_bytes(make_docx_zip())
@@ -492,6 +512,16 @@ class TestConvertDocxWithOcr:
             patch(
                 "specagent.retrieval.docx_ocr_converter.analyze_image",
                 analyze_mock,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                AsyncMock(
+                    return_value=_make_result(
+                        "image0.png",
+                        "```mermaid\nsequenceDiagram\n  A->>B: OCR content from data URI\n```",
+                        "call_flow",
+                    )
+                ),
             ),
         ):
             result = await convert_docx_with_ocr(docx_one_image, api_key="key")
@@ -610,6 +640,154 @@ class TestConvertDocxWithOcr:
 
         assert "**Figure:" not in result
         assert "content" in result
+
+    async def test_invalid_mermaid_triggers_correction_call(
+        self, docx_one_image: Path
+    ) -> None:
+        """When analyze_image returns invalid Mermaid, correct_mermaid_diagram is called once."""
+        from specagent.retrieval.groq_vision_client import ImageAnalysisResult
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        bad_result = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content="```mermaid\nBADCONTENT\n```",
+            image_type="call_flow",
+            prose_fallback="A call flow diagram.",
+        )
+        good_result = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content="```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```",
+            image_type="call_flow",
+            prose_fallback="A call flow diagram.",
+        )
+        correction_mock = AsyncMock(return_value=good_result)
+
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=bad_result),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                correction_mock,
+            ),
+        ):
+            result = await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        correction_mock.assert_called_once()
+        assert "sequenceDiagram" in result
+
+    async def test_valid_mermaid_skips_correction(
+        self, docx_one_image: Path
+    ) -> None:
+        """When first Mermaid result is valid, correct_mermaid_diagram is never called."""
+        from specagent.retrieval.groq_vision_client import ImageAnalysisResult
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        good_result = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content=(
+                "```mermaid\nsequenceDiagram\n  UE->>gNB: attach\n  gNB-->>UE: ok\n```"
+            ),
+            image_type="call_flow",
+            prose_fallback="Attach procedure.",
+        )
+        correction_mock = AsyncMock()
+
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=good_result),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                correction_mock,
+            ),
+        ):
+            await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        correction_mock.assert_not_called()
+
+    async def test_correction_failure_falls_back_to_prose(
+        self, docx_one_image: Path
+    ) -> None:
+        """When corrected Mermaid is still invalid, prose_fallback is used."""
+        from specagent.retrieval.groq_vision_client import ImageAnalysisResult
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        bad_result = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content="```mermaid\nBADCONTENT\n```",
+            image_type="call_flow",
+            prose_fallback="A network call flow showing UE and gNB.",
+        )
+        still_bad = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content="```mermaid\nSTILLBAD\n```",
+            image_type="call_flow",
+            prose_fallback="A network call flow showing UE and gNB.",
+        )
+
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=bad_result),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                AsyncMock(return_value=still_bad),
+            ),
+        ):
+            result = await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        assert "A network call flow showing UE and gNB." in result
+        assert "STILLBAD" not in result
+
+    async def test_non_diagram_type_skips_validation(
+        self, docx_one_image: Path
+    ) -> None:
+        """table and screenshot_text results pass through without validation."""
+        from specagent.retrieval.groq_vision_client import ImageAnalysisResult
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        table_result = ImageAnalysisResult(
+            placeholder_name="image0.png",
+            markdown_content="| Col A | Col B |\n|---|---|\n| 1 | 2 |",
+            image_type="table",
+            prose_fallback="A parameter table.",
+        )
+        correction_mock = AsyncMock()
+
+        with (
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="![image](image0.png)",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                AsyncMock(return_value=table_result),
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.correct_mermaid_diagram",
+                correction_mock,
+            ),
+        ):
+            result = await convert_docx_with_ocr(docx_one_image, api_key="key")
+
+        correction_mock.assert_not_called()
+        assert "| Col A |" in result
 
     async def test_index_matching_independent_of_placeholder_url(
         self, tmp_path: Path, large_png: bytes
