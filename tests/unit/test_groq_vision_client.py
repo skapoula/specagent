@@ -23,9 +23,9 @@ def _make_image(placeholder: str = "image0.png", n_bytes: int = 15 * 1024) -> "E
     )
 
 
-def _groq_response(image_type: str, content: str) -> dict:
+def _groq_response(image_type: str, content: str, prose_fallback: str = "") -> dict:
     """Build a minimal Groq chat completion response dict."""
-    payload = {"type": image_type, "content": content}
+    payload = {"type": image_type, "content": content, "prose_fallback": prose_fallback}
     return {
         "choices": [
             {
@@ -172,6 +172,98 @@ class TestAnalyzeImage:
             await analyze_image(_make_image(), api_key="test-key")
 
         assert call_order[0] == "acquire"
+
+    async def test_api_request_uses_system_message(self, httpx_mock) -> None:
+        """analyze_image sends a system role message as the first messages entry."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured_body: list[dict] = []
+
+        def capture(request):
+            captured_body.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response("other", "A diagram.", "A diagram."),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import analyze_image
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await analyze_image(_make_image(), api_key="test-key")
+
+        assert captured_body[0]["messages"][0]["role"] == "system"
+
+    async def test_api_request_includes_response_format(self, httpx_mock) -> None:
+        """analyze_image includes response_format json_schema in request body."""
+        import json as _json
+
+        import httpx as _httpx
+
+        captured_body: list[dict] = []
+
+        def capture(request):
+            captured_body.append(_json.loads(request.content))
+            return _httpx.Response(
+                200,
+                json=_groq_response("other", "A diagram.", "A diagram."),
+            )
+
+        httpx_mock.add_callback(capture)
+
+        from specagent.retrieval.groq_vision_client import analyze_image
+
+        with patch(
+            "specagent.retrieval.groq_vision_client._get_rate_limiter",
+            return_value=MagicMock(acquire=AsyncMock()),
+        ):
+            await analyze_image(_make_image(), api_key="test-key")
+
+        assert captured_body[0]["response_format"]["type"] == "json_schema"
+
+    async def test_parse_response_populates_prose_fallback(self) -> None:
+        """prose_fallback field is extracted from JSON response."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({
+            "type": "call_flow",
+            "content": "```mermaid\nsequenceDiagram\n  A->>B: msg\n```",
+            "prose_fallback": "A call flow between A and B.",
+        })
+        result = _parse_response("image0.png", raw)
+        assert result.prose_fallback == "A call flow between A and B."
+
+    async def test_parse_response_prose_fallback_defaults_to_empty(self) -> None:
+        """prose_fallback is empty string when key absent from JSON."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({"type": "other", "content": "A logo."})
+        result = _parse_response("image0.png", raw)
+        assert result.prose_fallback == ""
+
+    async def test_parse_response_state_machine_returns_statediagram(self) -> None:
+        """state_machine type is recognised and returned as-is."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        content = "```mermaid\nstateDiagram-v2\n  [*] --> Idle\n```"
+        raw = json.dumps({"type": "state_machine", "content": content, "prose_fallback": "A state machine."})
+        result = _parse_response("image0.png", raw)
+        assert result.image_type == "state_machine"
+        assert "stateDiagram-v2" in result.markdown_content
+
+    async def test_parse_response_unknown_type_falls_back_to_other(self) -> None:
+        """Unrecognised type value is normalised to 'other'."""
+        from specagent.retrieval.groq_vision_client import _parse_response
+
+        raw = json.dumps({"type": "banana", "content": "weird", "prose_fallback": ""})
+        result = _parse_response("image0.png", raw)
+        assert result.image_type == "other"
 
 
 @pytest.mark.unit

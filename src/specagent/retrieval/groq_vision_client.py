@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 import httpx
@@ -13,6 +14,11 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 if TYPE_CHECKING:
     from specagent.retrieval.docx_image_extractor import ExtractedImage
+from specagent.retrieval._vision_prompts import (
+    _RESPONSE_JSON_SCHEMA,
+    _SYSTEM_PROMPT,
+    _USER_MESSAGE_TEXT,
+)
 from specagent.retrieval.exceptions import ConfigurationError, VisionError
 from specagent.retrieval.groq_rate_limiter import _get_rate_limiter
 
@@ -39,28 +45,6 @@ _MERMAID_SUBTYPE: dict[str, str] = {
     "network_topology": "graph LR",
 }
 
-_VISION_PROMPT = (
-    "Analyze this image and respond with JSON only — no markdown wrapper, no explanation. "
-    "Classify it as exactly one of these types: "
-    "call_flow (a sequence diagram or call flow showing message exchanges between "
-    "network entities), "
-    "state_machine (a state diagram showing state transitions), "
-    "block_diagram (a block or box diagram), "
-    "flowchart (a flowchart showing process flow), "
-    "network_topology (a network topology diagram), "
-    "table (a table of data or parameters), "
-    "screenshot_text (a screenshot containing readable text), "
-    "or other (anything else). "
-    'Respond as a JSON object: {"type": "<class>", "content": "<extracted content>"}. '
-    "For call_flow: content MUST be a Mermaid sequenceDiagram fenced code block: "
-    "```mermaid\\nsequenceDiagram\\n  participant A\\n  participant B\\n  A->>B: message\\n```. "
-    "For state_machine: content must be a Mermaid stateDiagram-v2 code block. "
-    "For block_diagram, flowchart, network_topology: content must be a Mermaid graph. "
-    "For table: content must be a Markdown table. "
-    "For screenshot_text: content must be the extracted text as Markdown. "
-    "For other: content is a one-sentence plain-English description."
-)
-
 
 class ImageAnalysisResult(BaseModel):
     """Result of analysing a single image via the Groq vision API."""
@@ -79,6 +63,10 @@ class ImageAnalysisResult(BaseModel):
 
     skip_reason: str = ""
     """Human-readable reason when ``skipped=True``."""
+
+    prose_fallback: str = ""
+    """One-sentence plain-English description of the image, always populated
+    for diagram types. Used as fallback when Mermaid validation fails."""
 
 
 async def analyze_image(
@@ -113,6 +101,10 @@ async def analyze_image(
 
     encoded = base64.b64encode(image.image_bytes).decode("ascii")
     data_url = f"data:{image.mime_type};base64,{encoded}"
+    _headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
 
     @retry(
         retry=retry_if_exception(_is_retryable),
@@ -122,30 +114,43 @@ async def analyze_image(
     )
     async def _call() -> ImageAnalysisResult:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            body: dict = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _USER_MESSAGE_TEXT},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url},
+                            },
+                        ],
+                    },
+                ],
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": _RESPONSE_JSON_SCHEMA,
+                },
+                "max_tokens": 1024,
+                "temperature": 0.0,
+            }
             response = await client.post(
-                _GROQ_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": _VISION_PROMPT},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": data_url},
-                                },
-                            ],
-                        }
-                    ],
-                    "max_tokens": 1024,
-                    "temperature": 0.0,
-                },
+                _GROQ_CHAT_URL, headers=_headers, json=body
             )
+            # Fallback: if Groq rejects response_format, retry without it
+            if (
+                response.status_code == 400
+                and "response_format" in response.text
+            ):
+                logger.warning(
+                    "response_format not supported by model; retrying without it"
+                )
+                body = {k: v for k, v in body.items() if k != "response_format"}
+                response = await client.post(
+                    _GROQ_CHAT_URL, headers=_headers, json=body
+                )
             response.raise_for_status()
 
         raw_content = response.json()["choices"][0]["message"]["content"]
@@ -173,6 +178,12 @@ def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisRes
         if image_type not in _KNOWN_DIAGRAM_TYPES:
             image_type = "other"
         content = str(data.get("content", raw_content))
+        prose_fallback = str(data.get("prose_fallback", ""))
+
+        # For diagram types: ensure the Mermaid block uses the correct header keyword
+        if image_type in _MERMAID_SUBTYPE:
+            content = _fix_mermaid_header(content, _MERMAID_SUBTYPE[image_type])
+
     except (json.JSONDecodeError, AttributeError):
         logger.warning(
             "Non-JSON response from vision API for %r; treating as 'other'",
@@ -180,12 +191,35 @@ def _parse_response(placeholder_name: str, raw_content: str) -> ImageAnalysisRes
         )
         image_type = "other"
         content = raw_content
+        prose_fallback = ""
 
     return ImageAnalysisResult(
         placeholder_name=placeholder_name,
         markdown_content=content,
         image_type=image_type,
+        prose_fallback=prose_fallback,
     )
+
+
+def _fix_mermaid_header(content: str, expected_header: str) -> str:
+    """Ensure a Mermaid fenced block starts with the expected diagram header keyword.
+
+    If content is already correct, returns it unchanged.
+    If the first non-empty line inside the fence is wrong, replaces it.
+    """
+    fence_match = re.match(r"```mermaid\n([\s\S]*?)```\s*$", content.strip())
+    if not fence_match:
+        return content  # Not a fenced block — leave for validator to catch
+    inner = fence_match.group(1)
+    lines = inner.split("\n")
+    expected_keyword = expected_header.split()[0]  # e.g. "graph" from "graph LR"
+    for i, line in enumerate(lines):
+        if line.strip():
+            if not line.strip().startswith(expected_keyword):
+                lines[i] = expected_header
+                return f"```mermaid\n{chr(10).join(lines)}```"
+            break
+    return content
 
 
 def _is_retryable(exc: BaseException) -> bool:
