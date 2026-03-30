@@ -138,8 +138,10 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         state["ungrounded_claims"] = []
         return state
 
-    # Check if hallucination check should be skipped
-    average_confidence = state.get("average_confidence", 1.0)
+    # Check if hallucination check should be skipped.
+    # Default to 0.0 (force a check) — NOT 1.0, which would silently certify every
+    # answer as grounded whenever average_confidence was never set by the grader.
+    average_confidence = state.get("average_confidence", 0.0)
     has_numerical_content = _contains_numerical_or_tabular_content(generation)
 
     # Determine skip threshold based on content type
@@ -201,8 +203,10 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         # Format chunks into sources string
         source_parts = []
         for chunk in relevant_chunks:
-            # Format: [TS XX.XXX §Y.Z]: content
-            source_ref = f"[TS {chunk.spec_id.replace('TS', '', 1)} §{chunk.section}]"
+            # Format: [TS XX.XXX §Y.Z] or [TR XX.XXX §Y.Z]: content
+            prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
+            spec_num = chunk.spec_id[len(prefix):]
+            source_ref = f"[{prefix} {spec_num} §{chunk.section}]"
             source_parts.append(f"{source_ref}: {chunk.content}")
 
         sources = "\n\n".join(source_parts)

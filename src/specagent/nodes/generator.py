@@ -81,8 +81,10 @@ def generator_node(state: "GraphState") -> "GraphState":
         # Format chunks into context string with source metadata and numbering
         context_parts = []
         for idx, chunk in enumerate(relevant_chunks, start=1):
-            # Format: **Chunk N** [TS XX.XXX §Y.Z]: content
-            source_ref = f"[TS {chunk.spec_id.replace('TS', '', 1)} §{chunk.section}]"
+            # Format: **Chunk N** [TS XX.XXX §Y.Z] or [TR XX.XXX §Y.Z]: content
+            prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
+            spec_num = chunk.spec_id[len(prefix):]
+            source_ref = f"[{prefix} {spec_num} §{chunk.section}]"
             context_parts.append(f"**Chunk {idx}** {source_ref}:\n{chunk.content}")
 
         context = "\n\n".join(context_parts)
