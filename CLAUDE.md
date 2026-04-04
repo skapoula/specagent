@@ -1,15 +1,12 @@
 # SpecAgent
 
+> **Scope:** PROJECT-LEVEL — inherits org-wide policy from `/workspace/CLAUDE.md`.
+> Rules here extend or override global where they conflict.
+> Personal overrides go in `CLAUDE.local.md` (auto-gitignored).
+
+<!-- Global context loaded automatically via directory traversal — no import needed. -->
+
 Agentic RAG system for 3GPP telecommunications specifications. Helps telecom engineers query Release 18 specs using natural language.
-
-## Coding Rules
-
-See `.claude/rules/` for domain-specific guidelines:
-- `api.md` - FastAPI endpoint patterns
-- `langgraph.md` - LangGraph node implementation
-- `testing.md` - Test-first development standards
-
-Claude reads relevant rules automatically when working in those areas.
 
 ## Project Goal
 
@@ -54,13 +51,15 @@ src/specagent/
 │   └── models.py     # QueryRequest, QueryResponse, HealthResponse Pydantic schemas
 ├── observability/
 │   ├── models.py     # LLMCallRecord, RetrievalRecord, QueryEvent
-│   └── journal.py    # Thread-safe rotating JSONL journal (QueryJournal)
+│   ├── journal.py    # Thread-safe rotating JSONL journal (QueryJournal)
+│   └── report.py     # build_query_report() / log_report(): per-query metrics summary
 ├── evaluation/
 │   ├── benchmark.py  # TSpec-LLM runner + LLM judge, JSON+MD report output
 │   └── metrics.py    # RAGAS metrics
 └── tracing/
     ├── phoenix.py    # Arize Phoenix + OpenTelemetry setup
-    └── langsmith.py  # LangSmith tracing setup
+    ├── langsmith.py  # LangSmith tracing setup
+    └── rag_spans.py  # emit_retrieval_span(), emit_llm_usage_span(), emit_query_span()
 ```
 
 ## Commands
@@ -141,6 +140,22 @@ model = settings.embedding_model
 ### Per-Request Overrides
 Pass `max_rewrites_override` and `library_filter` in initial state to override global settings per query. The API exposes both via `QueryRequest.max_rewrites` and `QueryRequest.library`.
 
+## Environment
+
+Required:
+```bash
+GROQ_API_KEY=...                  # LLM backend (Groq cloud)
+```
+
+Optional (observability):
+```bash
+LANGCHAIN_API_KEY=...             # LangSmith tracing
+LANGCHAIN_TRACING_V2=true
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006  # Arize Phoenix (default: docker-compose)
+```
+
+See `config.py` for the full list of settings and their defaults. All settings are configurable via environment variables or a `.env` file.
+
 ## Constraints
 
 - **Memory**: 4GB RAM limit (k8s pod constraint)
@@ -153,8 +168,26 @@ Pass `max_rewrites_override` and `library_filter` in initial state to override g
 - Mock external APIs with `pytest-httpx`
 - Mark tests: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.e2e`
 
+## Do Not
+
+Extends global Do Not. Project-specific hard rules:
+
+| Rule | Reason |
+|---|---|
+| **No LLM calls outside LangGraph nodes** | Business logic in ad-hoc LLM calls bypasses tracing, state management, and retry logic |
+| **No bypassing grader thresholds** (0.55/0.82) | These were tuned for recall/precision balance on the TSpec-LLM benchmark — changing them requires re-evaluation |
+| **No real network calls in tests** | Use `pytest-httpx` to mock Groq/embedding endpoints — tests must pass offline |
+| **No writing to the user's real LanceDB in tests** | Always use `tmp_path` fixtures from `conftest.py` |
+| **No changing `EMBEDDING_MODEL`** without a full re-index | Embeddings from different models are incompatible; search silently returns garbage |
+| **No `print()` in `src/`** | Use `logging.getLogger(__name__)` — print pollutes structured logs and breaks stdio-based tooling |
+| **No skipping `specagent download-model`** on a fresh env | fastembed downloads the ONNX model on first use, which blocks the first query for 30+ seconds |
+
+---
+
 ## References
 
 - PRD: See `docs/prd-3gpp-agentic-rag.md` for full requirements
 - Evaluation: See `docs/prd-evaluation-addendum.md` for testing strategy
 - Development Guide: See `docs/claude-code-development-guide.md` for workflow
+- Overview (exec/end-user): See `docs/overview.md`
+- Developer Guide: See `docs/developer-guide.md`
