@@ -66,7 +66,9 @@ src/specagent/
 
 ```bash
 # Development
-pip install -e ".[dev,eval]"        # Install with dev + eval dependencies
+uv sync                              # install all dependencies (preferred — uses uv.lock)
+# or: pip install -e ".[dev,eval]"   # fallback if uv is unavailable
+specagent download-model             # REQUIRED on first setup: pre-caches ONNX model (avoids 30s+ cold start on first query)
 pytest                               # Run all tests (unit + integration, excludes slow)
 pytest -m unit                       # Run unit tests only
 pytest -m integration                # Run integration tests (real LanceDB)
