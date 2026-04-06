@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -44,6 +45,33 @@ _DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
     "flowchart",
     "network_topology",
 ])
+
+# Diagram types that are stored as DAGs (signal/call-flow diagrams only).
+_DAG_DIAGRAM_TYPES = frozenset(["call_flow"])
+
+
+@dataclass
+class ExtractedDiagram:
+    """A call-flow or signal-flow diagram extracted from a .docx file.
+
+    Produced by :func:`convert_docx_with_ocr` and consumed by the ingestor
+    to store the diagram as a DAG in Memgraph.
+    """
+
+    image_type: str
+    """Diagram type, e.g. ``call_flow``."""
+
+    mermaid_content: str
+    """Validated Mermaid block for this diagram."""
+
+    prose_description: str
+    """One-sentence plain-English description (from ``prose_fallback``)."""
+
+    caption: str
+    """Figure caption text extracted from the .docx file (may be empty)."""
+
+    placeholder_name: str
+    """MarkItDown placeholder, e.g. ``image0.png`` (used as fallback ID)."""
 
 
 def _prose_fallback_result(
@@ -98,7 +126,10 @@ async def _apply_mermaid_validation(
     return _prose_fallback_result(corrected, image.placeholder_name)
 
 
-async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
+async def convert_docx_with_ocr(
+    docx_path: Path,
+    api_key: str,
+) -> tuple[str, list[ExtractedDiagram]]:
     """Run a two-pass OCR-enhanced conversion for a single ``.docx`` file.
 
     **Pass 1** — MarkItDown converts the document to Markdown, leaving image
@@ -119,8 +150,10 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
         api_key: Groq API key for vision calls.
 
     Returns:
-        Markdown string with placeholders replaced by extracted content.
-        Placeholders for failed or skipped images are preserved verbatim.
+        Tuple of ``(markdown, diagrams)`` where:
+        - ``markdown`` is the enriched Markdown string with placeholders replaced.
+        - ``diagrams`` is a list of :class:`ExtractedDiagram` for call-flow
+          diagrams found in the document (used by the ingestor for DAG storage).
 
     Raises:
         UnsupportedFormatError: If ``docx_path`` suffix is not ``.docx``.
@@ -141,11 +174,11 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
         images: list[ExtractedImage] = await asyncio.to_thread(extract_images, docx_path)
     except IngestionError:
         logger.warning("Image extraction failed for %s; using Pass 1 output only", docx_path.name)
-        return raw_markdown
+        return raw_markdown, []
 
     if not images:
         logger.debug("No images in %s; skipping vision pass", docx_path.name)
-        return raw_markdown
+        return raw_markdown, []
 
     # ── Pass 2b: Analyse images (sequential — rate-limiter paces calls) ────
     # Results are keyed by the image's sequential index in the extracted list.
@@ -177,7 +210,21 @@ async def convert_docx_with_ocr(docx_path: Path, api_key: str) -> str:
             )
 
     captions = {i: images[i].caption for i in range(len(images)) if images[i].caption}
-    return _stitch(raw_markdown, results, captions)
+
+    # ── Collect call-flow diagrams for DAG storage ─────────────────────────
+    diagrams: list[ExtractedDiagram] = [
+        ExtractedDiagram(
+            image_type=result.image_type,
+            mermaid_content=result.markdown_content,
+            prose_description=result.prose_fallback,
+            caption=captions.get(idx, ""),
+            placeholder_name=result.placeholder_name,
+        )
+        for idx, result in results.items()
+        if result.image_type in _DAG_DIAGRAM_TYPES and not result.skipped
+    ]
+
+    return _stitch(raw_markdown, results, captions), diagrams
 
 
 async def _prepare_image(raw_image: ExtractedImage, doc_name: str) -> ExtractedImage | None:

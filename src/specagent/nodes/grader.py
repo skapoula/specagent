@@ -74,8 +74,10 @@ def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-
     """
     from specagent.graph.state import GradedChunk  # noqa: PLC0415
 
-    # Get question and retrieved chunks from state
-    question = state.get("question", "")
+    # Use the rewritten question when available — the retriever uses the same
+    # form, so grading against the original can incorrectly downgrade rewritten-
+    # query chunks.
+    question = state.get("rewritten_question") or state.get("question", "")
     retrieved_chunks = state.get("retrieved_chunks", [])
 
     # Only grade top-3 chunks for latency optimization
@@ -155,18 +157,34 @@ def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-
 
             # Verify we got the right number of grades
             if len(batch_result.grades) != len(llm_chunks):
-                raise ValueError(
-                    f"Expected {len(llm_chunks)} grades but got {len(batch_result.grades)}"
+                logger.warning(
+                    "Grader: expected %d LLM grades but got %d — falling back to similarity auto-grading",
+                    len(llm_chunks),
+                    len(batch_result.grades),
                 )
-
-            # Insert LLM-graded chunks into their original positions
-            for chunk, grade, idx in zip(llm_chunks, batch_result.grades, llm_chunk_indices):
-                graded_chunk = GradedChunk(
-                    chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
-                )
-                graded_chunks[idx] = graded_chunk
-                total_confidence += grade.confidence
-            llm_grade_count = len(llm_chunks)
+                # Fall back to similarity-based auto-grading for LLM-destined chunks
+                # rather than silently dropping them, which skews average_confidence.
+                midpoint = (_HIGH_SIMILARITY_AUTO_THRESHOLD + _LOW_SIMILARITY_AUTO_THRESHOLD) / 2
+                for chunk, idx in zip(llm_chunks, llm_chunk_indices):
+                    if chunk.similarity_score >= midpoint:
+                        grade = GradeResult(relevant="yes", confidence=chunk.similarity_score)
+                    else:
+                        grade = GradeResult(relevant="no", confidence=1.0 - chunk.similarity_score)
+                    graded_chunk = GradedChunk(
+                        chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
+                    )
+                    graded_chunks[idx] = graded_chunk
+                    total_confidence += grade.confidence
+                    auto_grade_count += 1
+            else:
+                # Insert LLM-graded chunks back into their original positions
+                for chunk, grade, idx in zip(llm_chunks, batch_result.grades, llm_chunk_indices):
+                    graded_chunk = GradedChunk(
+                        chunk=chunk, relevant=grade.relevant, confidence=grade.confidence
+                    )
+                    graded_chunks[idx] = graded_chunk
+                    total_confidence += grade.confidence
+                llm_grade_count = len(llm_chunks)
 
         # Remove any None placeholders left if LLM grading was skipped unexpectedly
         graded_chunks = [gc for gc in graded_chunks if gc is not None]

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 680" width="1020" height="680" font-family="Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 790" width="1020" height="790" font-family="Arial, sans-serif">
   <!-- Background -->
-  <rect width="1020" height="680" fill="#ffffff"/>
+  <rect width="1020" height="790" fill="#ffffff"/>
 
   <!-- Arrow defs -->
   <defs>
@@ -14,6 +14,9 @@
     <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
       <path d="M0,0 L0,6 L8,3 z" fill="#2e7d32"/>
     </marker>
+    <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1565C0"/>
+    </marker>
   </defs>
 
   <!-- Title -->
@@ -21,7 +24,7 @@
   <text x="510" y="52" text-anchor="middle" font-size="12" fill="#666666">Level 3: LangGraph Agentic Workflow Components</text>
 
   <!-- Pipeline boundary -->
-  <rect x="160" y="70" width="700" height="540" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <rect x="160" y="70" width="700" height="650" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
   <text x="510" y="90" text-anchor="middle" font-size="11" fill="#888888">[Agent Pipeline Container Boundary]</text>
 
   <!-- START indicator -->
@@ -59,65 +62,81 @@
   <line x1="510" y1="238" x2="510" y2="277" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="530" y="261" text-anchor="middle" font-size="9" fill="#555555">retrieve</text>
 
-  <!-- Component: Grader -->
-  <rect x="390" y="398" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
-  <text x="510" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Grader</text>
-  <text x="510" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/grader.py]</text>
-  <text x="510" y="458" text-anchor="middle" font-size="10" fill="#334455">Auto-grade high/low similarity;</text>
-  <text x="510" y="470" text-anchor="middle" font-size="10" fill="#334455">batch LLM grade for mid-range</text>
+  <!-- Component: DAG Retriever (optional — only when ENABLE_DAG_RETRIEVAL=true) -->
+  <rect x="695" y="385" width="155" height="82" rx="6" fill="#e8f0ff" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="772" y="409" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">DAG Retriever</text>
+  <text x="772" y="424" text-anchor="middle" font-size="10" fill="#334455">[nodes/dag_retriever.py]</text>
+  <text x="772" y="439" text-anchor="middle" font-size="10" fill="#334455">Kuzu keyword search</text>
+  <text x="772" y="452" text-anchor="middle" font-size="10" fill="#334455">→ dag_chunks</text>
 
-  <!-- Arrow: Retriever -> Grader -->
-  <line x1="510" y1="358" x2="510" y2="397" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Arrow: Retriever -> DAG Retriever (keyword query + DAG enabled) -->
+  <path d="M 630 318 Q 772 318 772 384" fill="none" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <text x="720" y="345" text-anchor="middle" font-size="9" fill="#1565C0">keyword + DAG on</text>
+
+  <!-- Arrow: Retriever -> Grader (other queries) -->
+  <line x1="510" y1="358" x2="510" y2="497" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="478" y="432" text-anchor="middle" font-size="9" fill="#555555">other</text>
+
+  <!-- Component: Grader -->
+  <rect x="390" y="498" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="526" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Grader</text>
+  <text x="510" y="542" text-anchor="middle" font-size="10" fill="#334455">[nodes/grader.py]</text>
+  <text x="510" y="558" text-anchor="middle" font-size="10" fill="#334455">Auto-grade high/low similarity;</text>
+  <text x="510" y="570" text-anchor="middle" font-size="10" fill="#334455">batch LLM grade for mid-range</text>
+
+  <!-- Arrow: DAG Retriever -> Grader (dag_chunks) -->
+  <path d="M 695 430 Q 630 430 630 538" fill="none" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <text x="644" y="490" text-anchor="middle" font-size="9" fill="#1565C0">dag_chunks</text>
 
   <!-- Component: Rewriter (conditional path) -->
-  <rect x="175" y="398" width="165" height="80" rx="6" fill="#e8f0ff" stroke="#438DD5" stroke-width="1.5" stroke-dasharray="5,3"/>
-  <text x="258" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Rewriter</text>
-  <text x="258" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/rewriter.py]</text>
-  <text x="258" y="458" text-anchor="middle" font-size="10" fill="#334455">LLM reformulates query</text>
-  <text x="258" y="470" text-anchor="middle" font-size="10" fill="#334455">with 3GPP terminology</text>
+  <rect x="175" y="498" width="165" height="80" rx="6" fill="#e8f0ff" stroke="#438DD5" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="258" y="526" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Rewriter</text>
+  <text x="258" y="542" text-anchor="middle" font-size="10" fill="#334455">[nodes/rewriter.py]</text>
+  <text x="258" y="558" text-anchor="middle" font-size="10" fill="#334455">LLM reformulates query</text>
+  <text x="258" y="570" text-anchor="middle" font-size="10" fill="#334455">with 3GPP terminology</text>
 
   <!-- Arrow: Grader -> Rewriter (conditional: low quality) -->
-  <line x1="390" y1="440" x2="341" y2="440" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
-  <text x="362" y="433" text-anchor="middle" font-size="9" fill="#e67e22">low quality</text>
+  <line x1="390" y1="540" x2="341" y2="540" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+  <text x="362" y="533" text-anchor="middle" font-size="9" fill="#e67e22">low quality</text>
 
   <!-- Arrow: Rewriter -> Retriever (loop back) -->
-  <path d="M 258 398 Q 258 320 390 318" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
-  <text x="290" y="308" text-anchor="middle" font-size="9" fill="#e67e22">retry (max 2x)</text>
+  <path d="M 258 498 Q 258 320 390 318" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+  <text x="290" y="390" text-anchor="middle" font-size="9" fill="#e67e22">retry (max 2x)</text>
 
   <!-- Component: Generator -->
-  <rect x="390" y="520" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
-  <text x="510" y="548" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Generator</text>
-  <text x="510" y="564" text-anchor="middle" font-size="10" fill="#334455">[nodes/generator.py]</text>
-  <text x="510" y="580" text-anchor="middle" font-size="10" fill="#334455">Synthesize answer with</text>
-  <text x="510" y="592" text-anchor="middle" font-size="10" fill="#334455">inline [TS XX.XXX §Y.Z] citations</text>
+  <rect x="390" y="620" width="240" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="510" y="648" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Generator</text>
+  <text x="510" y="664" text-anchor="middle" font-size="10" fill="#334455">[nodes/generator.py]</text>
+  <text x="510" y="680" text-anchor="middle" font-size="10" fill="#334455">Synthesize answer with</text>
+  <text x="510" y="692" text-anchor="middle" font-size="10" fill="#334455">inline [TS XX.XXX §Y.Z] citations</text>
 
   <!-- Arrow: Grader -> Generator (good quality) -->
-  <line x1="510" y1="478" x2="510" y2="519" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
-  <text x="535" y="502" text-anchor="middle" font-size="9" fill="#2e7d32">good quality</text>
+  <line x1="510" y1="578" x2="510" y2="619" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="540" y="602" text-anchor="middle" font-size="9" fill="#2e7d32">good quality</text>
 
   <!-- Component: Hallucination Checker -->
-  <rect x="700" y="398" width="220" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
-  <text x="810" y="426" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Hallucination Checker</text>
-  <text x="810" y="442" text-anchor="middle" font-size="10" fill="#334455">[nodes/hallucination.py]</text>
-  <text x="810" y="458" text-anchor="middle" font-size="10" fill="#334455">Verify answer grounded in</text>
-  <text x="810" y="470" text-anchor="middle" font-size="10" fill="#334455">retrieved source chunks</text>
+  <rect x="700" y="498" width="220" height="80" rx="6" fill="#85BBF0" stroke="#438DD5" stroke-width="1.5"/>
+  <text x="810" y="526" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">Hallucination Checker</text>
+  <text x="810" y="542" text-anchor="middle" font-size="10" fill="#334455">[nodes/hallucination.py]</text>
+  <text x="810" y="558" text-anchor="middle" font-size="10" fill="#334455">Verify answer grounded in</text>
+  <text x="810" y="570" text-anchor="middle" font-size="10" fill="#334455">retrieved source chunks</text>
 
   <!-- Arrow: Generator -> Hallucination Checker -->
-  <path d="M 630 560 Q 810 560 810 479" fill="none" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M 630 660 Q 810 660 810 579" fill="none" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Arrow: Hallucination Checker -> Generator (regenerate, once) -->
-  <path d="M 700 425 Q 680 500 630 555" fill="none" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
-  <text x="660" y="498" text-anchor="middle" font-size="9" fill="#cc4444">not grounded</text>
-  <text x="660" y="510" text-anchor="middle" font-size="9" fill="#cc4444">(once)</text>
+  <path d="M 700 525 Q 680 600 630 655" fill="none" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="660" y="598" text-anchor="middle" font-size="9" fill="#cc4444">not grounded</text>
+  <text x="660" y="610" text-anchor="middle" font-size="9" fill="#cc4444">(once)</text>
 
   <!-- END indicator -->
-  <circle cx="810" cy="520" r="18" fill="#333333" stroke="#333333" stroke-width="3"/>
-  <circle cx="810" cy="520" r="12" fill="#ffffff"/>
-  <text x="810" y="546" text-anchor="middle" font-size="11" font-weight="bold" fill="#333333">END</text>
+  <circle cx="810" cy="620" r="18" fill="#333333" stroke="#333333" stroke-width="3"/>
+  <circle cx="810" cy="620" r="12" fill="#ffffff"/>
+  <text x="810" y="646" text-anchor="middle" font-size="11" font-weight="bold" fill="#333333">END</text>
 
   <!-- Arrow: Hallucination Checker -> END (grounded) -->
-  <line x1="810" y1="478" x2="810" y2="501" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
-  <text x="840" y="492" text-anchor="middle" font-size="9" fill="#2e7d32">grounded</text>
+  <line x1="810" y1="578" x2="810" y2="601" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="840" y="592" text-anchor="middle" font-size="9" fill="#2e7d32">grounded</text>
 
   <!-- External: GraphState -->
   <rect x="20" y="278" width="130" height="90" rx="6" fill="#f5f5f5" stroke="#999999" stroke-width="1.5"/>
@@ -141,28 +160,41 @@
   <line x1="630" y1="318" x2="699" y2="318" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="664" y="311" text-anchor="middle" font-size="9" fill="#555555">search()</text>
 
+  <!-- External: Kuzu DAG Store -->
+  <rect x="867" y="385" width="135" height="72" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <ellipse cx="934" cy="385" rx="67" ry="10" fill="#aaaaaa" stroke="#777777" stroke-width="1.5"/>
+  <text x="934" y="420" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Kuzu</text>
+  <text x="934" y="436" text-anchor="middle" font-size="10" fill="#eeeeee">[DAG Store / Embedded]</text>
+  <text x="934" y="451" text-anchor="middle" font-size="10" fill="#ffffff">CallFlowDag graph</text>
+
+  <!-- Arrow: DAG Retriever -> Kuzu -->
+  <line x1="850" y1="426" x2="866" y2="421" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-blue)"/>
+  <text x="858" y="415" text-anchor="middle" font-size="9" fill="#1565C0">query()</text>
+
   <!-- External: Groq LLM -->
-  <rect x="700" y="520" width="140" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
-  <text x="770" y="548" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Groq LLM API</text>
-  <text x="770" y="565" text-anchor="middle" font-size="10" fill="#eeeeee">[External]</text>
-  <text x="770" y="582" text-anchor="middle" font-size="10" fill="#ffffff">LLM inference</text>
+  <rect x="700" y="620" width="140" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <text x="770" y="648" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Groq LLM API</text>
+  <text x="770" y="665" text-anchor="middle" font-size="10" fill="#eeeeee">[External]</text>
+  <text x="770" y="682" text-anchor="middle" font-size="10" fill="#ffffff">LLM inference</text>
 
   <!-- Arrow: Generator -> Groq -->
-  <line x1="630" y1="570" x2="699" y2="565" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="630" y1="660" x2="699" y2="655" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- Legend -->
-  <rect x="20" y="80" width="132" height="120" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
+  <rect x="20" y="80" width="132" height="140" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
   <text x="30" y="97" font-size="11" font-weight="bold" fill="#333333">Legend</text>
   <rect x="30" y="104" width="12" height="12" rx="2" fill="#85BBF0" stroke="#438DD5" stroke-width="1"/>
   <text x="48" y="115" font-size="10" fill="#444444">Component (node)</text>
   <rect x="30" y="121" width="12" height="12" rx="2" fill="#e8f0ff" stroke="#438DD5" stroke-width="1"/>
   <text x="48" y="132" font-size="10" fill="#444444">Conditional path</text>
-  <rect x="30" y="138" width="12" height="12" rx="2" fill="#999999"/>
-  <text x="48" y="149" font-size="10" fill="#444444">External system</text>
-  <line x1="30" y1="162" x2="55" y2="162" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
-  <text x="62" y="166" font-size="9" fill="#2e7d32">happy path</text>
-  <line x1="30" y1="178" x2="55" y2="178" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-red)"/>
-  <text x="62" y="182" font-size="9" fill="#cc4444">retry / reject</text>
-  <line x1="30" y1="194" x2="55" y2="194" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
-  <text x="62" y="198" font-size="9" fill="#e67e22">rewrite loop</text>
+  <rect x="30" y="138" width="12" height="12" rx="2" fill="#e8f0ff" stroke="#1565C0" stroke-width="1"/>
+  <text x="48" y="149" font-size="10" fill="#444444">Optional (DAG)</text>
+  <rect x="30" y="155" width="12" height="12" rx="2" fill="#999999"/>
+  <text x="48" y="166" font-size="10" fill="#444444">External system</text>
+  <line x1="30" y1="179" x2="55" y2="179" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="62" y="183" font-size="9" fill="#2e7d32">happy path</text>
+  <line x1="30" y1="195" x2="55" y2="195" stroke="#cc4444" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-red)"/>
+  <text x="62" y="199" font-size="9" fill="#cc4444">retry / reject</text>
+  <line x1="30" y1="211" x2="55" y2="211" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="62" y="215" font-size="9" fill="#e67e22">rewrite loop</text>
 </svg>

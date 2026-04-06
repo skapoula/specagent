@@ -922,14 +922,16 @@ def test_check_answer_correctness_word_based_match():
     assert result is True
 
 
-def test_llm_judge_answer_yes_with_content_attribute():
-    """llm_judge_answer returns True when LLM response has .content='yes'."""
+def test_llm_judge_answer_yes_with_str_response():
+    """llm_judge_answer returns True when LLM invoke() returns the string 'yes'.
+
+    get_llm().invoke() always returns str (per LLMProtocol); the old
+    hasattr(response, 'content') branch has been removed as dead code.
+    """
     from specagent.evaluation.benchmark import llm_judge_answer
 
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "yes"
-    mock_llm.invoke.return_value = mock_response
+    mock_llm.invoke.return_value = "yes"
     with patch("specagent.llm.factory.get_llm", return_value=mock_llm):
         assert llm_judge_answer("16 HARQ processes", "16") is True
 
@@ -953,3 +955,67 @@ def test_llm_judge_answer_exception_falls_back_to_fuzzy():
         assert llm_judge_answer("16 processes", "16") is True
         # "16" not in "wrong answer" → False
         assert llm_judge_answer("wrong answer", "16") is False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Failing tests for bug fixes
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+class TestBenchmarkBugFixes:
+    """Regression tests for benchmark bug fixes."""
+
+    def test_run_benchmark_timestamp_is_timezone_aware(self, sample_tspec_dataset, tmp_path):
+        """run_benchmark must produce a UTC timestamp, not a naive local-time datetime."""
+        import re  # noqa: PLC0415
+        from datetime import timezone  # noqa: PLC0415
+        from unittest.mock import MagicMock, patch  # noqa: PLC0415
+
+        mock_state = {
+            "route_decision": "retrieve",
+            "generation": "The answer is 16.",
+            "average_confidence": 0.85,
+            "retrieved_chunks": [],
+            "graded_chunks": [],
+            "rewrite_count": 0,
+            "processing_time_ms": 100.0,
+            "node_timings": {},
+            "llm_calls": [],
+        }
+
+        with patch("specagent.graph.workflow.run_query", return_value=mock_state):
+            questions = load_benchmark_questions(sample_tspec_dataset)[:1]
+            report = run_benchmark(
+                questions=questions,
+                output_dir=tmp_path,
+                skip_health_check=True,
+            )
+
+        # Timestamp must include timezone offset (+00:00 or Z)
+        assert "+" in report.timestamp or report.timestamp.endswith("Z"), (
+            f"Timestamp {report.timestamp!r} must be UTC-aware (contain '+' or end with 'Z')"
+        )
+
+    def test_llm_judge_answer_uses_plain_str_response(self):
+        """llm_judge_answer must call str(response) directly — not response.content.
+
+        get_llm().invoke() returns str per LLMProtocol. The hasattr(response, 'content')
+        branch in the original code is dead code that should be removed.
+        """
+        from unittest.mock import MagicMock, patch  # noqa: PLC0415
+        from specagent.evaluation.benchmark import llm_judge_answer  # noqa: PLC0415
+
+        mock_llm = MagicMock()
+        # invoke() returns plain str — no .content attribute
+        mock_llm.invoke.return_value = "yes"
+
+        # Patch where get_llm is resolved (inside the function's local import)
+        with patch("specagent.llm.factory.get_llm", return_value=mock_llm):
+            result = llm_judge_answer("The limit is 16 processes", "16")
+
+        assert result is True
+
+        mock_llm.invoke.return_value = "no"
+        with patch("specagent.llm.factory.get_llm", return_value=mock_llm):
+            result2 = llm_judge_answer("Completely wrong", "16")
+        assert result2 is False

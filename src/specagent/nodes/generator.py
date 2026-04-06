@@ -26,10 +26,10 @@ Context (numbered chunks from 3GPP specs):
 {context}
 ---
 
-Rules – Follow strictly:
-- Answer ONLY from the provided context – NO external knowledge
+Rules - Follow strictly:
+- Answer ONLY from the provided context - NO external knowledge
 - For numerical values/parameters/procedures: Extract the EXACT value with units (e.g., "2976 bits", "80 ms", "16 bits", "29 DRBs")
-- Synthesize from multiple chunks if needed – information may be spread
+- Synthesize from multiple chunks if needed - information may be spread
 - ALWAYS cite inline using [TS XX.XXX §Y.Z] for every claim
 - Say "I don't have enough information" ONLY if:
   • The specific parameter/value/procedure is completely absent from ALL chunks
@@ -45,7 +45,7 @@ Answer:"""
 CITATION_PATTERN = re.compile(r"\[TS\s+(\d+\.\d+(?:-\d+)?)\s+§\s*([0-9A-Za-z.]+)\]")
 
 
-def generator_node(state: "GraphState") -> "GraphState":
+def generator_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915
     """
     Generate answer from graded chunks.
 
@@ -61,6 +61,7 @@ def generator_node(state: "GraphState") -> "GraphState":
     # Get question and graded chunks from state
     question = state.get("question", "")
     graded_chunks = state.get("graded_chunks", [])
+    dag_chunks = state.get("dag_chunks", [])
 
     # Filter for relevant chunks only
     relevant_chunks = [gc.chunk for gc in graded_chunks if gc.relevant == "yes"]
@@ -68,8 +69,8 @@ def generator_node(state: "GraphState") -> "GraphState":
     # Sort by similarity descending so highest-relevance chunks appear first in context
     relevant_chunks.sort(key=lambda c: c.similarity_score, reverse=True)
 
-    # Handle case where no relevant chunks are available
-    if not relevant_chunks:
+    # Handle case where no relevant chunks and no DAG chunks are available
+    if not relevant_chunks and not dag_chunks:
         state["generation"] = (
             "I don't have enough information in the available specifications "
             "to fully answer this question."
@@ -78,7 +79,7 @@ def generator_node(state: "GraphState") -> "GraphState":
         return state
 
     try:
-        # Format chunks into context string with source metadata and numbering
+        # Format prose chunks into context string with source metadata and numbering
         context_parts = []
         for idx, chunk in enumerate(relevant_chunks, start=1):
             # Format: **Chunk N** [TS XX.XXX §Y.Z] or [TR XX.XXX §Y.Z]: content
@@ -86,6 +87,15 @@ def generator_node(state: "GraphState") -> "GraphState":
             spec_num = chunk.spec_id[len(prefix):]
             source_ref = f"[{prefix} {spec_num} §{chunk.section}]"
             context_parts.append(f"**Chunk {idx}** {source_ref}:\n{chunk.content}")
+
+        # Append DAG chunks as a clearly-labelled separate section
+        if dag_chunks:
+            context_parts.append("\n--- Call Flow Diagrams ---")
+            for dag_chunk in dag_chunks:
+                prefix = "TS" if dag_chunk.spec_id.startswith("TS") else "TR"
+                spec_num = dag_chunk.spec_id[len(prefix):]
+                source_ref = f"[{prefix} {spec_num} §{dag_chunk.section}]"
+                context_parts.append(f"**{dag_chunk.title}** {source_ref}:\n{dag_chunk.content}")
 
         context = "\n\n".join(context_parts)
 

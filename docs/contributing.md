@@ -72,7 +72,8 @@ specagent/
 ├── src/specagent/
 │   ├── api/            # FastAPI app, routes, request/response models
 │   ├── graph/          # LangGraph workflow definition and state schema
-│   ├── nodes/          # One file per agent node (router, retriever, grader, ...)
+│   ├── nodes/          # One file per agent node (router, retriever, dag_retriever, grader, ...)
+│   ├── memgraph/       # Kuzu embedded graph store: KuzuConnection, CallFlowDagStore, mermaid_parser
 │   ├── retrieval/      # LanceDB store, embedder, ingestor, chunker, converter
 │   ├── llm/            # LLM factory (Groq + custom endpoint)
 │   ├── observability/  # Query journal, telemetry models, report formatting
@@ -82,7 +83,7 @@ specagent/
 │   └── config.py       # Settings singleton (Pydantic, env-var backed)
 ├── tests/
 │   ├── unit/           # Fast tests, no I/O
-│   ├── integration/    # Multi-component tests with real LanceDB in tmp_path
+│   ├── integration/    # Multi-component tests with real LanceDB / Kuzu in tmp_path
 │   └── e2e/            # Full pipeline with mocked LLM and store
 ├── docs/               # User and developer documentation
 ├── k8s/                # Kubernetes manifests

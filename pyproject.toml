@@ -65,6 +65,8 @@ dependencies = [
     "pillow>=10.0.0",
     # Tracing
     "langsmith>=0.6.0,<1.0.0",
+    # Graph DB (embedded, no server required)
+    "kuzu>=0.6.0",
 ]
 
 [project.optional-dependencies]

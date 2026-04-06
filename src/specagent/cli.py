@@ -10,6 +10,10 @@ Commands:
 
 import logging
 import typer
+
+# Configure a basic handler so logger.error() calls in CLI commands reach stderr.
+# uvicorn sets up its own logging for the `serve` command; this covers the rest.
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 from rich.console import Console
 from rich.table import Table
 

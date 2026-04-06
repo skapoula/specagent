@@ -679,3 +679,48 @@ class TestGeneratorNode:
         assert "For numerical" in prompt or "numerical" in prompt.lower()
         assert "exact value" in prompt.lower() or "Extract exact" in prompt
         assert "unit" in prompt.lower()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Failing tests for bug fixes
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+class TestGeneratorBugFixes:
+    """Regression tests for generator bug fixes."""
+
+    @patch("specagent.nodes.generator.get_llm")
+    def test_chunk_content_with_curly_braces_does_not_raise(self, mock_create_llm):
+        """Chunk content containing '{...}' must not cause str.format() KeyError.
+
+        3GPP spec text contains expressions like {nrb}, {max_layers}, table cells, etc.
+        """
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = "The number of resource blocks is defined by {nrb}. [TS 38.211 §4.4]"
+        mock_llm.get_last_call.return_value = None
+        mock_create_llm.return_value = mock_llm
+
+        state = create_initial_state("What is nrb?")
+        state["graded_chunks"] = [
+            GradedChunk(
+                chunk=RetrievedChunk(
+                    content="The value {nrb} defines the number of resource blocks in TS 38.211.",
+                    chunk_id="c1",
+                    doc_id="d1",
+                    source="TS38.211.docx",
+                    title="TS38.211",
+                    chunk_index=0,
+                    file_type="docx",
+                    spec_id="TS38.211",
+                    section="4.4",
+                    similarity_score=0.9,
+                ),
+                relevant="yes",
+                confidence=0.9,
+            )
+        ]
+
+        # Must not raise KeyError
+        result = generator_node(state)
+        assert result.get("error") is None, f"Unexpected error: {result.get('error')}"
+        assert result.get("generation") is not None

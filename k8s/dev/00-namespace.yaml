@@ -110,7 +110,7 @@ data:
   # Embedding Configuration
   USE_LOCAL_EMBEDDINGS: "true"
   EMBEDDING_MODEL: "nomic-ai/nomic-embed-text-v1.5"
-  EMBEDDING_DIMENSION: "384"
+  EMBEDDING_DIMENSION: "768"
   
   # Chunking
   CHUNK_SIZE: "512"

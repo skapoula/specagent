@@ -402,8 +402,14 @@ class TestSaveGraphImage:
 
         save_graph_image()
 
-        # Verify draw_png was called with default path
-        mock_graph_obj.draw_png.assert_called_once_with("docs/architecture.png")
+        # Verify draw_png was called with the resolved absolute path.
+        # save_graph_image calls Path(path).resolve() to ensure an absolute path
+        # regardless of the caller's working directory.
+        from pathlib import Path  # noqa: PLC0415
+
+        mock_graph_obj.draw_png.assert_called_once_with(
+            str(Path("docs/architecture.png").resolve())
+        )
 
 
 @pytest.mark.unit

@@ -13,6 +13,7 @@ All nodes follow the signature:
     def node_name(state: GraphState) -> GraphState
 """
 
+from specagent.nodes.dag_retriever import dag_retriever_node, route_after_retriever
 from specagent.nodes.generator import generator_node
 from specagent.nodes.grader import grader_node
 from specagent.nodes.hallucination import hallucination_check_node
@@ -21,10 +22,12 @@ from specagent.nodes.rewriter import rewriter_node
 from specagent.nodes.router import router_node
 
 __all__ = [
+    "dag_retriever_node",
     "generator_node",
     "grader_node",
     "hallucination_check_node",
     "retriever_node",
     "rewriter_node",
+    "route_after_retriever",
     "router_node",
 ]

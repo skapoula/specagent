@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 
 import lancedb
@@ -227,6 +228,9 @@ class Store:
         self._indexes_created = False
         self._is_empty: bool = True
         self._cached_table: lancedb.table.Table | None = None
+        # Serialises concurrent table.add() calls — LanceDB does not support
+        # concurrent writes to the same table from multiple OS threads.
+        self._write_lock = threading.Lock()
 
     def _table(self) -> lancedb.table.Table:
         """Open and return the LanceDB table, creating scalar indexes on first call."""
@@ -264,26 +268,31 @@ class Store:
         """
         if not chunks:
             return
-        try:
-            table = self._table()
-            rows = [c.model_dump() for c in chunks]
-            # Convert embeddings to float32 numpy arrays to satisfy the
-            # FixedSizeList<float32> Arrow schema — Python lists are typed as
-            # ListType and only cast correctly when the sizes match, while numpy
-            # arrays are always unambiguous.
-            for row in rows:
-                row["embedding"] = np.array(row["embedding"], dtype=np.float32)
-            table.add(rows)
-            self._is_empty = False
-            logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
-            if rebuild_fts:
-                try:
-                    table.create_fts_index("content", replace=True)
-                    logger.debug("FTS index rebuilt on 'content'")
-                except Exception as fts_err:
-                    logger.warning("FTS index rebuild failed (hybrid search degraded): %s", fts_err)
-        except Exception as e:
-            raise StoreError(f"Failed to upsert {len(chunks)} chunks") from e
+        # Acquire write lock before touching the table — LanceDB does not support
+        # concurrent writes from multiple OS threads (asyncio.to_thread uses a pool).
+        with self._write_lock:
+            try:
+                table = self._table()
+                rows = [c.model_dump() for c in chunks]
+                # Convert embeddings to float32 numpy arrays to satisfy the
+                # FixedSizeList<float32> Arrow schema — Python lists are typed as
+                # ListType and only cast correctly when the sizes match, while numpy
+                # arrays are always unambiguous.
+                for row in rows:
+                    row["embedding"] = np.array(row["embedding"], dtype=np.float32)
+                table.add(rows)
+                self._is_empty = False
+                logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
+                if rebuild_fts:
+                    try:
+                        table.create_fts_index("content", replace=True)
+                        logger.debug("FTS index rebuilt on 'content'")
+                    except Exception as fts_err:
+                        logger.warning(
+                            "FTS index rebuild failed (hybrid search degraded): %s", fts_err
+                        )
+            except Exception as e:
+                raise StoreError(f"Failed to upsert {len(chunks)} chunks") from e
 
     def find_existing(self, source: str, library: str) -> tuple[str | None, str | None]:
         """Look up an existing document by (source, library) dedup key.
@@ -339,6 +348,7 @@ class Store:
             table.delete(f"doc_id = '{safe_id}'")
             after = table.count_rows()
             deleted = before - after
+            self._is_empty = after == 0
             logger.info("Deleted %d chunks for doc_id=%s", deleted, doc_id)
             return deleted
         except Exception as e:
@@ -366,6 +376,7 @@ class Store:
             table.delete(f"library = '{safe_lib}'")
             after = table.count_rows()
             deleted = before - after
+            self._is_empty = after == 0
             logger.info("Deleted %d chunks for library=%s", deleted, library)
             return deleted
         except Exception as e:
@@ -502,6 +513,14 @@ class Store:
             for row in rows:
                 did = row["doc_id"]
                 if did not in seen:
+                    try:
+                        meta = json.loads(row["metadata"])
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(
+                            "list_documents: corrupt metadata for doc_id=%s — falling back to {}",
+                            did,
+                        )
+                        meta = {}
                     seen[did] = {
                         "doc_id": did,
                         "source": row["source"],
@@ -509,7 +528,7 @@ class Store:
                         "library": row["library"],
                         "content_hash": row["content_hash"],
                         "created_at": row["created_at"],
-                        "metadata": json.loads(row["metadata"]),
+                        "metadata": meta,
                         "chunk_count": 0,
                     }
                 seen[did]["chunk_count"] += 1

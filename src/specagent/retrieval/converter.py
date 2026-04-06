@@ -53,7 +53,10 @@ def _get_markitdown() -> "MarkItDown":
     return _md
 
 
-async def convert_docx_ocr(source: Path, api_key: str) -> str:
+async def convert_docx_ocr(
+    source: Path,
+    api_key: str,
+) -> "tuple[str, list]":
     """Convert a .docx file to Markdown using the two-pass OCR pipeline.
 
     Delegates to :func:`~specagent.retrieval.docx_ocr_converter.convert_docx_with_ocr`.
@@ -64,7 +67,8 @@ async def convert_docx_ocr(source: Path, api_key: str) -> str:
         api_key: Groq API key for vision calls.
 
     Returns:
-        Enriched Markdown string with image placeholders replaced by OCR content.
+        Tuple of ``(markdown, diagrams)`` — see
+        :func:`~specagent.retrieval.docx_ocr_converter.convert_docx_with_ocr`.
 
     Raises:
         UnsupportedFormatError: If source is not a .docx file.

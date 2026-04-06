@@ -332,3 +332,43 @@ class TestRewriterNode:
         # Verify examples help guide the rewriting style
         prompt_lower = prompt.lower()
         assert "original" in prompt_lower or "rewrite" in prompt_lower
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Failing tests for bug fixes
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+class TestRewriterBugFixes:
+    """Regression tests for rewriter bug fixes."""
+
+    @patch("specagent.nodes.rewriter.get_llm")
+    def test_chunk_preview_with_curly_braces_does_not_raise(self, mock_create_llm):
+        """Chunk content preview containing '{...}' must not cause str.format() KeyError."""
+        from specagent.graph.state import RetrievedChunk, create_initial_state  # noqa: PLC0415
+        from specagent.nodes.rewriter import rewriter_node  # noqa: PLC0415
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = "Rewritten: resource block configuration {nrb} in NR"
+        mock_llm.get_last_call.return_value = None
+        mock_create_llm.return_value = mock_llm
+
+        state = create_initial_state("nrb?")
+        state["retrieved_chunks"] = [
+            RetrievedChunk(
+                content="The parameter {nrb} specifies the resource block count per subcarrier spacing.",
+                chunk_id="c1",
+                doc_id="d1",
+                source="TS38.211.docx",
+                title="TS38.211",
+                chunk_index=0,
+                file_type="docx",
+                spec_id="TS38.211",
+                section="4.4",
+                similarity_score=0.7,
+            )
+        ]
+
+        # Must not raise KeyError
+        result = rewriter_node(state)
+        assert result.get("error") is None, f"Unexpected error: {result.get('error')}"

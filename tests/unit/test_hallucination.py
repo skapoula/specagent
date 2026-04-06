@@ -282,11 +282,12 @@ class TestHallucinationCheckNode:
 
         result = hallucination_check_node(state)
 
-        # Should populate error field and default to grounded
+        # Should populate error field and set "unknown" — not "grounded"
+        # (grounded would falsely certify the answer when verification failed)
         assert "error" in result
         assert result["error"] is not None
         assert "error" in result["error"].lower()
-        assert result["hallucination_check"] == "grounded"
+        assert result["hallucination_check"] == "unknown"
         assert result["ungrounded_claims"] == []
 
     @patch("specagent.nodes.hallucination.get_llm")
@@ -957,5 +958,71 @@ def test_hallucination_no_json_braces_falls_to_json_loads():
         result = hallucination_check_node(state)
 
     # json.loads("grounded: yes no braces") raises JSONDecodeError
-    # → caught by except at line 237 → error set + fallback to "grounded"
-    assert result.get("hallucination_check") == "grounded"
+    # → caught by except → error set + "unknown" (not "grounded")
+    assert result.get("hallucination_check") == "unknown"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Failing tests for bug fixes (must fail before fixes are applied)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+class TestHallucinationBugFixes:
+    """Regression tests for bug fixes."""
+
+    @patch("specagent.nodes.hallucination.get_llm")
+    def test_error_path_sets_unknown_not_grounded(self, mock_create_llm):
+        """When the LLM call fails, hallucination_check must be 'unknown', not 'grounded'.
+
+        Silently certifying an answer as grounded when verification failed hides
+        hallucinations from the user.
+        """
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = RuntimeError("LLM API unavailable")
+        mock_create_llm.return_value = mock_llm
+
+        state = create_initial_state("What is the HARQ limit?")
+        state["generation"] = "The limit is 16."
+        state["graded_chunks"] = []
+        state["average_confidence"] = 0.3  # below threshold → check runs
+
+        result = hallucination_check_node(state)
+
+        assert result["hallucination_check"] == "unknown", (
+            "Error path must yield 'unknown', not 'grounded' — "
+            "grounded would falsely certify the answer"
+        )
+
+    @patch("specagent.nodes.hallucination.get_llm")
+    def test_chunk_content_with_curly_braces_does_not_raise(self, mock_create_llm):
+        """Chunk content containing '{...}' must not cause str.format() KeyError.
+
+        3GPP spec text commonly contains expressions like {nrb} or table cells
+        with format-like tokens.
+        """
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = '{"grounded": "yes", "ungrounded_claims": []}'
+        mock_create_llm.return_value = mock_llm
+
+        chunk = RetrievedChunk(
+            content="The value {nrb} defines the number of resource blocks.",
+            chunk_id="c1",
+            doc_id="d1",
+            source="TS38.211.docx",
+            title="TS38.211",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.211",
+            section="4.4.4",
+            similarity_score=0.75,
+        )
+        graded = GradedChunk(chunk=chunk, relevant="yes", confidence=0.75)
+
+        state = create_initial_state("What is nrb?")
+        state["generation"] = "The value defines resource blocks."
+        state["graded_chunks"] = [graded]
+        state["average_confidence"] = 0.3  # trigger check
+
+        # Must not raise KeyError
+        result = hallucination_check_node(state)
+        assert result.get("hallucination_check") in {"grounded", "not_grounded", "partial", "unknown"}

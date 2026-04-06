@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" font-family="Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" width="1000" height="720" font-family="Arial, sans-serif">
   <!-- Background -->
-  <rect width="1000" height="640" fill="#ffffff"/>
+  <rect width="1000" height="720" fill="#ffffff"/>
 
   <!-- Title -->
   <text x="500" y="32" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a1a1a">C4 Container Diagram — SpecAgent</text>
   <text x="500" y="52" text-anchor="middle" font-size="12" fill="#666666">Level 2: Runtime Containers</text>
 
   <!-- System Boundary -->
-  <rect x="160" y="70" width="680" height="520" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <rect x="160" y="70" width="680" height="600" rx="8" fill="none" stroke="#aaaaaa" stroke-width="1.5" stroke-dasharray="8,4"/>
   <text x="500" y="90" text-anchor="middle" font-size="11" fill="#888888">[SpecAgent System Boundary]</text>
 
   <!-- Arrow defs -->
@@ -16,7 +16,9 @@
     <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
       <path d="M0,0 L0,6 L8,3 z" fill="#707070"/>
     </marker>
-    <!-- Database cylinder clip -->
+    <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1565C0"/>
+    </marker>
   </defs>
 
   <!-- Container: CLI (Typer) -->
@@ -37,7 +39,7 @@
   <rect x="415" y="160" width="200" height="100" rx="6" fill="#1168BD" stroke="#0a4d8c" stroke-width="2"/>
   <text x="515" y="192" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Agent Pipeline</text>
   <text x="515" y="210" text-anchor="middle" font-size="10" fill="#cce0ff">[LangGraph / Python]</text>
-  <text x="515" y="228" text-anchor="middle" font-size="10" fill="#e8f0ff">6-node agentic workflow:</text>
+  <text x="515" y="228" text-anchor="middle" font-size="10" fill="#e8f0ff">7-node agentic workflow:</text>
   <text x="515" y="244" text-anchor="middle" font-size="10" fill="#e8f0ff">route → retrieve → grade → generate</text>
 
   <!-- Container: Retrieval Engine -->
@@ -62,6 +64,14 @@
   <text x="745" y="377" text-anchor="middle" font-size="10" fill="#e8f3ff">Persistent vector index</text>
   <text x="745" y="391" text-anchor="middle" font-size="10" fill="#e8f3ff">768d embeddings + BM25</text>
 
+  <!-- Container: Kuzu (database cylinder style) -->
+  <rect x="670" y="420" width="150" height="85" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
+  <ellipse cx="745" cy="420" rx="75" ry="12" fill="#5ea8e8" stroke="#2d6ca8" stroke-width="1.5"/>
+  <text x="745" y="456" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Kuzu</text>
+  <text x="745" y="473" text-anchor="middle" font-size="10" fill="#d6eaff">[Embedded / Disk]</text>
+  <text x="745" y="490" text-anchor="middle" font-size="10" fill="#e8f3ff">Call-flow DAG graphs</text>
+  <text x="745" y="503" text-anchor="middle" font-size="10" fill="#e8f3ff">(optional feature)</text>
+
   <!-- Container: Observability -->
   <rect x="200" y="440" width="170" height="90" rx="6" fill="#438DD5" stroke="#2d6ca8" stroke-width="1.5"/>
   <text x="285" y="471" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">Observability</text>
@@ -84,10 +94,10 @@
   <text x="745" y="222" text-anchor="middle" font-size="10" fill="#ffffff">LLM inference</text>
 
   <!-- External: Phoenix -->
-  <rect x="670" y="440" width="150" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
-  <text x="745" y="470" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Arize Phoenix</text>
-  <text x="745" y="487" text-anchor="middle" font-size="10" fill="#eeeeee">[External / Local]</text>
-  <text x="745" y="502" text-anchor="middle" font-size="10" fill="#ffffff">OTel trace collector</text>
+  <rect x="670" y="530" width="150" height="70" rx="6" fill="#999999" stroke="#777777" stroke-width="1.5"/>
+  <text x="745" y="560" text-anchor="middle" font-size="12" font-weight="bold" fill="#ffffff">Arize Phoenix</text>
+  <text x="745" y="577" text-anchor="middle" font-size="10" fill="#eeeeee">[External / Local]</text>
+  <text x="745" y="592" text-anchor="middle" font-size="10" fill="#ffffff">OTel trace collector</text>
 
   <!-- ARROWS -->
   <!-- User -> CLI -->
@@ -122,24 +132,25 @@
   <line x1="615" y1="480" x2="669" y2="400" stroke="#707070" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="649" y="440" text-anchor="middle" font-size="9" fill="#555555">write chunks</text>
 
+  <!-- Agent Pipeline -> Kuzu (DAG retrieval, optional) -->
+  <line x1="615" y1="245" x2="660" y2="455" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-blue)"/>
+  <text x="658" y="352" text-anchor="start" font-size="9" fill="#1565C0">DAG query</text>
+  <text x="658" y="363" text-anchor="start" font-size="9" fill="#1565C0">(optional)</text>
+
   <!-- CLI -> Ingestor (index command) -->
   <line x1="285" y1="355" x2="414" y2="455" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
   <text x="334" y="418" text-anchor="middle" font-size="9" fill="#555555">index command</text>
-
-  <!-- Observability -> Phoenix -->
-  <line x1="370" y1="480" x2="414" y2="480" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
-  <!-- skip this, different x range -->
 
   <!-- Agent Pipeline -> Observability -->
   <line x1="415" y1="240" x2="285" y2="439" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
   <text x="318" y="350" text-anchor="middle" font-size="9" fill="#555555">emit events</text>
 
   <!-- Observability -> Phoenix -->
-  <line x1="370" y1="490" x2="669" y2="475" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
-  <text x="520" y="498" text-anchor="middle" font-size="9" fill="#555555">OTel spans</text>
+  <line x1="370" y1="490" x2="669" y2="565" stroke="#707070" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="520" y="540" text-anchor="middle" font-size="9" fill="#555555">OTel spans</text>
 
   <!-- Legend -->
-  <rect x="20" y="80" width="125" height="76" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
+  <rect x="20" y="80" width="130" height="108" rx="4" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
   <text x="30" y="97" font-size="11" font-weight="bold" fill="#333333">Legend</text>
   <rect x="30" y="104" width="12" height="12" rx="2" fill="#08427B"/>
   <text x="48" y="115" font-size="10" fill="#444444">Person</text>
@@ -147,7 +158,8 @@
   <text x="48" y="132" font-size="10" fill="#444444">Primary container</text>
   <rect x="30" y="138" width="12" height="12" rx="2" fill="#438DD5"/>
   <text x="48" y="149" font-size="10" fill="#444444">Container</text>
-  <rect x="30" y="141" width="0" height="0"/>
   <rect x="30" y="155" width="12" height="12" rx="2" fill="#999999"/>
   <text x="48" y="166" font-size="10" fill="#444444">External system</text>
+  <line x1="30" y1="178" x2="42" y2="178" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="48" y="182" font-size="10" fill="#444444">Optional (DAG)</text>
 </svg>

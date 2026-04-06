@@ -187,7 +187,9 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
     except Exception as e:
         logger.error("Hallucination check error: %s", e)
         state["error"] = f"Hallucination check error: {e!s}"
-        state["hallucination_check"] = "grounded"
+        # Use "unknown" — not "grounded" — so callers know verification failed
+        # rather than treating a failed check as a positive grounding signal.
+        state["hallucination_check"] = "unknown"
         state["ungrounded_claims"] = []
 
     if check_ran:

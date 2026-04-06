@@ -11,7 +11,7 @@ import statistics
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -446,7 +446,7 @@ def run_benchmark(
     # Setup trace logging
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     trace = setup_trace_logging(output_path, timestamp, verbose)
 
     # Log benchmark header

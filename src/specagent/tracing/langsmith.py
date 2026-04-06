@@ -53,7 +53,7 @@ def setup_langsmith_tracing() -> None:
         )
         return
 
-    os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
+    os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)
 

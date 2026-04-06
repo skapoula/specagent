@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     # Env var: GROQ_API_KEY.
     groq_api_key: str = Field(
         default="",
+        repr=False,  # prevent key from appearing in Settings repr/logs
         description="Groq cloud API key. Required when llm_provider='groq'.",
     )
     # Model served by Groq.
@@ -409,6 +410,46 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================================
+    # Kuzu Embedded Graph DB / DAG Store Configuration
+    # ==========================================================================
+    kuzu_db_path: Path = Field(
+        default=Path("data/dag_store"),
+        description=(
+            "Path to the Kuzu embedded graph database directory for DAG storage. "
+            "Created automatically on first use. Env var: KUZU_DB_PATH."
+        ),
+    )
+    enable_dag_storage: bool = Field(
+        default=False,
+        description=(
+            "Enable DAG storage for detected call-flow diagrams during .docx OCR ingest. "
+            "Env var: ENABLE_DAG_STORAGE."
+        ),
+    )
+    enable_dag_retrieval: bool = Field(
+        default=False,
+        description=(
+            "Enable DAG-augmented retrieval in the RAG pipeline. "
+            "Requires ENABLE_DAG_STORAGE=true. Env var: ENABLE_DAG_RETRIEVAL."
+        ),
+    )
+    dag_retrieval_top_k: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Max number of DAG results to inject per query. Env var: DAG_RETRIEVAL_TOP_K.",
+    )
+    dag_retrieval_score: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Similarity score assigned to DAG-derived chunks injected into retrieval results. "
+            "Env var: DAG_RETRIEVAL_SCORE."
+        ),
+    )
+
+    # ==========================================================================
     # Validators
     # ==========================================================================
     @field_validator("chunk_overlap_tokens")
@@ -422,7 +463,7 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir", "journal_dir")
+    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir", "journal_dir", "kuzu_db_path")
     @classmethod
     def resolve_path(cls, v: Path) -> Path:
         """Resolve paths to absolute paths."""

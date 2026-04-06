@@ -539,9 +539,9 @@ class TestGraderNode:
 
     @patch("specagent.nodes.grader.get_llm")
     def test_grader_handles_grade_count_mismatch(self, mock_create_llm):
-        """Test error handling when LLM returns wrong number of grades."""
+        """Test that a grade count mismatch logs a warning and keeps auto-graded chunks."""
         mock_llm = MagicMock()
-        # Return only 1 grade for 2 chunks (mismatch)
+        # Return only 1 grade for 2 mid-range chunks (mismatch)
         mock_llm.invoke.return_value = '{"grades": [{"relevant": "yes", "confidence": 0.85}]}'
         mock_create_llm.return_value = mock_llm
 
@@ -553,12 +553,35 @@ class TestGraderNode:
 
         result = grader_node(state)
 
-        # Should handle error gracefully
-        assert "error" in result
-        assert result["error"] is not None
-        assert "Expected 2 grades but got 1" in result["error"]
-        assert result["graded_chunks"] == []
-        assert result["average_confidence"] == 0.0
+        # No error — mismatch is handled gracefully via warning
+        assert result.get("error") is None
+        # Both chunks were mid-range; mismatch now auto-grades them by similarity
+        assert len(result["graded_chunks"]) == 2
+        assert result["average_confidence"] > 0.0
+
+    @patch("specagent.nodes.grader.get_llm")
+    def test_grader_count_mismatch_preserves_auto_graded_chunks(self, mock_create_llm):
+        """Test that auto-graded chunks survive an LLM grade count mismatch."""
+        mock_llm = MagicMock()
+        # 1 mid-range chunk needs LLM; LLM returns 0 grades (mismatch)
+        mock_llm.invoke.return_value = '{"grades": []}'
+        mock_create_llm.return_value = mock_llm
+
+        chunks = [
+            {"content": "High similarity", "similarity_score": 0.90},  # auto-grade yes
+            {"content": "Mid similarity", "similarity_score": 0.65},   # needs LLM → mismatch
+        ]
+        state = self._create_state_with_chunks("Test question", chunks)
+
+        result = grader_node(state)
+
+        # Both chunks must appear: the auto-graded high-similarity one AND the
+        # mismatch-fallback auto-graded mid-range one.
+        assert result.get("error") is None
+        assert len(result["graded_chunks"]) == 2
+        # High-similarity chunk is graded yes at 0.90
+        high_chunk = next(gc for gc in result["graded_chunks"] if gc.confidence == pytest.approx(0.90))
+        assert high_chunk.relevant == "yes"
 
     @patch("specagent.nodes.grader.get_llm")
     def test_grader_handles_invalid_json_response(self, mock_create_llm):
@@ -753,3 +776,73 @@ def test_grader_error_path_sets_counter_fields():
     assert result["grader_auto_count"] == 0
     assert result["grader_llm_count"] == 0
     assert result["graded_chunks"] == []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Failing tests for bug fixes
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+class TestGraderBugFixes:
+    """Regression tests for grader bug fixes."""
+
+    def _make_chunk(self, similarity_score: float, content: str = "content") -> RetrievedChunk:
+        return RetrievedChunk(
+            content=content,
+            chunk_id="c1",
+            doc_id="d1",
+            source="TS38.321.docx",
+            title="TS38.321",
+            chunk_index=0,
+            file_type="docx",
+            spec_id="TS38.321",
+            section="5.4",
+            similarity_score=similarity_score,
+        )
+
+    @patch("specagent.nodes.grader.get_llm")
+    def test_mismatch_falls_back_to_auto_grading(self, mock_create_llm):
+        """When LLM returns wrong number of grades, mid-range chunks must be auto-graded.
+
+        Previously the mismatch branch dropped all LLM-destined chunks silently.
+        """
+        mock_llm = MagicMock()
+        # Return 0 grades for 1 mid-range chunk (count mismatch)
+        mock_llm.invoke.return_value = '{"grades": []}'
+        mock_llm.get_last_call.return_value = None
+        mock_create_llm.return_value = mock_llm
+
+        state = create_initial_state("test question")
+        # Single mid-range chunk (0.55 < 0.7 < 0.82) → would go to LLM
+        state["retrieved_chunks"] = [self._make_chunk(0.7)]
+
+        result = grader_node(state)
+
+        # The chunk must NOT be silently dropped — it must be auto-graded
+        assert len(result["graded_chunks"]) == 1, (
+            "Mismatch branch must auto-grade LLM-destined chunks, not drop them"
+        )
+
+    @patch("specagent.nodes.grader.get_llm")
+    def test_grader_uses_rewritten_question_for_grading(self, mock_create_llm):
+        """Grader must use rewritten_question when it is set, matching the retriever.
+
+        The retriever uses the rewritten question; using the original for grading
+        can downgrade chunks that match the rewritten but not the original query.
+        """
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = '{"grades": [{"relevant": "yes", "confidence": 0.8}]}'
+        mock_llm.get_last_call.return_value = None
+        mock_create_llm.return_value = mock_llm
+
+        state = create_initial_state("DRX cycle?")
+        state["rewritten_question"] = "Discontinuous Reception (DRX) cycle configuration in TS 38.331"
+        state["retrieved_chunks"] = [self._make_chunk(0.7)]
+
+        grader_node(state)
+
+        # The prompt sent to the LLM must use the rewritten question
+        prompt = mock_llm.invoke.call_args[0][0]
+        assert "Discontinuous Reception" in prompt or "DRX cycle configuration" in prompt, (
+            "Grader prompt must contain the rewritten_question, not only the original"
+        )

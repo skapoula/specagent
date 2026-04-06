@@ -23,3 +23,7 @@ class ConfigurationError(Exception):
 
 class VisionError(Exception):
     """Raised when the Groq vision API call fails after all retries."""
+
+
+class DagStoreError(Exception):
+    """Raised when a Memgraph DAG store read or write operation fails."""

@@ -52,7 +52,11 @@ class TestNewPipelineSettings:
         from specagent.config import get_settings
 
         get_settings.cache_clear()
-        s = get_settings()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("EMBEDDING_DIMENSION", None)
+            os.environ.pop("EMBEDDING_MODEL", None)
+            s = get_settings()
+        get_settings.cache_clear()
         assert s.embedding_dimension == 768
 
     @pytest.mark.unit

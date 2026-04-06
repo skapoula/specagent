@@ -11,6 +11,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from specagent.config import settings
+from specagent.memgraph.mermaid_parser import parse_sequence_diagram
+from specagent.memgraph.resources import get_dag_store
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
 from specagent.retrieval.embedder import embed_documents
@@ -106,9 +108,10 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     ingest_status = "replaced" if existing_doc_id is not None else "indexed"
 
     # ── 3. Convert to Markdown ─────────────────────────────────────────────────
+    diagrams = []
     try:
         if file_type == "docx" and settings.enable_docx_ocr and settings.groq_api_key:
-            text = await convert_docx_ocr(path, api_key=settings.groq_api_key)
+            text, diagrams = await convert_docx_ocr(path, api_key=settings.groq_api_key)
         else:
             text = await asyncio.to_thread(convert, path)
     except UnsupportedFormatError:
@@ -121,6 +124,10 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
 
     text = postprocess(text)
     title = _extract_title(text, source_str)
+
+    # ── 3b. Store call-flow diagrams as DAGs (fire-and-forget) ────────────────
+    if settings.enable_dag_storage and diagrams:
+        _store_diagrams_as_dags(diagrams, doc_name=path.stem, source=source_str)
 
     # ── 4. Chunk, extracting section headers per chunk ─────────────────────────
     try:
@@ -299,10 +306,39 @@ async def ingest_folder(
     )
 
 
+def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
+    """Store call-flow diagrams as DAGs in Memgraph (best-effort, never raises).
+
+    Args:
+        diagrams: List of :class:`~specagent.retrieval.docx_ocr_converter.ExtractedDiagram`.
+        doc_name: Stem of the source document filename (e.g. ``"TS23.502"``).
+        source: Full path string of the source document.
+    """
+    dag_store = get_dag_store()
+    for diagram in diagrams:
+        caption = diagram.caption or diagram.placeholder_name
+        dag_id = f"{doc_name}::{caption}"
+        try:
+            participants, steps = parse_sequence_diagram(diagram.mermaid_content)
+            dag_store.store_call_flow_dag(
+                dag_id=dag_id,
+                doc_id="",  # not yet assigned at this pipeline stage
+                source=source,
+                title=caption,
+                mermaid_content=diagram.mermaid_content,
+                participants=participants,
+                steps=steps,
+                prose_description=diagram.prose_description,
+            )
+            logger.info("Stored call-flow DAG %r (%d steps)", dag_id, len(steps))
+        except Exception as exc:
+            logger.warning("DAG storage failed for %r: %s — continuing ingest", dag_id, exc)
+
+
 def _extract_title(text: str, source: str) -> str:
     """Infer a document title from the first Markdown heading or source path."""
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("#"):
             return stripped.lstrip("#").strip()[:200]
-    return source.split("/")[-1].split("\\")[-1][:200]
+    return Path(source).name[:200]

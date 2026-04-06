@@ -117,6 +117,13 @@ class GraphState(TypedDict, total=False):
     retrieved_chunks: list[RetrievedChunk]
     """Chunks retrieved from LanceDB vector store."""
 
+    dag_chunks: list[RetrievedChunk]
+    """Call-flow diagram chunks retrieved from the Memgraph DAG store (separate lane).
+
+    Populated by ``dag_retriever_node`` when a call-flow query is detected.
+    Passed directly to the generator — bypasses the grader.
+    """
+
     # ==========================================================================
     # Grading
     # ==========================================================================
@@ -144,8 +151,8 @@ class GraphState(TypedDict, total=False):
     # ==========================================================================
     # Hallucination Check
     # ==========================================================================
-    hallucination_check: Literal["grounded", "not_grounded", "partial"]
-    """Result of hallucination verification."""
+    hallucination_check: Literal["grounded", "not_grounded", "partial", "unknown"]
+    """Result of hallucination verification. 'unknown' means the check could not run."""
 
     ungrounded_claims: list[str]
     """List of claims not supported by source documents."""
@@ -220,6 +227,7 @@ def create_initial_state(question: str) -> GraphState:
         question=question,
         rewritten_question=None,
         retrieved_chunks=[],
+        dag_chunks=[],
         graded_chunks=[],
         citations=[],
         rewrite_count=0,

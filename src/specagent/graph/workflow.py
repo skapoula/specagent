@@ -12,6 +12,7 @@ Graph visualization can be exported via get_graph_visualization().
 import logging
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
@@ -20,11 +21,13 @@ from langgraph.graph.state import CompiledStateGraph
 from specagent.config import settings
 from specagent.graph.state import GraphState, create_initial_state
 from specagent.nodes import (
+    dag_retriever_node,
     generator_node,
     grader_node,
     hallucination_check_node,
     retriever_node,
     rewriter_node,
+    route_after_retriever,
     router_node,
 )
 
@@ -227,6 +230,7 @@ def build_graph() -> CompiledStateGraph:
     # Add nodes with timing and Phoenix tracing instrumentation
     workflow.add_node("router", _wrap(router_node, "router"))
     workflow.add_node("retriever", _wrap(retriever_node, "retriever"))
+    workflow.add_node("dag_retriever", _wrap(dag_retriever_node, "dag_retriever"))
     workflow.add_node("grader", _wrap(grader_node, "grader"))
     workflow.add_node("rewriter", _wrap(rewriter_node, "rewriter"))
     workflow.add_node("generator", _wrap(generator_node, "generator"))
@@ -245,8 +249,18 @@ def build_graph() -> CompiledStateGraph:
         },
     )
 
-    # Retriever always goes to grader
-    workflow.add_edge("retriever", "grader")
+    # Retriever → conditional: route to dag_retriever or bypass directly to grader
+    workflow.add_conditional_edges(
+        "retriever",
+        route_after_retriever,
+        {
+            "dag_retriever": "dag_retriever",
+            "grader": "grader",
+        },
+    )
+
+    # DAG retriever always feeds into grader
+    workflow.add_edge("dag_retriever", "grader")
 
     # Grader conditional edges
     workflow.add_conditional_edges(
@@ -396,14 +410,14 @@ def get_graph_visualization() -> str:
     return graph.get_graph().draw_mermaid()
 
 
-def save_graph_image(path: str = "docs/architecture.png") -> None:
+def save_graph_image(path: str | Path = Path("docs/architecture.png")) -> None:
     """
     Save graph visualization as PNG image.
 
     Requires graphviz to be installed.
 
     Args:
-        path: Output path for the PNG file
+        path: Output path for the PNG file.
     """
     graph = build_graph()
-    graph.get_graph().draw_png(path)
+    graph.get_graph().draw_png(str(Path(path).resolve()))
