@@ -20,7 +20,10 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 DOCX_PATH = _REPO_ROOT / "data" / "raw" / "38413-i30.docx"
 OUTPUT_PATH = Path(__file__).resolve().parent / "comparison_38413.md"
 
-_ARROW_LINE_RE = re.compile(r"^\s+\S.*?(?:-->>|->>).*?:", re.MULTILINE)
+_ARROW_LINE_RE = re.compile(
+    r"^\s+\S.*?(?:-->>|--x|-->|->>|->|-x|--\)|--|-\)).*?:",
+    re.MULTILINE,
+)
 _PARTICIPANT_LINE_RE = re.compile(r"^\s+participant\s+\S", re.MULTILINE | re.IGNORECASE)
 
 
@@ -69,7 +72,10 @@ def _winner(  # noqa: PLR0911 — each branch returns a distinct sentinel value;
     return "—"
 
 
-def align_results(prose_flows: list, vision_diagrams: list) -> list[ComparisonRow]:
+def align_results(
+    prose_flows: list[ProseCallFlow],  # noqa: F821 — TYPE_CHECKING-only import; safe with from __future__ import annotations
+    vision_diagrams: list[ExtractedDiagram],  # noqa: F821 — TYPE_CHECKING-only import; safe with from __future__ import annotations
+) -> list[ComparisonRow]:
     """Match prose flows to vision diagrams by caption substring; build ComparisonRow list.
 
     Matching strategy: a prose flow's title is matched to a vision diagram's caption
