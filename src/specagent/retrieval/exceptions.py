@@ -26,7 +26,7 @@ class VisionError(Exception):
 
 
 class DagStoreError(Exception):
-    """Raised when a Memgraph DAG store read or write operation fails."""
+    """Raised when a Kuzu DAG store read or write operation fails."""
 
 
 class LLMRateLimitError(Exception):

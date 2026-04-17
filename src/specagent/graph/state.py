@@ -118,7 +118,7 @@ class GraphState(TypedDict, total=False):
     """Chunks retrieved from LanceDB vector store."""
 
     dag_chunks: list[RetrievedChunk]
-    """Call-flow diagram chunks retrieved from the Memgraph DAG store (separate lane).
+    """Call-flow diagram chunks retrieved from the Kuzu DAG store (separate lane).
 
     Populated by ``dag_retriever_node`` when a call-flow query is detected.
     Passed directly to the generator — bypasses the grader.

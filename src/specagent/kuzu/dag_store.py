@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from specagent.memgraph.connection import KuzuConnection
-    from specagent.memgraph.mermaid_parser import StepRecord
+    from specagent.kuzu.connection import KuzuConnection
+    from specagent.kuzu.mermaid_parser import StepRecord
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class CallFlowDagStore:
     """Domain-level DAG operations for call-flow diagrams in the Kuzu graph store."""
 
     def __init__(self, connection: KuzuConnection) -> None:
-        """Initialise with an existing :class:`~specagent.memgraph.connection.KuzuConnection`.
+        """Initialise with an existing :class:`~specagent.kuzu.connection.KuzuConnection`.
 
         Args:
             connection: Active Kuzu connection.
@@ -117,7 +117,7 @@ class CallFlowDagStore:
             title: Human-readable diagram title (caption or heading).
             mermaid_content: Full validated Mermaid ``sequenceDiagram`` block.
             participants: Deduplicated list of participant names.
-            steps: Ordered list of :class:`~specagent.memgraph.mermaid_parser.StepRecord`.
+            steps: Ordered list of :class:`~specagent.kuzu.mermaid_parser.StepRecord`.
             prose_description: One-sentence plain-English description (``prose_fallback``).
         """
         ingested_at = datetime.now(UTC).isoformat()

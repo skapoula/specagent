@@ -16,6 +16,7 @@ _DEFAULT_DPI = 150
 _INKSCAPE_BIN = "inkscape"
 _INKSCAPE_TIMEOUT = 60  # seconds; generous for large/complex EMF files
 
+
 # MIME types that identify Windows metafile formats handled by this module.
 # Includes both IANA-registered and commonly-emitted variants.
 EMF_MIME_TYPES: frozenset[str] = frozenset(
@@ -63,6 +64,7 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
                         f"--export-dpi={dpi}",
                         str(tmp_in),
                     ],
+                    check=False,
                     capture_output=True,
                     text=True,
                     timeout=_INKSCAPE_TIMEOUT,
@@ -72,9 +74,7 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
                     f"Inkscape timed out after {_INKSCAPE_TIMEOUT}s converting {filetype} image"
                 ) from exc
             if result.returncode != 0 or not tmp_out.exists():
-                raise IngestionError(
-                    f"Inkscape exited {result.returncode}: {result.stderr[:200]}"
-                )
+                raise IngestionError(f"Inkscape exited {result.returncode}: {result.stderr[:200]}")
 
             png_bytes = tmp_out.read_bytes()
 

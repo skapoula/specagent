@@ -11,8 +11,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from specagent.config import settings
-from specagent.memgraph.mermaid_parser import parse_sequence_diagram
-from specagent.memgraph.resources import get_dag_store
+from specagent.kuzu.mermaid_parser import parse_sequence_diagram
+from specagent.kuzu.resources import get_dag_store
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
 from specagent.retrieval.embedder import embed_documents
@@ -343,7 +343,7 @@ def _store_prose_dags(text: str, doc_name: str, source: str) -> None:
 
 
 def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
-    """Store call-flow diagrams as DAGs in Memgraph (best-effort, never raises).
+    """Store call-flow diagrams as DAGs in Kuzu (best-effort, never raises).
 
     Args:
         diagrams: List of :class:`~specagent.retrieval.docx_ocr_converter.ExtractedDiagram`.

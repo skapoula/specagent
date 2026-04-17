@@ -1,4 +1,4 @@
-"""Unit tests for specagent.memgraph.mermaid_parser.
+"""Unit tests for specagent.kuzu.mermaid_parser.
 
 Tests are written FIRST (TDD). Implementation does not exist yet — all tests
 must fail with ImportError / ModuleNotFoundError before the module is created.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from specagent.memgraph.mermaid_parser import StepRecord, parse_sequence_diagram
+from specagent.kuzu.mermaid_parser import StepRecord, parse_sequence_diagram
 
 # ---------------------------------------------------------------------------
 # Helpers

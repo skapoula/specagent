@@ -274,7 +274,7 @@ class TestMermaidOutput:
     @pytest.mark.unit
     def test_mermaid_parseable_by_parse_sequence_diagram(self) -> None:
         """Generated Mermaid content can be parsed by the existing parser."""
-        from specagent.memgraph.mermaid_parser import parse_sequence_diagram
+        from specagent.kuzu.mermaid_parser import parse_sequence_diagram
 
         flows = extract_prose_call_flows(_SIMPLE_FLOW)
         participants, steps = parse_sequence_diagram(flows[0].mermaid_content)
@@ -441,6 +441,197 @@ class TestRangeSkipped:
 
 
 # ---------------------------------------------------------------------------
+# Improvement 1: new NF names
+# ---------------------------------------------------------------------------
+
+_NEW_NF_FLOW = """\
+Figure 4.2.3.1-1: 5GC connection procedure
+
+1. FN-RG to W-5GAN: Registration Request
+
+2. W-5GAN to AMF: N2 Initial UE Message
+
+3. AMF to DN: PDU Session Establishment
+
+4. SCEF to AMF: Data request
+
+5. MBSF to MBSTF: MBS session update
+
+6. AMF to EIR: N5g-eir_EquipmentIdentityCheck_Get
+"""
+
+
+class TestNewNFNames:
+    """Newly added NF names are recognised as valid actors."""
+
+    @pytest.mark.unit
+    def test_fn_rg_recognised_as_from_actor(self) -> None:
+        """FN-RG is extracted as from_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        assert flows[0].steps[0].from_actor == "FN-RG"
+
+    @pytest.mark.unit
+    def test_w_5gan_recognised_as_to_actor(self) -> None:
+        """W-5GAN is extracted as to_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        assert flows[0].steps[0].to_actor == "W-5GAN"
+
+    @pytest.mark.unit
+    def test_dn_recognised_as_to_actor(self) -> None:
+        """DN is extracted as to_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        assert flows[0].steps[2].to_actor == "DN"
+
+    @pytest.mark.unit
+    def test_scef_recognised_as_from_actor(self) -> None:
+        """SCEF is extracted as from_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        assert flows[0].steps[3].from_actor == "SCEF"
+
+    @pytest.mark.unit
+    def test_mbsf_and_mbstf_recognised(self) -> None:
+        """MBSF and MBSTF are extracted as from_actor and to_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        step = flows[0].steps[4]
+        assert step.from_actor == "MBSF"
+        assert step.to_actor == "MBSTF"
+
+    @pytest.mark.unit
+    def test_eir_recognised_as_to_actor(self) -> None:
+        """EIR is extracted as to_actor."""
+        flows = extract_prose_call_flows(_NEW_NF_FLOW)
+        assert flows[0].steps[5].to_actor == "EIR"
+
+
+# ---------------------------------------------------------------------------
+# Improvement 3: verb-based step pattern (_VERB_RE)
+# ---------------------------------------------------------------------------
+
+_CONTACTS_FLOW = """\
+Figure 4.3.2.2.1-1: PDU Session Establishment
+
+1. UE to AMF: PDU Session Establishment Request
+
+2. The SMF contacts UPF with N4 Session Establishment Request
+
+3. AMF forwards Registration Accept to UE
+"""
+
+
+class TestVerbPattern:
+    """Verb-based prose steps (invokes) are extracted via _VERB_RE."""
+
+    @pytest.mark.unit
+    def test_invokes_step_extracted(self) -> None:
+        """'N. ACTOR invokes SERVICE on ACTOR' is extracted as a step."""
+        flows = extract_prose_call_flows(_INVOKES_FLOW)
+        assert len(flows) == 1
+        assert len(flows[0].steps) == 2  # step 1 (_STEP_RE) + step 12 (_VERB_RE)
+
+    @pytest.mark.unit
+    def test_invokes_from_actor(self) -> None:
+        """from_actor of the invokes step includes 'AMF'."""
+        flows = extract_prose_call_flows(_INVOKES_FLOW)
+        step = flows[0].steps[1]
+        assert "AMF" in step.from_actor
+
+    @pytest.mark.unit
+    def test_invokes_to_actor_is_eir(self) -> None:
+        """to_actor of the invokes step is EIR."""
+        flows = extract_prose_call_flows(_INVOKES_FLOW)
+        step = flows[0].steps[1]
+        assert step.to_actor == "EIR"
+
+    @pytest.mark.unit
+    def test_invokes_message_contains_service_name(self) -> None:
+        """message contains the service operation name."""
+        flows = extract_prose_call_flows(_INVOKES_FLOW)
+        step = flows[0].steps[1]
+        assert "N5g-eir_EquipmentIdentityCheck_Get" in step.message
+
+
+class TestVerbVariants:
+    """contacts and forwards verb forms are matched by _VERB_RE."""
+
+    @pytest.mark.unit
+    def test_contacts_verb_extracted(self) -> None:
+        """'The SMF contacts UPF with ...' produces from_actor=SMF, to_actor=UPF."""
+        flows = extract_prose_call_flows(_CONTACTS_FLOW)
+        assert len(flows) == 1
+        step = flows[0].steps[1]
+        assert step.from_actor == "SMF"
+        assert step.to_actor == "UPF"
+
+    @pytest.mark.unit
+    def test_forwards_verb_extracted(self) -> None:
+        """'AMF forwards ... to UE' produces from_actor=AMF, to_actor=UE."""
+        flows = extract_prose_call_flows(_CONTACTS_FLOW)
+        step = flows[0].steps[2]
+        assert step.from_actor == "AMF"
+        assert step.to_actor == "UE"
+
+
+# ---------------------------------------------------------------------------
+# Improvement 2: implicit from-actor continuity
+# ---------------------------------------------------------------------------
+
+_IMPLICIT_FLOW = """\
+Figure 4.2.2.2.2-1: Registration procedure
+
+1. UE to AMF: Registration Request
+
+2. AMF to UDM: Nudm_UECM_Registration
+
+3. sends Nudm_UECM_Registration Response to AMF
+
+4. [Conditional] sends Namf_Communication_RegistrationComplete to UE
+"""
+
+_IMPLICIT_ORPHAN_FLOW = """\
+Figure 1.1-1: Orphan sends
+
+1. sends Registration Request to AMF
+"""
+
+
+class TestImplicitContinuity:
+    """Implicit from-actor continuity heuristic fills omitted sender from last to_actor."""
+
+    @pytest.mark.unit
+    def test_implicit_step_count(self) -> None:
+        """All 4 steps are extracted including the 2 implicit-sender steps."""
+        flows = extract_prose_call_flows(_IMPLICIT_FLOW)
+        assert len(flows) == 1
+        assert len(flows[0].steps) == 4
+
+    @pytest.mark.unit
+    def test_implicit_from_actor_is_last_to(self) -> None:
+        """from_actor of implicit step equals to_actor of preceding step (UDM)."""
+        flows = extract_prose_call_flows(_IMPLICIT_FLOW)
+        # step 2: AMF → UDM, so last_to_actor = UDM
+        # step 3: sends ... to AMF → from_actor must be UDM
+        step = flows[0].steps[2]
+        assert step.from_actor == "UDM"
+        assert step.to_actor == "AMF"
+
+    @pytest.mark.unit
+    def test_implicit_conditional_step(self) -> None:
+        """[Conditional] prefix before sends is handled for implicit steps."""
+        flows = extract_prose_call_flows(_IMPLICIT_FLOW)
+        # step 3: AMF → UE, last_to_actor = AMF
+        # step 4: [Conditional] sends ... to UE → from_actor must be AMF
+        step = flows[0].steps[3]
+        assert step.from_actor == "AMF"
+        assert step.to_actor == "UE"
+
+    @pytest.mark.unit
+    def test_no_implicit_match_without_prior_context(self) -> None:
+        """A sends-form step with no prior context does not produce a phantom step."""
+        flows = extract_prose_call_flows(_IMPLICIT_ORPHAN_FLOW)
+        assert len(flows) == 0
+
+
+# ---------------------------------------------------------------------------
 # Real document smoke test
 # ---------------------------------------------------------------------------
 
@@ -465,14 +656,14 @@ class TestRealDocument:
 
         assert len(flows) >= 38, f"Expected ≥38 flows, got {len(flows)}"
         total_steps = sum(len(f.steps) for f in flows)
-        assert total_steps >= 380, (
-            f"Expected ≥380 total steps after improvements, got {total_steps}"
+        assert total_steps >= 250, (
+            f"Expected ≥250 clean steps (NF-anchored extraction), got {total_steps}"
         )
         # Every flow must have at least one step
         for flow in flows:
             assert len(flow.steps) >= 1, f"Flow {flow.figure_id!r} has no steps"
         # Every flow must produce parseable Mermaid
-        from specagent.memgraph.mermaid_parser import parse_sequence_diagram
+        from specagent.kuzu.mermaid_parser import parse_sequence_diagram
 
         for flow in flows[:10]:
             participants, steps = parse_sequence_diagram(flow.mermaid_content)

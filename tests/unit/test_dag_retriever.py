@@ -7,7 +7,7 @@ Covers:
 - route_after_retriever keyword heuristic (call-flow queries → dag_retriever)
 - route_after_retriever bypass (non-call-flow queries, DAG disabled)
 - dag_retriever_node populates state["dag_chunks"]
-- dag_retriever_node graceful degradation when Memgraph is down
+- dag_retriever_node graceful degradation when Kuzu is down
 - Generator prompt receives dag_chunks (separate lane)
 """
 
@@ -324,7 +324,7 @@ def test_dag_retriever_node_graceful_on_dag_store_exception() -> None:
     state = _make_state("Registration call flow")
 
     mock_dag_store = MagicMock()
-    mock_dag_store.query_dags_by_keyword.side_effect = DagStoreError("Memgraph unavailable")
+    mock_dag_store.query_dags_by_keyword.side_effect = DagStoreError("Kuzu unavailable")
 
     with (
         patch("specagent.nodes.dag_retriever.get_dag_store", return_value=mock_dag_store),

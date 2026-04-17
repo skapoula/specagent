@@ -1,6 +1,6 @@
-"""Unit tests for specagent.memgraph.dag_store.CallFlowDagStore.
+"""Unit tests for specagent.kuzu.dag_store.CallFlowDagStore.
 
-All Memgraph calls are mocked — no live Memgraph instance required.
+All Kuzu calls are mocked — no live Kuzu instance required.
 Tests must pass offline.
 
 Tests are written FIRST (TDD). Implementation does not exist yet.
@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from specagent.memgraph.dag_store import CallFlowDagStore
-from specagent.memgraph.mermaid_parser import StepRecord
+from specagent.kuzu.dag_store import CallFlowDagStore
+from specagent.kuzu.mermaid_parser import StepRecord
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -37,7 +37,7 @@ _SAMPLE_STEPS = [
 
 @pytest.fixture
 def mock_conn() -> MagicMock:
-    """Mock MemgraphConnection with no-op execute methods."""
+    """Mock KuzuConnection with no-op execute methods."""
     conn = MagicMock()
     conn.execute_cypher.return_value = []
     conn.execute_cypher_write.return_value = None
@@ -202,7 +202,7 @@ class TestQueryDagsByKeyword:
     def test_returns_empty_list_on_no_match(
         self, store: CallFlowDagStore, mock_conn: MagicMock
     ) -> None:
-        """Returns empty list when Memgraph returns no results."""
+        """Returns empty list when Kuzu returns no results."""
         mock_conn.execute_cypher.return_value = []
 
         result = store.query_dags_by_keyword(["registration"], limit=3)
@@ -213,7 +213,7 @@ class TestQueryDagsByKeyword:
     def test_returns_dag_list_on_match(
         self, store: CallFlowDagStore, mock_conn: MagicMock
     ) -> None:
-        """Returns list of dicts when Memgraph returns matches."""
+        """Returns list of dicts when Kuzu returns matches."""
         mock_conn.execute_cypher.return_value = [
             {
                 "dag_id": "ts23.502::registration",
@@ -276,7 +276,7 @@ class TestGetDagMermaid:
     def test_returns_none_when_not_found(
         self, store: CallFlowDagStore, mock_conn: MagicMock
     ) -> None:
-        """Returns None when the DAG does not exist in Memgraph."""
+        """Returns None when the DAG does not exist in Kuzu."""
         mock_conn.execute_cypher.return_value = []
 
         result = store.get_dag_mermaid("nonexistent::dag")
@@ -306,7 +306,7 @@ class TestDagStoreHealthCheck:
     def test_delegates_to_connection_health_check(
         self, store: CallFlowDagStore, mock_conn: MagicMock
     ) -> None:
-        """health_check delegates to the underlying MemgraphConnection."""
+        """health_check delegates to the underlying KuzuConnection."""
         mock_conn.health_check.return_value = True
 
         result = store.health_check()

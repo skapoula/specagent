@@ -94,7 +94,7 @@ specagent/
 │   │   ├── rewriter.py          # rewriter_node: LLM query reformulation
 │   │   ├── generator.py         # generator_node: LLM answer synthesis + citation extraction
 │   │   └── hallucination.py     # hallucination_check_node: LLM-as-judge grounding check
-│   ├── memgraph/                # Kuzu embedded graph store for call-flow DAGs
+│   ├── kuzu/                    # Kuzu embedded graph store for call-flow DAGs
 │   │   ├── connection.py        # KuzuConnection: execute_cypher / execute_cypher_write / health_check
 │   │   ├── dag_store.py         # CallFlowDagStore: store_call_flow_dag, query_dags_by_keyword, get_dag_mermaid
 │   │   ├── mermaid_parser.py    # parse_sequence_diagram(): Mermaid → StepRecord list
@@ -146,13 +146,13 @@ specagent/
 
 Relevant thresholds used by the agent logic:
 
-| Setting | Default | Purpose |
-|---|---|---|
-| `grader_confidence_threshold` | 0.60 | Below this → trigger rewrite |
-| `min_relevant_chunk_percentage` | 0.50 | Below this → trigger rewrite |
-| `high_similarity_threshold` | 0.85 | Top-3 avg above this → skip rewrite (fast heuristic) |
-| `max_rewrites` | 1 | Per-pipeline rewrite cap (overridable per request) |
-| `retrieval_top_k` | 10 | Chunks fetched per retrieval call |
+| Setting                         | Default | Purpose                                              |
+| ------------------------------- | ------- | ---------------------------------------------------- |
+| `grader_confidence_threshold`   | 0.60    | Below this → trigger rewrite                         |
+| `min_relevant_chunk_percentage` | 0.50    | Below this → trigger rewrite                         |
+| `high_similarity_threshold`     | 0.85    | Top-3 avg above this → skip rewrite (fast heuristic) |
+| `max_rewrites`                  | 1       | Per-pipeline rewrite cap (overridable per request)   |
+| `retrieval_top_k`               | 10      | Chunks fetched per retrieval call                    |
 
 ### `graph/state.py` — Shared pipeline state
 
@@ -187,34 +187,37 @@ GraphState fields (grouped by pipeline stage):
 
 Every node has the signature `def node_name(state: GraphState) -> GraphState` and must not raise exceptions — errors are written to `state["error"]` and the node returns gracefully.
 
-| Node | LLM calls | Key output fields |
-|---|---|---|
-| `router_node` | 1 (structured: `RouteDecision`) | `route_decision`, `route_reasoning` |
-| `retriever_node` | 0 (embed + search) | `retrieved_chunks`, `retrieval_events` |
-| `dag_retriever_node` | 0 (Kuzu keyword search; optional) | `dag_chunks` |
-| `grader_node` | 0–1 (batched `BatchGradeResult` for mid-range chunks) | `graded_chunks`, `average_confidence` |
-| `rewriter_node` | 1 (free text) | `rewritten_question`, `rewrite_count` |
-| `generator_node` | 1 (free text with citation extraction) | `generation`, `citations` |
+| Node                       | LLM calls                                                                | Key output fields                                                |
+| -------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `router_node`              | 1 (structured: `RouteDecision`)                                          | `route_decision`, `route_reasoning`                              |
+| `retriever_node`           | 0 (embed + search)                                                       | `retrieved_chunks`, `retrieval_events`                           |
+| `dag_retriever_node`       | 0 (Kuzu keyword search; optional)                                        | `dag_chunks`                                                     |
+| `grader_node`              | 0–1 (batched `BatchGradeResult` for mid-range chunks)                    | `graded_chunks`, `average_confidence`                            |
+| `rewriter_node`            | 1 (free text)                                                            | `rewritten_question`, `rewrite_count`                            |
+| `generator_node`           | 1 (free text with citation extraction)                                   | `generation`, `citations`                                        |
 | `hallucination_check_node` | 0–1 (skipped when avg confidence above threshold; `HallucinationResult`) | `hallucination_check`, `ungrounded_claims`, `regeneration_count` |
 
 **Grader auto-grading thresholds** (in `nodes/grader.py`):
+
 - `similarity_score > 0.82` → auto "yes" (no LLM call)
 - `similarity_score < 0.55` → auto "no" (no LLM call)
 - `0.55 ≤ similarity_score ≤ 0.82` → single batched LLM call for all mid-range chunks
 
 **Hallucination skip thresholds** (in `nodes/hallucination.py`):
+
 - `average_confidence ≥ 0.65` (numerical/tabular content) → skip check
 - `average_confidence ≥ 0.70` (other content) → skip check
 
-### `memgraph/` — Kuzu embedded graph store
+### `kuzu/` — Kuzu embedded graph store
 
-The `memgraph/` package implements the optional call-flow DAG layer. Despite the package name (inherited from the original Memgraph design), it now uses **Kuzu** — an in-process embeddable graph database — with no external server or port.
+The `kuzu/` package implements the optional call-flow DAG layer using **Kuzu** — an in-process embeddable graph database — with no external server or port.
 
 `KuzuConnection` opens (or creates) a Kuzu database at `kuzu_db_path` and auto-applies the DDL schema on first access. It exposes the same `execute_cypher` / `execute_cypher_write` / `health_check` interface used by `CallFlowDagStore`, keeping the store layer independent of the backend.
 
 `CallFlowDagStore` writes call-flow diagrams extracted from `.docx` files as a graph: `CallFlowDag → HAS_STEP → DagStep` and `CallFlowDag → HAS_PARTICIPANT → DagParticipant`. Retrieval uses Kuzu's `any(kw IN $keywords WHERE ...)` predicate for case-insensitive keyword matching across step messages, titles, and prose descriptions.
 
 `dag_retriever_node` is the conditional LangGraph node that queries the DAG store. It is only reached when:
+
 1. `ENABLE_DAG_RETRIEVAL=true`, and
 2. `route_after_retriever()` detects call-flow keywords (procedure, sequence, call flow, 3GPP participants like UE/AMF/gNB) in the query.
 
@@ -263,22 +266,22 @@ The `POST /query` handler runs `run_query()` via `asyncio.to_thread` (the LangGr
 
 ### ChunkRecord (LanceDB schema)
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | str (UUID4) | Chunk-level unique ID |
-| `doc_id` | str (UUID4) | Document-level grouping key |
-| `library` | str | Library tag (e.g. `"3gpp-specs"`) |
-| `source` | str | Absolute file path |
-| `content_hash` | str | SHA-256 hex of raw file bytes (dedup key) |
-| `title` | str | First `#` heading or filename stem |
-| `content` | str | Chunk text |
-| `embedding` | list[float32] × 768 | nomic-embed-text-v1.5 vector |
-| `chunk_index` | int | Zero-based position in document |
-| `created_at` | str (ISO 8601) | Ingest timestamp |
-| `metadata` | str (JSON) | Includes `section_header` key |
-| `file_type` | str | Extension without dot (e.g. `"pdf"`) |
-| `last_modified` | str (ISO 8601) | File mtime |
-| `page` | int | Page number (0 = not applicable) |
+| Field           | Type                | Description                               |
+| --------------- | ------------------- | ----------------------------------------- |
+| `id`            | str (UUID4)         | Chunk-level unique ID                     |
+| `doc_id`        | str (UUID4)         | Document-level grouping key               |
+| `library`       | str                 | Library tag (e.g. `"3gpp-specs"`)         |
+| `source`        | str                 | Absolute file path                        |
+| `content_hash`  | str                 | SHA-256 hex of raw file bytes (dedup key) |
+| `title`         | str                 | First `#` heading or filename stem        |
+| `content`       | str                 | Chunk text                                |
+| `embedding`     | list[float32] × 768 | nomic-embed-text-v1.5 vector              |
+| `chunk_index`   | int                 | Zero-based position in document           |
+| `created_at`    | str (ISO 8601)      | Ingest timestamp                          |
+| `metadata`      | str (JSON)          | Includes `section_header` key             |
+| `file_type`     | str                 | Extension without dot (e.g. `"pdf"`)      |
+| `last_modified` | str (ISO 8601)      | File mtime                                |
+| `page`          | int                 | Page number (0 = not applicable)          |
 
 ### GraphState flow
 
@@ -350,36 +353,36 @@ All settings are in `config.py` and configurable via environment variables or a 
 
 ### Required
 
-| Variable | Description |
-|---|---|
+| Variable       | Description                                            |
+| -------------- | ------------------------------------------------------ |
 | `GROQ_API_KEY` | Groq cloud API key (required when `LLM_PROVIDER=groq`) |
 
 ### Common overrides
 
-| Variable | Default | Description |
-|---|---|---|
-| `LLM_PROVIDER` | `groq` | `groq` or `custom_endpoint` |
-| `GROQ_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model ID |
-| `CUSTOM_ENDPOINT_URL` | — | OpenAI-compatible endpoint URL |
-| `LANCEDB_URI` | `data/lancedb` | Vector index storage path |
-| `EMBEDDING_MODEL` | `nomic-ai/nomic-embed-text-v1.5` | fastembed model name |
-| `EMBEDDING_DIMENSION` | `768` | Must match the model output dimension |
-| `RETRIEVAL_TOP_K` | `10` | Chunks fetched per query |
-| `MAX_REWRITES` | `1` | Max query rewrite iterations |
-| `CHUNK_SIZE_TOKENS` | `512` | Target chunk size in tokens |
-| `CHUNK_OVERLAP_TOKENS` | `64` | Token overlap between consecutive chunks |
-| `ENABLE_TRACING` | `true` | Enable Arize Phoenix OTel tracing |
-| `PHOENIX_ENDPOINT` | `http://localhost:6006` | Phoenix collector URL |
-| `ENABLE_LANGSMITH` | `true` | Enable LangSmith tracing |
-| `LANGCHAIN_API_KEY` | — | LangSmith API key |
-| `ENABLE_QUERY_JOURNAL` | `false` | Write per-query JSONL journal |
-| `ENABLE_DOCX_OCR` | `false` | Enable Groq vision two-pass OCR for DOCX |
-| `CORS_ALLOW_ORIGINS` | `http://localhost:3000` | Comma-separated allowed CORS origins |
-| `KUZU_DB_PATH` | `data/dag_store` | Path to Kuzu embedded graph database directory (created automatically) |
-| `ENABLE_DAG_STORAGE` | `false` | Persist call-flow DAGs extracted from `.docx` ingest to Kuzu |
-| `ENABLE_DAG_RETRIEVAL` | `false` | Augment RAG with Kuzu DAG results for call-flow queries |
-| `DAG_RETRIEVAL_TOP_K` | `1` | Max DAG results injected per query |
-| `DAG_RETRIEVAL_SCORE` | `0.70` | Similarity score assigned to injected DAG chunks |
+| Variable               | Default                                     | Description                                                            |
+| ---------------------- | ------------------------------------------- | ---------------------------------------------------------------------- |
+| `LLM_PROVIDER`         | `groq`                                      | `groq` or `custom_endpoint`                                            |
+| `GROQ_MODEL`           | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model ID                                                          |
+| `CUSTOM_ENDPOINT_URL`  | —                                           | OpenAI-compatible endpoint URL                                         |
+| `LANCEDB_URI`          | `data/lancedb`                              | Vector index storage path                                              |
+| `EMBEDDING_MODEL`      | `nomic-ai/nomic-embed-text-v1.5`            | fastembed model name                                                   |
+| `EMBEDDING_DIMENSION`  | `768`                                       | Must match the model output dimension                                  |
+| `RETRIEVAL_TOP_K`      | `10`                                        | Chunks fetched per query                                               |
+| `MAX_REWRITES`         | `1`                                         | Max query rewrite iterations                                           |
+| `CHUNK_SIZE_TOKENS`    | `512`                                       | Target chunk size in tokens                                            |
+| `CHUNK_OVERLAP_TOKENS` | `64`                                        | Token overlap between consecutive chunks                               |
+| `ENABLE_TRACING`       | `true`                                      | Enable Arize Phoenix OTel tracing                                      |
+| `PHOENIX_ENDPOINT`     | `http://localhost:6006`                     | Phoenix collector URL                                                  |
+| `ENABLE_LANGSMITH`     | `true`                                      | Enable LangSmith tracing                                               |
+| `LANGCHAIN_API_KEY`    | —                                           | LangSmith API key                                                      |
+| `ENABLE_QUERY_JOURNAL` | `false`                                     | Write per-query JSONL journal                                          |
+| `ENABLE_DOCX_OCR`      | `false`                                     | Enable Groq vision two-pass OCR for DOCX                               |
+| `CORS_ALLOW_ORIGINS`   | `http://localhost:3000`                     | Comma-separated allowed CORS origins                                   |
+| `KUZU_DB_PATH`         | `data/dag_store`                            | Path to Kuzu embedded graph database directory (created automatically) |
+| `ENABLE_DAG_STORAGE`   | `false`                                     | Persist call-flow DAGs extracted from `.docx` ingest to Kuzu           |
+| `ENABLE_DAG_RETRIEVAL` | `false`                                     | Augment RAG with Kuzu DAG results for call-flow queries                |
+| `DAG_RETRIEVAL_TOP_K`  | `1`                                         | Max DAG results injected per query                                     |
+| `DAG_RETRIEVAL_SCORE`  | `0.70`                                      | Similarity score assigned to injected DAG chunks                       |
 
 ## Extending SpecAgent
 
