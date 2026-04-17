@@ -27,3 +27,7 @@ class VisionError(Exception):
 
 class DagStoreError(Exception):
     """Raised when a Memgraph DAG store read or write operation fails."""
+
+
+class LLMRateLimitError(Exception):
+    """Raised when the Groq LLM API daily quota is exhausted and retry would exceed threshold."""

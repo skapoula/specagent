@@ -18,6 +18,7 @@ from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert
 from specagent.retrieval.embedder import embed_documents
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
 from specagent.retrieval.markdown_postprocessor import postprocess
+from specagent.retrieval.prose_dag_extractor import extract_prose_call_flows
 from specagent.retrieval.resources import get_store
 from specagent.retrieval.store import ChunkRecord
 
@@ -128,6 +129,10 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     # ── 3b. Store call-flow diagrams as DAGs (fire-and-forget) ────────────────
     if settings.enable_dag_storage and diagrams:
         _store_diagrams_as_dags(diagrams, doc_name=path.stem, source=source_str)
+
+    # ── 3c. Extract prose call-flow DAGs from Markdown (non-OCR path) ─────────
+    if settings.enable_dag_storage and not diagrams:
+        _store_prose_dags(text, doc_name=path.stem, source=source_str)
 
     # ── 4. Chunk, extracting section headers per chunk ─────────────────────────
     try:
@@ -304,6 +309,37 @@ async def ingest_folder(
         results=results,
         errors=errors,
     )
+
+
+def _store_prose_dags(text: str, doc_name: str, source: str) -> None:
+    """Store prose-extracted call-flow DAGs in Kuzu (best-effort, never raises).
+
+    Args:
+        text: Postprocessed Markdown text from the document.
+        doc_name: Stem of the source document filename (e.g. ``"TS23.502"``).
+        source: Full path string of the source document.
+    """
+
+    flows = extract_prose_call_flows(text)
+    if not flows:
+        return
+    dag_store = get_dag_store()
+    for flow in flows:
+        dag_id = f"{doc_name}::{flow.title}"
+        try:
+            dag_store.store_call_flow_dag(
+                dag_id=dag_id,
+                doc_id="",
+                source=source,
+                title=flow.title,
+                mermaid_content=flow.mermaid_content,
+                participants=flow.participants,
+                steps=flow.steps,
+                prose_description="",
+            )
+            logger.info("Stored prose DAG %r (%d steps)", dag_id, len(flow.steps))
+        except Exception as exc:
+            logger.warning("Prose DAG storage failed for %r: %s — continuing ingest", dag_id, exc)
 
 
 def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:

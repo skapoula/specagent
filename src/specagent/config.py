@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 # Recognised LLM backend identifiers.
 LLMProvider = Literal["custom_endpoint", "groq"]
@@ -353,6 +353,24 @@ class Settings(BaseSettings):
         ge=1,
         description="Groq vision API requests-per-day limit (free tier: 1000).",
     )
+    vision_tpm_limit: int = Field(
+        default=30000,
+        ge=1,
+        description=(
+            "Groq vision API tokens-per-minute limit (free tier: 30000 for llama-4-scout). "
+            "Pre-flight TPM budgeting slows calls when the estimated token budget is nearly full. "
+            "Env var: VISION_TPM_LIMIT."
+        ),
+    )
+    vision_tokens_per_call_estimate: int = Field(
+        default=2000,
+        ge=1,
+        description=(
+            "Conservative token estimate per vision API call used for pre-flight TPM budgeting. "
+            "Each call uses ~1024 output + ~1000 input tokens; 2000 is a safe upper bound. "
+            "Env var: VISION_TOKENS_PER_CALL_ESTIMATE."
+        ),
+    )
     vision_min_image_bytes: int = Field(
         default=10 * 1024,  # 10 KB
         ge=1,
@@ -384,6 +402,62 @@ class Settings(BaseSettings):
         description=(
             "Diagram types for which Mermaid output is requested from the vision model. "
             "Env var: VISION_DIAGRAM_TYPES (comma-separated)."
+        ),
+    )
+
+    # ==========================================================================
+    # Groq LLM Rate Limit Configuration
+    # Defaults match the free-tier limits for meta-llama/llama-4-scout-17b-16e-instruct.
+    # ==========================================================================
+    groq_llm_rpm_limit: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description=(
+            "Groq LLM API requests-per-minute limit. "
+            "Free-tier default: 30. Env var: GROQ_LLM_RPM_LIMIT."
+        ),
+    )
+    groq_llm_rpd_limit: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Groq LLM API requests-per-day limit. "
+            "Free-tier default: 1000. Env var: GROQ_LLM_RPD_LIMIT."
+        ),
+    )
+    groq_llm_tpm_limit: int = Field(
+        default=30000,
+        ge=1,
+        description=(
+            "Groq LLM API tokens-per-minute limit. "
+            "Free-tier default: 30000. Env var: GROQ_LLM_TPM_LIMIT."
+        ),
+    )
+    groq_llm_tpd_limit: int = Field(
+        default=500000,
+        ge=1,
+        description=(
+            "Groq LLM API tokens-per-day limit. "
+            "Free-tier default: 500000. Env var: GROQ_LLM_TPD_LIMIT."
+        ),
+    )
+    groq_llm_tokens_per_call_estimate: int = Field(
+        default=6000,
+        ge=1,
+        description=(
+            "Conservative token estimate per LLM call for pre-flight TPM budgeting. "
+            "specagent makes up to 5 LLM calls per query at ~1200 tokens each. "
+            "Env var: GROQ_LLM_TOKENS_PER_CALL_ESTIMATE."
+        ),
+    )
+    groq_llm_max_retries: int = Field(
+        default=6,
+        ge=1,
+        le=10,
+        description=(
+            "Maximum tenacity retries for 429/503/504 Groq LLM API errors. "
+            "Env var: GROQ_LLM_MAX_RETRIES."
         ),
     )
 
@@ -463,11 +537,42 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator("lancedb_uri", "docs_dir", "data_dir", "raw_data_dir", "processed_data_dir", "journal_dir", "kuzu_db_path")
+    @field_validator(
+        "lancedb_uri",
+        "docs_dir",
+        "data_dir",
+        "raw_data_dir",
+        "processed_data_dir",
+        "journal_dir",
+        "kuzu_db_path",
+    )
     @classmethod
     def resolve_path(cls, v: Path) -> Path:
         """Resolve paths to absolute paths."""
         return v.resolve()
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Load configuration from .env file only — shell environment variables are excluded.
+
+        This prevents ambient shell exports (e.g. EMBEDDING_MODEL set by another
+        project sharing the same devcontainer) from silently overriding .env values.
+        Constructor kwargs still take priority, which allows tests to pass overrides
+        directly without touching the filesystem.
+
+        IMPORTANT: Because shell exports are ignored, secrets such as GROQ_API_KEY
+        must be supplied via a ``.env`` file (e.g. ``echo 'GROQ_API_KEY=...' >> .env``),
+        not via ``export GROQ_API_KEY=...`` in the shell. Shell exports will be
+        silently ignored.
+        """
+        return (init_settings, dotenv_settings, file_secret_settings)
 
 
 @lru_cache

@@ -6,7 +6,7 @@ Provides common fixtures for:
     - Mock LLM API responses
     - Sample document chunks
     - Temporary directories for indexes
-    - Docx ZIP helpers for OCR pipeline tests
+    - Docx ZIP helpers for structural/error-path tests only
 """
 
 import io
@@ -22,6 +22,18 @@ import pytest
 
 from specagent.retrieval.resources import clear_resource_cache
 
+# ---------------------------------------------------------------------------
+# Real test data — actual 3GPP .docx files from the project data directory
+# ---------------------------------------------------------------------------
+
+RAW_DATA_DIR = Path(__file__).parent.parent / "data" / "raw"
+
+# The three real .docx files available for tests.
+# 38108-i40.docx is the smallest (857 KB) and is the default for most tests.
+DOCX_SMALL = RAW_DATA_DIR / "38108-i40.docx"  # 857 KB, 98 images (87 wmf, 8 emf, 3 png)
+DOCX_MEDIUM = RAW_DATA_DIR / "38104-ic0.docx"  # 3.3 MB, 164 images
+DOCX_LARGE = RAW_DATA_DIR / "23502-j70.docx"  # 16.9 MB, 288 images
+
 # =============================================================================
 # Configuration Fixtures
 # =============================================================================
@@ -32,26 +44,23 @@ def mock_settings():
     """Provide test settings without requiring .env file.
 
     Clears the get_settings lru_cache before and after the test so that any
-    code calling get_settings() during the test receives a fresh instance
-    built from the patched environment variables.
+    code calling get_settings() during the test receives a fresh instance.
+    Settings are constructed via kwargs (shell env vars are excluded from the
+    settings source chain, so patch.dict(os.environ) has no effect here).
     """
     from specagent.config import Settings, get_settings
 
     get_settings.cache_clear()
-    with patch.dict(
-        "os.environ",
-        {
-            "EMBEDDING_MODEL": "nomic-ai/nomic-embed-text-v1.5",
-            "ENABLE_TRACING": "false",
-        },
+    new_settings = Settings(
+        embedding_model="nomic-ai/nomic-embed-text-v1.5",
+        enable_tracing=False,
+    )
+    # Patch the module-level singletons imported at load time in each module
+    with (
+        patch("specagent.config.settings", new_settings),
+        patch("specagent.graph.workflow.settings", new_settings),
     ):
-        new_settings = Settings()
-        # Patch the module-level singletons imported at load time in each module
-        with (
-            patch("specagent.config.settings", new_settings),
-            patch("specagent.graph.workflow.settings", new_settings),
-        ):
-            yield new_settings
+        yield new_settings
     get_settings.cache_clear()
 
 
@@ -66,6 +75,20 @@ def reset_resource_cache():
     clear_resource_cache()
     yield
     clear_resource_cache()
+
+
+@pytest.fixture(autouse=True)
+def reset_llm_rate_limiter_singleton():
+    """Reset the Groq LLM rate limiter singleton before each test.
+
+    Prevents test cross-contamination when settings are patched during singleton
+    initialisation (e.g. patch("specagent.config.settings") in factory tests).
+    """
+    import specagent.llm.groq_rate_limiter as _mod
+
+    _mod._llm_rate_limiter = None
+    yield
+    _mod._llm_rate_limiter = None
 
 
 # =============================================================================
@@ -433,9 +456,7 @@ def make_docx_zip_with_caption(
     Returns:
         Raw bytes of a valid .docx ZIP archive.
     """
-    _IMAGE_REL_TYPE = (
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
-    )
+    _IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
     _PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
     _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
     _R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -478,43 +499,50 @@ def make_docx_zip_with_caption(
 
 @pytest.fixture
 def small_png() -> bytes:
-    """PNG well below the 10 KB default min threshold (~100 bytes)."""
+    """PNG well below the 10 KB default min threshold (~100 bytes).
+
+    Still synthetic — used only for size-threshold edge-case tests where
+    a real sub-threshold PNG is required as bytes (not a file path).
+    """
     return _make_png_bytes()
 
 
 @pytest.fixture
 def large_png() -> bytes:
-    """PNG padded to 15 KB — above default min threshold of 10 KB."""
-    return _make_png_bytes(n_bytes=15 * 1024)
+    """Real PNG bytes from the smallest 3GPP docx (image4.png, 33 KB).
+
+    Above the 10 KB vision_min_image_bytes threshold.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(DOCX_SMALL) as zf:
+        return zf.read("word/media/image4.png")
 
 
 @pytest.fixture
 def docx_no_images(tmp_path: Path) -> Path:
-    """A .docx file containing no embedded images."""
+    """A .docx file containing no embedded images (synthetic minimal ZIP).
+
+    Used only for structural/error-path tests that require a docx with
+    zero images. Real 3GPP files all contain images, so this remains
+    synthetic for those specific tests.
+    """
     p = tmp_path / "no_images.docx"
     p.write_bytes(make_docx_zip())
     return p
 
 
 @pytest.fixture
-def docx_one_image(tmp_path: Path, large_png: bytes) -> Path:
-    """A .docx file containing one PNG image (15 KB)."""
-    p = tmp_path / "one_image.docx"
-    p.write_bytes(make_docx_zip(images=[("image1.png", large_png)]))
-    return p
+def docx_one_image() -> Path:
+    """Real 3GPP .docx file (38108-i40.docx) — contains 98 embedded images."""
+    return DOCX_SMALL
 
 
 @pytest.fixture
-def docx_three_images(tmp_path: Path, large_png: bytes) -> Path:
-    """A .docx file with three PNG images."""
-    p = tmp_path / "three_images.docx"
-    p.write_bytes(
-        make_docx_zip(
-            images=[
-                ("image1.png", large_png),
-                ("image2.png", large_png),
-                ("image3.png", large_png),
-            ]
-        )
-    )
-    return p
+def docx_three_images() -> Path:
+    """Real 3GPP .docx file (38108-i40.docx) — contains 98 embedded images.
+
+    Tests using this fixture verify that multiple images are processed;
+    assertions should use >= 3 rather than exactly 3.
+    """
+    return DOCX_SMALL

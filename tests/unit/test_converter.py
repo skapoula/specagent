@@ -4,17 +4,19 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import DOCX_SMALL
+
 
 @pytest.mark.unit
-def test_convert_markdown_file(tmp_path):
-    """convert() on a .md file returns its content as a string."""
+def test_convert_docx_file():
+    """convert() on a real 3GPP .docx returns non-empty markdown string."""
     from specagent.retrieval.converter import convert
 
-    md_file = tmp_path / "test.md"
-    md_file.write_text("# Title\n\nSome content.")
-    result = convert(md_file)
+    result = convert(DOCX_SMALL)
     assert isinstance(result, str)
     assert len(result) > 0
+    # Real 3GPP spec content expected
+    assert "3GPP" in result
 
 
 @pytest.mark.unit

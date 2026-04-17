@@ -46,8 +46,14 @@ class TestGroqAdapterLastCall:
         }
         adapter._model.invoke.return_value = mock_response
 
-        with patch("specagent.config.settings") as ms:
+        mock_limiter = MagicMock()
+        with (
+            patch("specagent.config.settings") as ms,
+            patch("specagent.llm.groq_rate_limiter._get_llm_rate_limiter", return_value=mock_limiter),
+        ):
             ms.groq_model = "llama-4-scout"
+            ms.groq_llm_tokens_per_call_estimate = 6000
+            ms.groq_llm_max_retries = 1
             adapter.invoke("test prompt")
 
         rec = adapter.get_last_call()
@@ -66,8 +72,14 @@ class TestGroqAdapterLastCall:
         mock_response.usage_metadata = None
         adapter._model.invoke.return_value = mock_response
 
-        with patch("specagent.config.settings") as ms:
+        mock_limiter = MagicMock()
+        with (
+            patch("specagent.config.settings") as ms,
+            patch("specagent.llm.groq_rate_limiter._get_llm_rate_limiter", return_value=mock_limiter),
+        ):
             ms.groq_model = "llama-4-scout"
+            ms.groq_llm_tokens_per_call_estimate = 6000
+            ms.groq_llm_max_retries = 1
             adapter.invoke("test prompt")
 
         rec = adapter.get_last_call()

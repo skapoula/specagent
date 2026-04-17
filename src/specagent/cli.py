@@ -13,7 +13,11 @@ import typer
 
 # Configure a basic handler so logger.error() calls in CLI commands reach stderr.
 # uvicorn sets up its own logging for the `serve` command; this covers the rest.
-logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+# Respect LOG_LEVEL env var so rate-limit / vision warnings are visible at runtime.
+import os as _os
+_log_level = getattr(logging, _os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING)
+logging.basicConfig(level=_log_level, format="%(levelname)s: %(message)s")
+del _os, _log_level
 from rich.console import Console
 from rich.table import Table
 

@@ -21,10 +21,72 @@ import warnings
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Protocol
 
+from tenacity import Retrying, retry_if_exception, stop_after_attempt
+
 if TYPE_CHECKING:
     from specagent.observability.models import LLMCallRecord
 
 logger = logging.getLogger(__name__)
+
+
+def _is_llm_retryable(exc: BaseException) -> bool:
+    """Return True for transient Groq LLM API errors that should be retried.
+
+    Retries 429 (rate limit) unless Retry-After > 3600 s (daily quota exhausted).
+    Also retries 503 (server unavailable) and 504 (gateway timeout).
+    All other exceptions are not retried.
+    """
+    try:
+        import openai  # noqa: PLC0415
+
+        if isinstance(exc, openai.APIStatusError):
+            if exc.status_code == 429:
+                retry_after = exc.response.headers.get("retry-after", "")
+                try:
+                    if float(retry_after) > 3600.0:
+                        return False
+                except (ValueError, TypeError):
+                    pass
+                return True
+            return exc.status_code in (503, 504)
+    except ImportError:
+        pass
+    return False
+
+
+def _wait_llm_retry_after(retry_state: Any) -> float:
+    """Tenacity wait callable: honour Retry-After header, else use exponential backoff.
+
+    Returns the number of seconds to wait before the next retry attempt.
+    Falls back to ``min(2^attempt * 2, 60)`` when no header is present.
+    """
+    exc = retry_state.outcome.exception()
+    try:
+        import openai  # noqa: PLC0415
+
+        if isinstance(exc, openai.APIStatusError):
+            raw = exc.response.headers.get("retry-after", "")
+            try:
+                seconds = float(raw)
+                if 0.0 < seconds <= 3600.0:
+                    logger.warning(
+                        "Groq LLM 429 — honouring Retry-After: %.0f s (attempt %d)",
+                        seconds,
+                        retry_state.attempt_number,
+                    )
+                    return seconds
+            except (ValueError, TypeError):
+                pass
+    except ImportError:
+        pass
+
+    wait = min(2.0 ** retry_state.attempt_number * 2.0, 60.0)
+    logger.warning(
+        "Groq LLM transient error — exponential backoff: %.1f s (attempt %d)",
+        wait,
+        retry_state.attempt_number,
+    )
+    return wait
 
 
 class LLMProtocol(Protocol):
@@ -52,34 +114,53 @@ class _GroqAdapter:
         self._tls = threading.local()
 
     def invoke(self, prompt: str) -> str:
-        """Send prompt to Groq, capture token usage, and return the response text."""
+        """Send prompt to Groq, capture token usage, and return the response text.
+
+        Proactively throttles against Groq's RPM/TPM limits before each call, then
+        wraps the call in a tenacity retry loop to handle transient 429/503/504 errors.
+        """
+        from specagent.config import settings  # noqa: PLC0415
+        from specagent.llm.groq_rate_limiter import _get_llm_rate_limiter  # noqa: PLC0415
+
         self._tls.last_call = None
+
+        # Proactive throttle: block until a slot is available within RPM/TPM budgets
+        _get_llm_rate_limiter().acquire(settings.groq_llm_tokens_per_call_estimate)
+
         from langchain_core.messages import HumanMessage  # noqa: PLC0415
 
-        start = time.perf_counter()
-        response = self._model.invoke([HumanMessage(content=prompt)])
-        inference_ms = (time.perf_counter() - start) * 1000
-        try:
-            from specagent.config import settings  # noqa: PLC0415
-            from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
+        for attempt in Retrying(
+            retry=retry_if_exception(_is_llm_retryable),
+            stop=stop_after_attempt(settings.groq_llm_max_retries),
+            wait=_wait_llm_retry_after,
+            reraise=True,
+        ):
+            with attempt:
+                start = time.perf_counter()
+                response = self._model.invoke([HumanMessage(content=prompt)])
+                inference_ms = (time.perf_counter() - start) * 1000
+                try:
+                    from specagent.observability.models import LLMCallRecord  # noqa: PLC0415
 
-            usage = response.usage_metadata
-            self._tls.last_call = LLMCallRecord(
-                node="",
-                trace_id="",
-                model=settings.groq_model,
-                provider="groq",
-                prompt_tokens=usage.get("input_tokens") if usage else None,
-                completion_tokens=usage.get("output_tokens") if usage else None,
-                total_tokens=usage.get("total_tokens") if usage else None,
-                inference_ms=inference_ms,
-            )
-        except Exception:
-            logger.warning(
-                "Failed to capture LLM call record; token usage unavailable", exc_info=True
-            )
-            self._tls.last_call = None
-        content = response.content
+                    usage = response.usage_metadata
+                    self._tls.last_call = LLMCallRecord(
+                        node="",
+                        trace_id="",
+                        model=settings.groq_model,
+                        provider="groq",
+                        prompt_tokens=usage.get("input_tokens") if usage else None,
+                        completion_tokens=usage.get("output_tokens") if usage else None,
+                        total_tokens=usage.get("total_tokens") if usage else None,
+                        inference_ms=inference_ms,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to capture LLM call record; token usage unavailable",
+                        exc_info=True,
+                    )
+                    self._tls.last_call = None
+
+        content = response.content  # type: ignore[possibly-undefined]
         return content if isinstance(content, str) else str(content)
 
     def get_last_call(self) -> LLMCallRecord | None:

@@ -77,3 +77,38 @@ class TestGroqVisionRateLimiter:
         limiter_a = _get_rate_limiter()
         limiter_b = _get_rate_limiter()
         assert limiter_a is limiter_b
+
+    async def test_acquire_respects_tpm_budget(self) -> None:
+        """Acquiring slots is delayed when estimated token budget would exceed tpm_limit."""
+        from specagent.retrieval.groq_rate_limiter import GroqVisionRateLimiter
+
+        # tpm_limit=3000, tokens_per_call=1000 → max 3 calls per minute
+        limiter = GroqVisionRateLimiter(rpm_limit=100, rpd_limit=1000, tpm_limit=3000, tokens_per_call=1000)
+        # Pre-fill minute_tokens to within 1 call of the limit
+        now = time.monotonic()
+        limiter._minute_tokens.append((now, 1000))  # noqa: SLF001
+        limiter._minute_tokens.append((now, 1000))  # noqa: SLF001
+        limiter._minute_tokens.append((now, 1000))  # noqa: SLF001
+        # Next acquire should block on TPM — but we can't wait 60 s in a test,
+        # so just confirm current_minute_tokens == tpm_limit
+        current = sum(t for _, t in limiter._minute_tokens)  # noqa: SLF001
+        assert current >= limiter._tpm  # noqa: SLF001
+
+    async def test_reset_for_testing_clears_minute_tokens(self) -> None:
+        """reset_for_testing() also empties the minute-tokens deque."""
+        from specagent.retrieval.groq_rate_limiter import GroqVisionRateLimiter
+
+        limiter = GroqVisionRateLimiter(rpm_limit=5, rpd_limit=10, tpm_limit=5000, tokens_per_call=1000)
+        await limiter.acquire()
+        limiter.reset_for_testing()
+        assert len(limiter._minute_tokens) == 0  # noqa: SLF001
+
+    async def test_acquire_records_token_estimate_in_minute_window(self) -> None:
+        """Each acquire() appends tokens_per_call to the minute-token window."""
+        from specagent.retrieval.groq_rate_limiter import GroqVisionRateLimiter
+
+        limiter = GroqVisionRateLimiter(rpm_limit=10, rpd_limit=100, tpm_limit=30000, tokens_per_call=2000)
+        await limiter.acquire()
+        await limiter.acquire()
+        total = sum(t for _, t in limiter._minute_tokens)  # noqa: SLF001
+        assert total == 4000

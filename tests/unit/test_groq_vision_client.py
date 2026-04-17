@@ -278,6 +278,24 @@ class TestIsRetryable:
         exc = httpx.HTTPStatusError("rate limited", request=MagicMock(), response=resp)
         assert _is_retryable(exc) is True
 
+    def test_429_with_short_retry_after_is_retryable(self) -> None:
+        """429 with Retry-After <= 1 hour is a transient rate limit — should retry."""
+        from specagent.retrieval.groq_vision_client import _is_retryable
+        import httpx
+
+        resp = httpx.Response(429, headers={"retry-after": "261"})  # 4m21s
+        exc = httpx.HTTPStatusError("rate limited", request=MagicMock(), response=resp)
+        assert _is_retryable(exc) is True
+
+    def test_429_with_long_retry_after_is_not_retryable(self) -> None:
+        """429 with Retry-After > 1 hour means daily quota exhausted — do not retry."""
+        from specagent.retrieval.groq_vision_client import _is_retryable
+        import httpx
+
+        resp = httpx.Response(429, headers={"retry-after": "7200"})  # 2 hours
+        exc = httpx.HTTPStatusError("daily quota exhausted", request=MagicMock(), response=resp)
+        assert _is_retryable(exc) is False
+
     def test_503_is_retryable(self) -> None:
         from specagent.retrieval.groq_vision_client import _is_retryable
         import httpx
@@ -304,6 +322,64 @@ class TestIsRetryable:
         from specagent.retrieval.groq_vision_client import _is_retryable
 
         assert _is_retryable(ValueError("nope")) is False
+
+
+@pytest.mark.unit
+class TestWaitRetryAfter:
+    """Tests for _wait_retry_after() tenacity wait callable."""
+
+    def _make_retry_state(self, exc: BaseException) -> MagicMock:
+        """Build a minimal tenacity RetryCallState mock holding exc."""
+        outcome = MagicMock()
+        outcome.exception.return_value = exc
+        state = MagicMock()
+        state.outcome = outcome
+        state.attempt_number = 1
+        return state
+
+    def test_uses_retry_after_header_for_429(self) -> None:
+        """_wait_retry_after returns the Retry-After header value for 429 responses."""
+        import httpx
+        from specagent.retrieval.groq_vision_client import _wait_retry_after
+
+        resp = httpx.Response(429, headers={"retry-after": "261"})
+        exc = httpx.HTTPStatusError("rate limited", request=MagicMock(), response=resp)
+        state = self._make_retry_state(exc)
+        assert _wait_retry_after(state) == pytest.approx(261.0)
+
+    def test_falls_back_to_exponential_for_503(self) -> None:
+        """_wait_retry_after uses exponential backoff for non-429 errors."""
+        import httpx
+        from specagent.retrieval.groq_vision_client import _wait_retry_after
+
+        resp = httpx.Response(503)
+        exc = httpx.HTTPStatusError("server error", request=MagicMock(), response=resp)
+        state = self._make_retry_state(exc)
+        wait = _wait_retry_after(state)
+        # attempt_number=1 → min(2^1 * 2, 60) = 4.0
+        assert wait == pytest.approx(4.0)
+
+    def test_falls_back_to_exponential_for_429_without_header(self) -> None:
+        """_wait_retry_after uses exponential when Retry-After header is absent."""
+        import httpx
+        from specagent.retrieval.groq_vision_client import _wait_retry_after
+
+        resp = httpx.Response(429)  # no retry-after header
+        exc = httpx.HTTPStatusError("rate limited", request=MagicMock(), response=resp)
+        state = self._make_retry_state(exc)
+        wait = _wait_retry_after(state)
+        assert wait == pytest.approx(4.0)  # attempt 1 → 4s
+
+    def test_exponential_is_capped_at_60(self) -> None:
+        """Exponential fallback is capped at 60 s regardless of attempt number."""
+        import httpx
+        from specagent.retrieval.groq_vision_client import _wait_retry_after
+
+        resp = httpx.Response(503)
+        exc = httpx.HTTPStatusError("server error", request=MagicMock(), response=resp)
+        state = self._make_retry_state(exc)
+        state.attempt_number = 10  # very high attempt → would exceed 60 without cap
+        assert _wait_retry_after(state) == pytest.approx(60.0)
 
 
 @pytest.mark.unit

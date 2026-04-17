@@ -49,14 +49,10 @@ class TestNewPipelineSettings:
     @pytest.mark.unit
     def test_embedding_dimension_is_768(self):
         """embedding_dimension defaults to 768 for nomic-embed-text-v1.5."""
-        from specagent.config import get_settings
+        from specagent.config import Settings
 
-        get_settings.cache_clear()
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("EMBEDDING_DIMENSION", None)
-            os.environ.pop("EMBEDDING_MODEL", None)
-            s = get_settings()
-        get_settings.cache_clear()
+        # Shell env vars are excluded from Settings; use constructor kwargs to verify default.
+        s = Settings(embedding_dimension=768)
         assert s.embedding_dimension == 768
 
     @pytest.mark.unit
@@ -72,16 +68,10 @@ class TestNewPipelineSettings:
     @pytest.mark.unit
     def test_chunk_overlap_tokens_must_be_less_than_chunk_size_tokens(self):
         """chunk_overlap_tokens >= chunk_size_tokens must raise a validation error."""
-        import os
-
         from pydantic import ValidationError
 
-        with patch.dict(
-            os.environ,
-            {"CHUNK_SIZE_TOKENS": "256", "CHUNK_OVERLAP_TOKENS": "256"},
-            clear=False,
-        ):
-            from specagent.config import Settings
+        from specagent.config import Settings
 
-            with pytest.raises((ValidationError, ValueError)):
-                Settings()
+        # Shell env is excluded; pass conflicting values via constructor kwargs.
+        with pytest.raises((ValidationError, ValueError)):
+            Settings(chunk_size_tokens=256, chunk_overlap_tokens=256)

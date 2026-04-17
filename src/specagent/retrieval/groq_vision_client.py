@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt
+
+from typing import Any
 
 if TYPE_CHECKING:
     from specagent.retrieval.docx_image_extractor import ExtractedImage
@@ -31,6 +33,34 @@ logger = logging.getLogger(__name__)
 
 _GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+
+def _wait_retry_after(retry_state: Any) -> float:
+    """Tenacity wait callable that respects Groq's ``Retry-After`` header.
+
+    For 429 responses Groq returns a ``Retry-After`` header with the exact
+    number of seconds to wait before the rate-limit window resets.  Using
+    that value avoids the exponential back-off loop that would otherwise keep
+    hitting the API every few seconds — burning quota on calls that will all
+    return 429 anyway.
+
+    Falls back to capped exponential back-off for non-429 errors or when the
+    header is absent/unparseable.
+    """
+    exc = retry_state.outcome.exception()
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        retry_after_raw = exc.response.headers.get("retry-after", "")
+        try:
+            wait = float(retry_after_raw)
+            if wait > 0:
+                logger.warning(
+                    "Groq 429 rate limit; sleeping %.1f s (Retry-After header)", wait
+                )
+                return wait
+        except (ValueError, TypeError):
+            pass
+    # Fallback: capped exponential (attempt 1→4 s, 2→8 s … capped at 60 s)
+    return min(2.0 ** retry_state.attempt_number * 2.0, 60.0)
 
 
 class ImageAnalysisResult(BaseModel):
@@ -96,7 +126,7 @@ async def analyze_image(
     @retry(
         retry=retry_if_exception(_is_retryable),
         stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
+        wait=_wait_retry_after,
         reraise=True,
     )
     async def _call() -> ImageAnalysisResult:
@@ -204,7 +234,7 @@ async def correct_mermaid_diagram(
     @retry(
         retry=retry_if_exception(_is_retryable),
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=30),
+        wait=_wait_retry_after,
         reraise=True,
     )
     async def _call() -> ImageAnalysisResult:

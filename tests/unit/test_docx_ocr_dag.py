@@ -14,7 +14,6 @@ All tests mock vision API and Memgraph — pass offline.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,11 +22,7 @@ from specagent.retrieval.docx_ocr_converter import ExtractedDiagram, convert_doc
 from specagent.retrieval.exceptions import DagStoreError
 from specagent.retrieval.groq_vision_client import ImageAnalysisResult
 from specagent.retrieval.ingestor import ingest
-from tests.conftest import _make_png_bytes, make_docx_zip
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
+from tests.conftest import DOCX_SMALL
 
 # ---------------------------------------------------------------------------
 # ExtractedDiagram dataclass
@@ -63,24 +58,17 @@ class TestConvertDocxWithOcrReturnType:
     """convert_docx_with_ocr returns (markdown, diagrams)."""
 
     @pytest.mark.unit
-    async def test_returns_tuple_of_markdown_and_diagrams(self, tmp_path: Path) -> None:
-        """Return value is a tuple (str, list[ExtractedDiagram])."""
-        docx_path = tmp_path / "test.docx"
-        docx_path.write_bytes(make_docx_zip())  # no images
-
+    async def test_returns_tuple_of_markdown_and_diagrams(self) -> None:
+        """Return value is a tuple (str, list[ExtractedDiagram]) for a real .docx."""
         with patch("specagent.retrieval.docx_ocr_converter.convert", return_value="# Test\n"):
-            markdown, diagrams = await convert_docx_with_ocr(docx_path, api_key="test-key")
+            markdown, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key="test-key")
 
         assert isinstance(markdown, str)
         assert isinstance(diagrams, list)
 
     @pytest.mark.unit
-    async def test_call_flow_diagram_in_diagrams_list(self, tmp_path: Path) -> None:
+    async def test_call_flow_diagram_in_diagrams_list(self) -> None:
         """A validated call_flow result appears in the diagrams list."""
-        large_png = _make_png_bytes(n_bytes=15 * 1024)
-        docx_path = tmp_path / "test.docx"
-        docx_path.write_bytes(make_docx_zip(images=[("image1.png", large_png)]))
-
         call_flow_result = ImageAnalysisResult(
             placeholder_name="image0.png",
             markdown_content="```mermaid\nsequenceDiagram\n    UE->>AMF: Reg\n```",
@@ -89,22 +77,29 @@ class TestConvertDocxWithOcrReturnType:
         )
 
         with (
-            patch("specagent.retrieval.docx_ocr_converter.convert", return_value="# Test\n![](image1.png)\n"),
-            patch("specagent.retrieval.docx_ocr_converter.analyze_image", new_callable=AsyncMock, return_value=call_flow_result),
-            patch("specagent.retrieval.docx_ocr_converter._apply_mermaid_validation", new_callable=AsyncMock, return_value=call_flow_result),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="# Test\n![](image1.emf)\n",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                new_callable=AsyncMock,
+                return_value=call_flow_result,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter._apply_mermaid_validation",
+                new_callable=AsyncMock,
+                return_value=call_flow_result,
+            ),
         ):
-            _, diagrams = await convert_docx_with_ocr(docx_path, api_key="test-key")
+            _, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key="test-key")
 
-        assert len(diagrams) == 1
+        assert len(diagrams) >= 1
         assert diagrams[0].image_type == "call_flow"
 
     @pytest.mark.unit
-    async def test_non_call_flow_diagram_excluded(self, tmp_path: Path) -> None:
+    async def test_non_call_flow_diagram_excluded(self) -> None:
         """A 'table' image_type does not appear in the diagrams list."""
-        large_png = _make_png_bytes(n_bytes=15 * 1024)
-        docx_path = tmp_path / "test.docx"
-        docx_path.write_bytes(make_docx_zip(images=[("image1.png", large_png)]))
-
         table_result = ImageAnalysisResult(
             placeholder_name="image0.png",
             markdown_content="| Col1 | Col2 |\n|---|---|\n| A | B |",
@@ -112,21 +107,28 @@ class TestConvertDocxWithOcrReturnType:
         )
 
         with (
-            patch("specagent.retrieval.docx_ocr_converter.convert", return_value="# Test\n![](image1.png)\n"),
-            patch("specagent.retrieval.docx_ocr_converter.analyze_image", new_callable=AsyncMock, return_value=table_result),
-            patch("specagent.retrieval.docx_ocr_converter._apply_mermaid_validation", new_callable=AsyncMock, return_value=table_result),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="# Test\n![](image1.emf)\n",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                new_callable=AsyncMock,
+                return_value=table_result,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter._apply_mermaid_validation",
+                new_callable=AsyncMock,
+                return_value=table_result,
+            ),
         ):
-            _, diagrams = await convert_docx_with_ocr(docx_path, api_key="test-key")
+            _, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key="test-key")
 
         assert diagrams == []
 
     @pytest.mark.unit
-    async def test_skipped_image_excluded_from_diagrams(self, tmp_path: Path) -> None:
+    async def test_skipped_image_excluded_from_diagrams(self) -> None:
         """A skipped ImageAnalysisResult does not appear in the diagrams list."""
-        large_png = _make_png_bytes(n_bytes=15 * 1024)
-        docx_path = tmp_path / "test.docx"
-        docx_path.write_bytes(make_docx_zip(images=[("image1.png", large_png)]))
-
         skipped_result = ImageAnalysisResult(
             placeholder_name="image0.png",
             markdown_content="",
@@ -136,11 +138,22 @@ class TestConvertDocxWithOcrReturnType:
         )
 
         with (
-            patch("specagent.retrieval.docx_ocr_converter.convert", return_value="# Test\n![](image1.png)\n"),
-            patch("specagent.retrieval.docx_ocr_converter.analyze_image", new_callable=AsyncMock, return_value=skipped_result),
-            patch("specagent.retrieval.docx_ocr_converter._apply_mermaid_validation", new_callable=AsyncMock, return_value=skipped_result),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.convert",
+                return_value="# Test\n![](image1.emf)\n",
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter.analyze_image",
+                new_callable=AsyncMock,
+                return_value=skipped_result,
+            ),
+            patch(
+                "specagent.retrieval.docx_ocr_converter._apply_mermaid_validation",
+                new_callable=AsyncMock,
+                return_value=skipped_result,
+            ),
         ):
-            _, diagrams = await convert_docx_with_ocr(docx_path, api_key="test-key")
+            _, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key="test-key")
 
         assert diagrams == []
 
@@ -163,22 +176,24 @@ class TestIngestorDagStorage:
         )
 
     @pytest.mark.unit
-    async def test_dag_store_called_for_call_flow_diagram(self, tmp_path: Path) -> None:
+    async def test_dag_store_called_for_call_flow_diagram(self) -> None:
         """store_call_flow_dag is called when a call_flow diagram is returned."""
-        docx_path = tmp_path / "TS23.502.docx"
-        docx_path.write_bytes(make_docx_zip())
-
         diagram = self._make_call_flow_diagram()
         mock_dag_store = MagicMock()
 
         with (
             patch("specagent.retrieval.ingestor.settings") as mock_settings,
-            patch("specagent.retrieval.ingestor.convert_docx_ocr", new_callable=AsyncMock,
-                  return_value=("# TS23.502\n\nSome text content here.\n", [diagram])),
+            patch(
+                "specagent.retrieval.ingestor.convert_docx_ocr",
+                new_callable=AsyncMock,
+                return_value=("# TS38.108\n\nSome text content here.\n", [diagram]),
+            ),
             patch("specagent.retrieval.ingestor.get_store") as mock_get_store,
             patch("specagent.retrieval.ingestor.embed_documents", return_value=[[0.0] * 768]),
-            patch("specagent.retrieval.ingestor.chunk_with_metadata",
-                  return_value=[("Some text content here.", "Section 4")]),
+            patch(
+                "specagent.retrieval.ingestor.chunk_with_metadata",
+                return_value=[("Some text content here.", "Section 4")],
+            ),
             patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
         ):
             mock_settings.enable_docx_ocr = True
@@ -191,27 +206,29 @@ class TestIngestorDagStorage:
             store.rebuild_fts_index.return_value = None
             mock_get_store.return_value = store
 
-            await ingest(source=docx_path, library="test")
+            await ingest(source=DOCX_SMALL, library="test")
 
         mock_dag_store.store_call_flow_dag.assert_called_once()
 
     @pytest.mark.unit
-    async def test_dag_id_uses_doc_name_and_caption(self, tmp_path: Path) -> None:
+    async def test_dag_id_uses_doc_name_and_caption(self) -> None:
         """dag_id is constructed as '{doc_name}::{caption}'."""
-        docx_path = tmp_path / "TS23.502.docx"
-        docx_path.write_bytes(make_docx_zip())
-
         diagram = self._make_call_flow_diagram(caption="Figure 4.2-1 Registration")
         mock_dag_store = MagicMock()
 
         with (
             patch("specagent.retrieval.ingestor.settings") as mock_settings,
-            patch("specagent.retrieval.ingestor.convert_docx_ocr", new_callable=AsyncMock,
-                  return_value=("# Content\n\nSome text content here.\n", [diagram])),
+            patch(
+                "specagent.retrieval.ingestor.convert_docx_ocr",
+                new_callable=AsyncMock,
+                return_value=("# Content\n\nSome text content here.\n", [diagram]),
+            ),
             patch("specagent.retrieval.ingestor.get_store") as mock_get_store,
             patch("specagent.retrieval.ingestor.embed_documents", return_value=[[0.0] * 768]),
-            patch("specagent.retrieval.ingestor.chunk_with_metadata",
-                  return_value=[("Some text content here.", "Section 4")]),
+            patch(
+                "specagent.retrieval.ingestor.chunk_with_metadata",
+                return_value=[("Some text content here.", "Section 4")],
+            ),
             patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
         ):
             mock_settings.enable_docx_ocr = True
@@ -224,28 +241,30 @@ class TestIngestorDagStorage:
             store.rebuild_fts_index.return_value = None
             mock_get_store.return_value = store
 
-            await ingest(source=docx_path, library="test")
+            await ingest(source=DOCX_SMALL, library="test")
 
         call_kwargs = mock_dag_store.store_call_flow_dag.call_args[1]
-        assert call_kwargs["dag_id"] == "TS23.502::Figure 4.2-1 Registration"
+        assert call_kwargs["dag_id"] == "38108-i40::Figure 4.2-1 Registration"
 
     @pytest.mark.unit
-    async def test_dag_storage_skipped_when_disabled(self, tmp_path: Path) -> None:
+    async def test_dag_storage_skipped_when_disabled(self) -> None:
         """No DAG storage when enable_dag_storage=False."""
-        docx_path = tmp_path / "TS23.502.docx"
-        docx_path.write_bytes(make_docx_zip())
-
         diagram = self._make_call_flow_diagram()
         mock_dag_store = MagicMock()
 
         with (
             patch("specagent.retrieval.ingestor.settings") as mock_settings,
-            patch("specagent.retrieval.ingestor.convert_docx_ocr", new_callable=AsyncMock,
-                  return_value=("# Content\n\nText.\n", [diagram])),
+            patch(
+                "specagent.retrieval.ingestor.convert_docx_ocr",
+                new_callable=AsyncMock,
+                return_value=("# Content\n\nText.\n", [diagram]),
+            ),
             patch("specagent.retrieval.ingestor.get_store") as mock_get_store,
             patch("specagent.retrieval.ingestor.embed_documents", return_value=[[0.0] * 768]),
-            patch("specagent.retrieval.ingestor.chunk_with_metadata",
-                  return_value=[("Text.", "Section 4")]),
+            patch(
+                "specagent.retrieval.ingestor.chunk_with_metadata",
+                return_value=[("Text.", "Section 4")],
+            ),
             patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
         ):
             mock_settings.enable_docx_ocr = True
@@ -258,28 +277,30 @@ class TestIngestorDagStorage:
             store.rebuild_fts_index.return_value = None
             mock_get_store.return_value = store
 
-            await ingest(source=docx_path, library="test")
+            await ingest(source=DOCX_SMALL, library="test")
 
         mock_dag_store.store_call_flow_dag.assert_not_called()
 
     @pytest.mark.unit
-    async def test_pipeline_continues_when_dag_store_raises(self, tmp_path: Path) -> None:
+    async def test_pipeline_continues_when_dag_store_raises(self) -> None:
         """Ingest succeeds even if store_call_flow_dag raises DagStoreError."""
-        docx_path = tmp_path / "TS23.502.docx"
-        docx_path.write_bytes(make_docx_zip())
-
         diagram = self._make_call_flow_diagram()
         mock_dag_store = MagicMock()
         mock_dag_store.store_call_flow_dag.side_effect = DagStoreError("Memgraph down")
 
         with (
             patch("specagent.retrieval.ingestor.settings") as mock_settings,
-            patch("specagent.retrieval.ingestor.convert_docx_ocr", new_callable=AsyncMock,
-                  return_value=("# Content\n\nText.\n", [diagram])),
+            patch(
+                "specagent.retrieval.ingestor.convert_docx_ocr",
+                new_callable=AsyncMock,
+                return_value=("# Content\n\nText.\n", [diagram]),
+            ),
             patch("specagent.retrieval.ingestor.get_store") as mock_get_store,
             patch("specagent.retrieval.ingestor.embed_documents", return_value=[[0.0] * 768]),
-            patch("specagent.retrieval.ingestor.chunk_with_metadata",
-                  return_value=[("Text.", "Section 4")]),
+            patch(
+                "specagent.retrieval.ingestor.chunk_with_metadata",
+                return_value=[("Text.", "Section 4")],
+            ),
             patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
         ):
             mock_settings.enable_docx_ocr = True
@@ -293,6 +314,6 @@ class TestIngestorDagStorage:
             mock_get_store.return_value = store
 
             # Must not raise
-            result = await ingest(source=docx_path, library="test")
+            result = await ingest(source=DOCX_SMALL, library="test")
 
         assert result.status == "indexed"

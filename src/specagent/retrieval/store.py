@@ -101,9 +101,9 @@ def _open_table(uri: str, table_name: str) -> lancedb.table.Table:
 def _ensure_scalar_indexes(table: lancedb.table.Table) -> None:
     """Create scalar indexes on commonly filtered columns (idempotent).
 
-    Called once per Store instance after the table is first opened. Scalar indexes
-    require at least one row to be created; failures are logged as warnings rather
-    than silently ignored.
+    Should be called after rows are present in the table. If the table is empty,
+    index creation will fail and a warning is logged; the caller is responsible
+    for retrying after the first write.
 
     Args:
         table: Open LanceDB table to index.
@@ -113,7 +113,7 @@ def _ensure_scalar_indexes(table: lancedb.table.Table) -> None:
             table.create_scalar_index(col, replace=True)
         except Exception as e:
             logger.warning(
-                "Scalar index on %r not created (table may be empty — will retry on next write): %s",
+                "Scalar index on %r not created (table may be empty): %s",
                 col,
                 e,
             )
@@ -252,10 +252,10 @@ class Store:
         handles it via content-hash checks before calling this method. Calling
         this method directly with duplicate ``id`` values will insert duplicate rows.
 
-        Thread safety: LanceDB does not support concurrent writes to the same table.
-        Do not call this method from multiple threads/coroutines simultaneously.
-        When using ``ingest_folder``, set ``max_concurrency=1`` or ensure external
-        serialisation to avoid write races during initial table creation.
+        Thread safety: ``_write_lock`` serialises concurrent calls from the
+        ``asyncio.to_thread`` pool used by ``ingest_folder``. All callers must share
+        the same ``Store`` instance (i.e. go through ``get_store()``) to benefit
+        from this protection.
 
         Args:
             chunks: Chunk records to insert.
@@ -272,6 +272,7 @@ class Store:
         # concurrent writes from multiple OS threads (asyncio.to_thread uses a pool).
         with self._write_lock:
             try:
+                was_empty = self._is_empty
                 table = self._table()
                 rows = [c.model_dump() for c in chunks]
                 # Convert embeddings to float32 numpy arrays to satisfy the
@@ -282,6 +283,9 @@ class Store:
                     row["embedding"] = np.array(row["embedding"], dtype=np.float32)
                 table.add(rows)
                 self._is_empty = False
+                # Scalar indexes require at least one row — retry on the first write.
+                if was_empty:
+                    _ensure_scalar_indexes(table)
                 logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
                 if rebuild_fts:
                     try:

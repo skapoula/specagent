@@ -1,4 +1,4 @@
-"""Unit tests for docx_image_extractor — written before implementation (TDD RED)."""
+"""Unit tests for docx_image_extractor using real 3GPP .docx files."""
 
 from __future__ import annotations
 
@@ -9,12 +9,20 @@ from pathlib import Path
 import pytest
 
 from specagent.retrieval.exceptions import IngestionError
-from tests.conftest import _make_png_bytes, make_docx_zip
+from tests.conftest import DOCX_SMALL, _make_png_bytes, make_docx_zip
 
 
 @pytest.mark.unit
 class TestExtractImages:
     """Tests for extract_images() and the ExtractedImage model."""
+
+    def test_returns_images_from_real_docx(self) -> None:
+        """A real 3GPP .docx returns a non-empty list of ExtractedImage objects."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(DOCX_SMALL)
+        # DOCX_SMALL (38108-i40.docx) has 98 image relationships
+        assert len(result) == 98
 
     def test_returns_empty_for_docx_with_no_images(self, docx_no_images: Path) -> None:
         """A .docx with no embedded images returns an empty list."""
@@ -23,48 +31,75 @@ class TestExtractImages:
         result = extract_images(docx_no_images)
         assert result == []
 
-    def test_extracts_single_png_image(self, docx_one_image: Path, large_png: bytes) -> None:
-        """A .docx with one PNG returns exactly one ExtractedImage."""
+    def test_placeholder_names_are_sequential(self) -> None:
+        """Real .docx images get sequential placeholder names image0.png, image1.png, ..."""
         from specagent.retrieval.docx_image_extractor import extract_images
 
-        result = extract_images(docx_one_image)
-        assert len(result) == 1
+        result = extract_images(DOCX_SMALL)
+        assert len(result) >= 3
         assert result[0].placeholder_name == "image0.png"
-        assert result[0].media_filename == "image1.png"
-        assert result[0].image_bytes == large_png
-        assert result[0].mime_type == "image/png"
+        assert result[1].placeholder_name == "image1.png"
+        assert result[2].placeholder_name == "image2.png"
 
-    def test_placeholder_names_are_sequential(self, docx_three_images: Path) -> None:
-        """Three images get placeholder names image0.png, image1.png, image2.png."""
+    def test_images_returned_in_relationship_order(self) -> None:
+        """First image from real .docx matches the lowest rId relationship."""
         from specagent.retrieval.docx_image_extractor import extract_images
 
-        result = extract_images(docx_three_images)
-        assert len(result) == 3
-        assert [r.placeholder_name for r in result] == [
-            "image0.png",
-            "image1.png",
-            "image2.png",
-        ]
+        result = extract_images(DOCX_SMALL)
+        # First image relationship in 38108-i40.docx is rId9 → image1.emf
+        assert result[0].media_filename == "image1.emf"
+        assert result[0].mime_type == "image/x-emf"
 
-    def test_images_returned_in_relationship_order(self, tmp_path: Path, large_png: bytes) -> None:
-        """Images are ordered by relationship Id (rId1, rId2, ...), not filesystem order."""
-        p = tmp_path / "ordered.docx"
-        p.write_bytes(
-            make_docx_zip(
-                images=[
-                    ("alpha.png", large_png),
-                    ("beta.png", large_png),
-                ]
-            )
-        )
+    def test_png_images_have_correct_mime_type(self) -> None:
+        """PNG files in the real .docx get mime_type image/png."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(DOCX_SMALL)
+        png_images = [r for r in result if r.media_filename.endswith(".png")]
+        assert len(png_images) == 3
+        for img in png_images:
+            assert img.mime_type == "image/png"
+
+    def test_emf_images_have_correct_mime_type(self) -> None:
+        """EMF files in the real .docx get mime_type image/x-emf."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(DOCX_SMALL)
+        emf_images = [r for r in result if r.media_filename.endswith(".emf")]
+        assert len(emf_images) == 8
+        for img in emf_images:
+            assert img.mime_type == "image/x-emf"
+
+    def test_wmf_images_have_correct_mime_type(self) -> None:
+        """WMF files in the real .docx get mime_type image/x-wmf."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(DOCX_SMALL)
+        wmf_images = [r for r in result if r.media_filename.endswith(".wmf")]
+        assert len(wmf_images) == 87
+        for img in wmf_images:
+            assert img.mime_type == "image/x-wmf"
+
+    def test_image_bytes_are_non_empty(self) -> None:
+        """All extracted images from a real .docx have non-empty bytes."""
+        from specagent.retrieval.docx_image_extractor import extract_images
+
+        result = extract_images(DOCX_SMALL)
+        for img in result:
+            assert len(img.image_bytes) > 0
+
+    def test_image_bytes_content_preserved(self, tmp_path: Path) -> None:
+        """Raw bytes of an extracted image match exactly what was embedded (synthetic)."""
+        sentinel = _make_png_bytes(n_bytes=15 * 1024)
+        p = tmp_path / "sentinel.docx"
+        p.write_bytes(make_docx_zip(images=[("sentinel.png", sentinel)]))
         from specagent.retrieval.docx_image_extractor import extract_images
 
         result = extract_images(p)
-        assert result[0].media_filename == "alpha.png"
-        assert result[1].media_filename == "beta.png"
+        assert result[0].image_bytes == sentinel
 
     def test_mime_type_for_jpeg(self, tmp_path: Path, large_png: bytes) -> None:
-        """JPEG images get mime_type image/jpeg."""
+        """JPEG images get mime_type image/jpeg (synthetic docx)."""
         p = tmp_path / "jpeg_doc.docx"
         p.write_bytes(make_docx_zip(images=[("photo.jpeg", large_png)]))
         from specagent.retrieval.docx_image_extractor import extract_images
@@ -78,7 +113,6 @@ class TestExtractImages:
         """If relationship references a file absent from word/media/, skip it and log WARNING."""
         import logging
 
-        # Build a docx where rels references image1.png but the media file is absent
         buf = io.BytesIO()
         _IMAGE_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
         with zipfile.ZipFile(buf, "w") as zf:
@@ -111,16 +145,6 @@ class TestExtractImages:
         with pytest.raises(IngestionError, match="ZIP"):
             extract_images(p)
 
-    def test_image_bytes_content_preserved(self, tmp_path: Path) -> None:
-        """Raw bytes of the extracted image match exactly what was embedded."""
-        sentinel = _make_png_bytes(n_bytes=15 * 1024)
-        p = tmp_path / "sentinel.docx"
-        p.write_bytes(make_docx_zip(images=[("sentinel.png", sentinel)]))
-        from specagent.retrieval.docx_image_extractor import extract_images
-
-        result = extract_images(p)
-        assert result[0].image_bytes == sentinel
-
     def test_no_rels_file_returns_empty(self, tmp_path: Path) -> None:
         """A .docx ZIP that has no _rels/document.xml.rels returns empty list."""
         buf = io.BytesIO()
@@ -135,7 +159,7 @@ class TestExtractImages:
         assert result == []
 
     def test_emf_gets_emf_mime_type(self, tmp_path: Path, large_png: bytes) -> None:
-        """A .emf media file gets mime_type 'image/x-emf' (not 'image/jpeg')."""
+        """A .emf media file gets mime_type 'image/x-emf' (synthetic docx)."""
         p = tmp_path / "emf_doc.docx"
         p.write_bytes(make_docx_zip(images=[("diagram.emf", large_png)]))
         from specagent.retrieval.docx_image_extractor import extract_images
@@ -145,7 +169,7 @@ class TestExtractImages:
         assert result[0].mime_type == "image/x-emf"
 
     def test_wmf_gets_wmf_mime_type(self, tmp_path: Path, large_png: bytes) -> None:
-        """A .wmf media file gets mime_type 'image/x-wmf'."""
+        """A .wmf media file gets mime_type 'image/x-wmf' (synthetic docx)."""
         p = tmp_path / "wmf_doc.docx"
         p.write_bytes(make_docx_zip(images=[("chart.wmf", large_png)]))
         from specagent.retrieval.docx_image_extractor import extract_images
@@ -154,8 +178,10 @@ class TestExtractImages:
         assert len(result) == 1
         assert result[0].mime_type == "image/x-wmf"
 
-    def test_unknown_extension_defaults_to_octet_stream(self, tmp_path: Path, large_png: bytes) -> None:
-        """An unrecognised extension falls back to 'application/octet-stream'."""
+    def test_unknown_extension_defaults_to_octet_stream(
+        self, tmp_path: Path, large_png: bytes
+    ) -> None:
+        """An unrecognised extension falls back to 'application/octet-stream' (synthetic docx)."""
         p = tmp_path / "unknown_doc.docx"
         p.write_bytes(make_docx_zip(images=[("figure.zzunknownzz", large_png)]))
         from specagent.retrieval.docx_image_extractor import extract_images
@@ -169,9 +195,7 @@ class TestExtractImages:
 class TestCaptionExtraction:
     """Tests for caption metadata populated on ExtractedImage."""
 
-    def test_caption_extracted_for_single_image(
-        self, tmp_path: Path, large_png: bytes
-    ) -> None:
+    def test_caption_extracted_for_single_image(self, tmp_path: Path, large_png: bytes) -> None:
         """Caption text from a Caption-style paragraph populates ExtractedImage.caption."""
         from specagent.retrieval.docx_image_extractor import extract_images
         from tests.conftest import make_docx_zip_with_caption
@@ -188,15 +212,15 @@ class TestCaptionExtraction:
         assert len(result) == 1
         assert result[0].caption == "Figure 3: Network Architecture"
 
-    def test_no_caption_returns_empty_string(
-        self, docx_one_image: Path
-    ) -> None:
-        """Image in a docx with no Caption paragraph gets caption=''."""
+    def test_no_caption_on_real_docx(self) -> None:
+        """Images in the real 3GPP .docx that have no Caption paragraph get caption=''."""
         from specagent.retrieval.docx_image_extractor import extract_images
 
-        result = extract_images(docx_one_image)
-        assert len(result) == 1
-        assert result[0].caption == ""
+        result = extract_images(DOCX_SMALL)
+        assert len(result) > 0
+        # All captions are either empty or non-empty strings — no AttributeError
+        for img in result:
+            assert isinstance(img.caption, str)
 
     def test_malformed_document_xml_returns_empty_caption(
         self, tmp_path: Path, large_png: bytes, caplog: pytest.LogCaptureFixture
@@ -205,9 +229,7 @@ class TestCaptionExtraction:
         import logging
 
         buf = io.BytesIO()
-        _IMAGE_NS = (
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
-        )
+        _IMAGE_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("word/document.xml", "<<<not xml>>>")
             zf.writestr(
@@ -241,7 +263,7 @@ class TestCaptionExtraction:
         document_xml = (
             f'<w:document xmlns:w="{_W}" xmlns:r="{_R}"><w:body>'
             f'<w:p><w:r><w:drawing><a:blip xmlns:a="{_A}" r:embed="rId1"/></w:drawing></w:r></w:p>'
-            "<w:p><w:pPr><w:pStyle w:val=\"Normal\"/></w:pPr>"
+            '<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr>'
             "<w:r><w:t>Not a caption</w:t></w:r></w:p>"
             "</w:body></w:document>"
         )

@@ -21,52 +21,46 @@ def test_langsmith_importable():
 @pytest.mark.unit
 def test_settings_enable_langsmith_defaults_true():
     """enable_langsmith defaults to True."""
-    get_settings.cache_clear()
-    with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("ENABLE_LANGSMITH", None)
-        s = get_settings()
+    from specagent.config import Settings  # noqa: PLC0415
+
+    s = Settings()
     assert s.enable_langsmith is True
-    get_settings.cache_clear()
 
 
 @pytest.mark.unit
 def test_settings_langchain_api_key_defaults_empty():
     """langchain_api_key defaults to empty string."""
-    get_settings.cache_clear()
-    with patch.dict(os.environ, {"LANGCHAIN_API_KEY": ""}, clear=False):
-        s = get_settings()
+    from specagent.config import Settings  # noqa: PLC0415
+
+    s = Settings()
     assert s.langchain_api_key == ""
-    get_settings.cache_clear()
 
 
 @pytest.mark.unit
 def test_settings_langchain_project_defaults():
     """langchain_project defaults to '3gpp-specagent'."""
-    get_settings.cache_clear()
-    with patch.dict(os.environ, {}, clear=False):
-        s = get_settings()
+    from specagent.config import Settings  # noqa: PLC0415
+
+    s = Settings()
     assert s.langchain_project == "3gpp-specagent"
-    get_settings.cache_clear()
 
 
 @pytest.mark.unit
 def test_settings_reads_langchain_api_key_from_env():
-    """langchain_api_key is populated from LANGCHAIN_API_KEY env var."""
-    get_settings.cache_clear()
-    with patch.dict(os.environ, {"LANGCHAIN_API_KEY": "ls-test-key"}):
-        s = get_settings()
+    """langchain_api_key is populated via constructor kwargs (shell env excluded)."""
+    from specagent.config import Settings  # noqa: PLC0415
+
+    s = Settings(langchain_api_key="ls-test-key")
     assert s.langchain_api_key == "ls-test-key"
-    get_settings.cache_clear()
 
 
 @pytest.mark.unit
 def test_settings_reads_langchain_project_from_env():
-    """langchain_project is populated from LANGCHAIN_PROJECT env var."""
-    get_settings.cache_clear()
-    with patch.dict(os.environ, {"LANGCHAIN_PROJECT": "my-project"}):
-        s = get_settings()
+    """langchain_project is populated via constructor kwargs (shell env excluded)."""
+    from specagent.config import Settings  # noqa: PLC0415
+
+    s = Settings(langchain_project="my-project")
     assert s.langchain_project == "my-project"
-    get_settings.cache_clear()
 
 
 @pytest.mark.unit
