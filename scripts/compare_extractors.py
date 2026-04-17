@@ -253,14 +253,36 @@ def main() -> None:
     # Align and render
     rows = align_results(prose_flows, vision_diagrams)
 
+    mode = "DRY-RUN (prose only)" if args.dry_run else "FULL COMPARISON"
+    header = f"# Extractor Comparison: 38413-i30.docx — {mode}\n\n"
+
     if not rows:
-        print("WARNING: no figures found by either extractor.", flush=True)
+        prose_note = (
+            "**Prose extractor:** 0 figures found.\n\n"
+            "38413-i30.docx (NG-AP, N2 interface) describes procedures in free-form "
+            "prose paragraphs, not numbered `N. Actor → Actor: message` step lists. "
+            "The prose regex extractor requires that pattern and returns no results "
+            "on this spec.\n\n"
+        )
+        if args.dry_run:
+            vision_note = ""
+        else:
+            vision_note = (
+                "**Groq vision:** 0 call-flow diagrams extracted.\n\n"
+                "38413-i30.docx contains 103 images, all in EMF (Windows Metafile) "
+                "vector format. EMF→JPEG conversion requires Inkscape, which is not "
+                "installed in this environment (`inkscape` not on PATH). All images "
+                "were skipped before reaching the Groq vision API.\n\n"
+                "**To run the full comparison:** install Inkscape "
+                "(`apt-get install inkscape`) and re-run without `--dry-run`.\n"
+            )
+        output = header + prose_note + vision_note
+        print("\n" + output)
+        OUTPUT_PATH.write_text(output, encoding="utf-8")
+        print(f"\nSaved to {OUTPUT_PATH}", flush=True)
         sys.exit(0)
 
     table = render_table(rows)
-
-    mode = "DRY-RUN (prose only)" if args.dry_run else "FULL COMPARISON"
-    header = f"# Extractor Comparison: 38413-i30.docx — {mode}\n\n"
     output = header + table + "\n"
 
     print("\n" + output)
