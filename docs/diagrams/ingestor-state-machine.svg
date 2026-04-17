@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1020" width="1100" height="1020" font-family="Arial, sans-serif">
+
+  <!-- Background -->
+  <rect width="1100" height="1020" fill="#ffffff"/>
+
+  <!-- Arrow marker defs -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#c0392b"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#27ae60"/>
+    </marker>
+    <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1565C0"/>
+    </marker>
+    <marker id="arr-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#e67e22"/>
+    </marker>
+  </defs>
+
+  <!-- ── Title ──────────────────────────────────────────────────── -->
+  <text x="550" y="32" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a1a1a">Ingestor + Storage Pipeline — State Machine</text>
+  <text x="550" y="52" text-anchor="middle" font-size="12" fill="#666666">ingestor.py  ·  store.py  ·  prose_dag_extractor.py  ·  dag_store.py</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN PIPELINE COLUMN  (x-centre = 310)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- ── START ── -->
+  <circle cx="310" cy="100" r="16" fill="#2c3e50"/>
+  <text x="310" y="105" text-anchor="middle" font-size="10" font-weight="bold" fill="#ffffff">START</text>
+
+  <!-- S1: Read File -->
+  <rect x="190" y="135" width="240" height="64" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="158" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S1 · Read File</text>
+  <text x="310" y="174" text-anchor="middle" font-size="10" fill="#2c3e50">path.read_bytes()</text>
+  <text x="310" y="188" text-anchor="middle" font-size="10" fill="#2c3e50">sha256(raw_bytes)  ·  stat().st_mtime</text>
+
+  <!-- S2: Dedup Check -->
+  <rect x="190" y="225" width="240" height="64" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="248" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S2 · Dedup Check</text>
+  <text x="310" y="264" text-anchor="middle" font-size="10" fill="#2c3e50">store.find_existing(source, library)</text>
+  <text x="310" y="278" text-anchor="middle" font-size="10" fill="#2c3e50">compare SHA-256 hashes</text>
+
+  <!-- S3: Convert to Markdown -->
+  <rect x="190" y="345" width="240" height="76" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="368" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S3 · Convert to Markdown</text>
+  <text x="310" y="384" text-anchor="middle" font-size="10" fill="#2c3e50">docx + OCR on → convert_docx_ocr()</text>
+  <text x="310" y="398" text-anchor="middle" font-size="10" fill="#2c3e50">all others → convert()  [markitdown]</text>
+  <text x="310" y="412" text-anchor="middle" font-size="10" fill="#2c3e50">postprocess()  ·  _extract_title()</text>
+
+  <!-- S4: Chunk -->
+  <rect x="190" y="505" width="240" height="64" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="528" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S4 · Chunk</text>
+  <text x="310" y="544" text-anchor="middle" font-size="10" fill="#2c3e50">chunk_with_metadata(text)</text>
+  <text x="310" y="558" text-anchor="middle" font-size="10" fill="#2c3e50">512-token chunks + section headers</text>
+
+  <!-- S5: Embed -->
+  <rect x="190" y="595" width="240" height="64" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="618" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S5 · Embed</text>
+  <text x="310" y="634" text-anchor="middle" font-size="10" fill="#2c3e50">embed_documents(chunk_texts)</text>
+  <text x="310" y="648" text-anchor="middle" font-size="10" fill="#2c3e50">nomic-embed-text-v1.5  ·  768d</text>
+
+  <!-- S6: Build Records -->
+  <rect x="190" y="685" width="240" height="64" rx="8" fill="#d6eaf8" stroke="#2980b9" stroke-width="1.5"/>
+  <text x="310" y="708" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S6 · Build ChunkRecords</text>
+  <text x="310" y="724" text-anchor="middle" font-size="10" fill="#2c3e50">uuid4 per chunk  ·  doc_id  ·  metadata</text>
+  <text x="310" y="738" text-anchor="middle" font-size="10" fill="#2c3e50">section_header  ·  file_type  ·  page</text>
+
+  <!-- S7: Write LanceDB -->
+  <rect x="190" y="775" width="240" height="64" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.5"/>
+  <text x="310" y="798" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S7 · Write LanceDB</text>
+  <text x="310" y="814" text-anchor="middle" font-size="10" fill="#2c3e50">store.upsert_chunks(records)</text>
+  <text x="310" y="828" text-anchor="middle" font-size="10" fill="#2c3e50">table.add()  ·  FTS index rebuild</text>
+
+  <!-- S8: Delete Old (conditional) -->
+  <rect x="190" y="865" width="240" height="64" rx="8" fill="#fef9e7" stroke="#f39c12" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="310" y="888" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">S8 · Delete Old Version</text>
+  <text x="310" y="904" text-anchor="middle" font-size="10" fill="#2c3e50">store.delete_document(existing_doc_id)</text>
+  <text x="310" y="918" text-anchor="middle" font-size="10" fill="#2c3e50">only if status == "replaced"</text>
+
+  <!-- END terminal -->
+  <circle cx="310" cy="980" r="16" fill="#2c3e50" stroke="#2c3e50" stroke-width="3"/>
+  <circle cx="310" cy="980" r="10" fill="#ffffff"/>
+
+  <!-- ── TERMINAL STATES (right column, error exits) ── -->
+
+  <!-- T-SKIP: Skipped -->
+  <rect x="700" y="225" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="249" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">SKIPPED</text>
+  <text x="785" y="265" text-anchor="middle" font-size="10" fill="#922b21">hash unchanged → return</text>
+
+  <!-- T-ERR-READ -->
+  <rect x="700" y="135" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="156" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">ERROR</text>
+  <text x="785" y="172" text-anchor="middle" font-size="10" fill="#922b21">IngestionError: cannot read</text>
+
+  <!-- T-ERR-CONV -->
+  <rect x="700" y="345" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="366" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">ERROR</text>
+  <text x="785" y="382" text-anchor="middle" font-size="10" fill="#922b21">UnsupportedFormatError</text>
+  <text x="785" y="394" text-anchor="middle" font-size="10" fill="#922b21">or IngestionError: conversion</text>
+
+  <!-- T-ERR-CHUNK -->
+  <rect x="700" y="505" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="526" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">ERROR</text>
+  <text x="785" y="542" text-anchor="middle" font-size="10" fill="#922b21">IngestionError: no chunks</text>
+
+  <!-- T-ERR-EMBED -->
+  <rect x="700" y="595" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="616" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">ERROR</text>
+  <text x="785" y="632" text-anchor="middle" font-size="10" fill="#922b21">IngestionError: embedding</text>
+
+  <!-- T-ERR-STORE -->
+  <rect x="700" y="775" width="170" height="52" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="785" y="796" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">ERROR</text>
+  <text x="785" y="812" text-anchor="middle" font-size="10" fill="#922b21">IngestionError: store write</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       DAG BRANCH  (left column, x-centre = 60 label, boxes at x=20)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- DAG boundary box (covers 3b and 3c) -->
+  <rect x="18" y="436" width="154" height="188" rx="6" fill="none" stroke="#1565C0" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="95" y="453" text-anchor="middle" font-size="9" fill="#1565C0">enable_dag_storage = true</text>
+
+  <!-- S3b: OCR DAGs -->
+  <rect x="22" y="460" width="146" height="64" rx="6" fill="#dbeafe" stroke="#1565C0" stroke-width="1.5"/>
+  <text x="95" y="480" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1a1a">S3b · OCR DAGs</text>
+  <text x="95" y="495" text-anchor="middle" font-size="9" fill="#1e3a5f">parse_sequence_diagram()</text>
+  <text x="95" y="508" text-anchor="middle" font-size="9" fill="#1e3a5f">dag_store.store_call_flow_dag()</text>
+  <text x="95" y="519" text-anchor="middle" font-size="8" fill="#7f8c8d">if diagrams (OCR path)</text>
+
+  <!-- S3c: Prose DAGs -->
+  <rect x="22" y="544" width="146" height="64" rx="6" fill="#dbeafe" stroke="#1565C0" stroke-width="1.5"/>
+  <text x="95" y="564" text-anchor="middle" font-size="11" font-weight="bold" fill="#1a1a1a">S3c · Prose DAGs</text>
+  <text x="95" y="579" text-anchor="middle" font-size="9" fill="#1e3a5f">extract_prose_call_flows()</text>
+  <text x="95" y="592" text-anchor="middle" font-size="9" fill="#1e3a5f">dag_store.store_call_flow_dag()</text>
+  <text x="95" y="603" text-anchor="middle" font-size="8" fill="#7f8c8d">if not diagrams (non-OCR path)</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       ARROWS — main pipeline (vertical)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- START -> S1 -->
+  <line x1="310" y1="116" x2="310" y2="134" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- S1 -> S2 -->
+  <line x1="310" y1="199" x2="310" y2="224" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="320" y="215" font-size="9" fill="#555555">bytes + hash</text>
+
+  <!-- S2 -> S3 (hash differs / new) -->
+  <line x1="310" y1="289" x2="310" y2="344" stroke="#27ae60" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="320" y="322" font-size="9" fill="#27ae60">new / changed</text>
+
+  <!-- S3 -> S4 -->
+  <line x1="310" y1="421" x2="310" y2="504" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="320" y="466" font-size="9" fill="#555555">markdown text</text>
+
+  <!-- S4 -> S5 -->
+  <line x1="310" y1="569" x2="310" y2="594" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="320" y="585" font-size="9" fill="#555555">chunk_pairs</text>
+
+  <!-- S5 -> S6 -->
+  <line x1="310" y1="659" x2="310" y2="684" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="320" y="675" font-size="9" fill="#555555">embeddings</text>
+
+  <!-- S6 -> S7 -->
+  <line x1="310" y1="749" x2="310" y2="774" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="320" y="765" font-size="9" fill="#555555">records[]</text>
+
+  <!-- S7 -> S8 (replaced) -->
+  <line x1="310" y1="839" x2="310" y2="864" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-orange)"/>
+  <text x="320" y="856" font-size="9" fill="#e67e22">replaced</text>
+
+  <!-- S8 -> END -->
+  <line x1="310" y1="929" x2="310" y2="963" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- S7 -> END (indexed, bypasses S8) -->
+  <path d="M 180 807 Q 140 900 180 962 Q 220 974 293 976" fill="none" stroke="#27ae60" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="128" y="900" text-anchor="middle" font-size="9" fill="#27ae60">indexed</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       ARROWS — error exits (right side)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- S1 -[OSError]-> T-ERR-READ -->
+  <line x1="430" y1="161" x2="699" y2="161" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="155" text-anchor="middle" font-size="9" fill="#c0392b">OSError</text>
+
+  <!-- S2 -[hash ==]-> T-SKIP -->
+  <line x1="430" y1="257" x2="699" y2="252" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="249" text-anchor="middle" font-size="9" fill="#c0392b">hash match</text>
+
+  <!-- S3 -[UnsupportedFormat / empty]-> T-ERR-CONV -->
+  <line x1="430" y1="376" x2="699" y2="371" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="366" text-anchor="middle" font-size="9" fill="#c0392b">unsupported / empty</text>
+
+  <!-- S4 -[no chunks]-> T-ERR-CHUNK -->
+  <line x1="430" y1="531" x2="699" y2="531" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="525" text-anchor="middle" font-size="9" fill="#c0392b">no chunks</text>
+
+  <!-- S5 -[EmbeddingError]-> T-ERR-EMBED -->
+  <line x1="430" y1="621" x2="699" y2="621" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="615" text-anchor="middle" font-size="9" fill="#c0392b">EmbeddingError</text>
+
+  <!-- S7 -[StoreError]-> T-ERR-STORE -->
+  <line x1="430" y1="801" x2="699" y2="801" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="560" y="795" text-anchor="middle" font-size="9" fill="#c0392b">StoreError</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       ARROWS — DAG branch (left side, from S3)
+  ══════════════════════════════════════════════════════════════ -->
+
+  <!-- S3 -> S3b (OCR path, enable_dag_storage) -->
+  <path d="M 190 430 Q 150 450 168 468" fill="none" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <text x="148" y="444" text-anchor="end" font-size="9" fill="#1565C0">OCR diagrams</text>
+
+  <!-- S3 -> S3c (non-OCR path, enable_dag_storage) -->
+  <path d="M 190 440 Q 145 490 168 552" fill="none" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <text x="138" y="508" text-anchor="end" font-size="9" fill="#1565C0">prose path</text>
+
+  <!-- S3b -> Kuzu (fire-and-forget) -->
+  <line x1="22" y1="492" x2="8" y2="492" stroke="#1565C0" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="8" y1="492" x2="8" y2="640" stroke="#1565C0" stroke-width="1" stroke-dasharray="3,2"/>
+  <!-- Kuzu store box -->
+  <rect x="22" y="628" width="146" height="44" rx="6" fill="#d1ecf1" stroke="#117a8b" stroke-width="1.5"/>
+  <text x="95" y="648" text-anchor="middle" font-size="11" font-weight="bold" fill="#0c5460">Kuzu DAG Store</text>
+  <text x="95" y="663" text-anchor="middle" font-size="9" fill="#0c5460">CallFlowDag · DagStep · DagParticipant</text>
+  <line x1="8" y1="640" x2="22" y2="648" stroke="#1565C0" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-blue)"/>
+
+  <!-- S3c -> Kuzu (fire-and-forget) -->
+  <line x1="22" y1="576" x2="9" y2="576" stroke="#1565C0" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="9" y1="576" x2="9" y2="640" stroke="#1565C0" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LANCEDB STORE BOX (right, aligned with S7)
+  ══════════════════════════════════════════════════════════════ -->
+  <rect x="700" y="870" width="170" height="55" rx="6" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.5"/>
+  <text x="785" y="892" text-anchor="middle" font-size="11" font-weight="bold" fill="#145a32">LanceDB</text>
+  <text x="785" y="907" text-anchor="middle" font-size="9" fill="#145a32">table.add(rows)  ·  FTS index</text>
+  <text x="785" y="919" text-anchor="middle" font-size="9" fill="#145a32">scalar indexes on library / doc_id</text>
+
+  <!-- S7 -> LanceDB store box -->
+  <path d="M 430 807 Q 560 807 560 898 Q 560 922 699 905" fill="none" stroke="#27ae60" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <text x="560" y="860" text-anchor="middle" font-size="9" fill="#27ae60">upsert_chunks()</text>
+
+  <!-- S8 -[warn, continue]-> END note -->
+  <rect x="700" y="865" width="170" height="44" rx="6" fill="#fef9e7" stroke="#f39c12" stroke-width="1"/>
+  <text x="785" y="883" text-anchor="middle" font-size="10" font-weight="bold" fill="#7d6608">delete_document()</text>
+  <text x="785" y="898" text-anchor="middle" font-size="9" fill="#7d6608">best-effort: log WARNING</text>
+  <text x="785" y="910" text-anchor="middle" font-size="9" fill="#7d6608">if delete fails, new version kept</text>
+  <line x1="430" y1="895" x2="699" y2="887" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-orange)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       BULK INGEST NOTE
+  ══════════════════════════════════════════════════════════════ -->
+  <rect x="540" y="940" width="310" height="68" rx="6" fill="#f4f6f7" stroke="#aab7b8" stroke-width="1"/>
+  <text x="695" y="958" text-anchor="middle" font-size="11" font-weight="bold" fill="#333333">ingest_folder() — Bulk path</text>
+  <text x="695" y="973" text-anchor="middle" font-size="10" fill="#555555">asyncio.gather() with Semaphore(max_concurrency=4)</text>
+  <text x="695" y="987" text-anchor="middle" font-size="10" fill="#555555">each file → ingest(rebuild_fts=False)</text>
+  <text x="695" y="1001" text-anchor="middle" font-size="10" fill="#555555">FTS index rebuilt once after all writes complete</text>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LEGEND
+  ══════════════════════════════════════════════════════════════ -->
+  <rect x="540" y="68" width="300" height="150" rx="6" fill="#f8f8f8" stroke="#dddddd" stroke-width="1"/>
+  <text x="554" y="86" font-size="11" font-weight="bold" fill="#333333">Legend</text>
+
+  <rect x="554" y="94" width="14" height="14" rx="3" fill="#d6eaf8" stroke="#2980b9" stroke-width="1"/>
+  <text x="574" y="105" font-size="10" fill="#444444">Pipeline state</text>
+
+  <rect x="554" y="113" width="14" height="14" rx="3" fill="#dbeafe" stroke="#1565C0" stroke-width="1"/>
+  <text x="574" y="124" font-size="10" fill="#444444">DAG extraction state (optional)</text>
+
+  <rect x="554" y="132" width="14" height="14" rx="3" fill="#d5f5e3" stroke="#27ae60" stroke-width="1"/>
+  <text x="574" y="143" font-size="10" fill="#444444">Write / terminal success</text>
+
+  <rect x="554" y="151" width="14" height="14" rx="3" fill="#fef9e7" stroke="#f39c12" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="574" y="162" font-size="10" fill="#444444">Conditional / best-effort state</text>
+
+  <rect x="554" y="170" width="14" height="14" rx="3" fill="#fdecea" stroke="#c0392b" stroke-width="1"/>
+  <text x="574" y="181" font-size="10" fill="#444444">Error terminal</text>
+
+  <line x1="554" y1="196" x2="580" y2="196" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="586" y="200" font-size="10" fill="#444444">Happy path</text>
+
+  <line x1="660" y1="196" x2="686" y2="196" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="692" y="200" font-size="10" fill="#444444">Error / skip exit</text>
+
+  <line x1="554" y1="213" x2="580" y2="213" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <text x="586" y="217" font-size="10" fill="#444444">DAG branch (fire-and-forget)</text>
+
+</svg>
