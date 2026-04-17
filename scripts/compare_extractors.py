@@ -8,6 +8,9 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+import asyncio
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -189,3 +192,81 @@ def render_table(rows: list[ComparisonRow]) -> str:
     )
 
     return header + "\n".join(body_lines) + "\n" + summary
+
+
+async def _run_vision(api_key: str) -> tuple[str, list]:
+    """Run the two-pass OCR pipeline and return (enriched_markdown, diagrams)."""
+    from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr  # noqa: PLC0415
+
+    return await convert_docx_with_ocr(DOCX_PATH, api_key=api_key)
+
+
+def main() -> None:
+    """Entry point: parse args, run extractors, print and save scorecard."""
+    parser = argparse.ArgumentParser(
+        description="Compare prose_dag_extractor vs Groq vision on 38413-i30.docx"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run prose extractor only — skip Groq vision API calls",
+    )
+    args = parser.parse_args()
+
+    if not DOCX_PATH.exists():
+        print(f"ERROR: spec file not found: {DOCX_PATH}", file=sys.stderr)
+        sys.exit(1)
+
+    api_key = ""
+    if not args.dry_run:
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        if not api_key:
+            print(
+                "ERROR: GROQ_API_KEY environment variable is not set.\n"
+                "Set it or use --dry-run to run the prose extractor only.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # Pass 1: MarkItDown → Markdown
+    print(f"Converting {DOCX_PATH.name} with MarkItDown…", flush=True)
+    from specagent.retrieval.converter import convert  # noqa: PLC0415
+
+    markdown = convert(DOCX_PATH)
+
+    # Prose extractor
+    print("Running prose DAG extractor…", flush=True)
+    from specagent.retrieval.prose_dag_extractor import extract_prose_call_flows  # noqa: PLC0415
+
+    prose_flows = extract_prose_call_flows(markdown)
+    print(f"  → {len(prose_flows)} figures with parseable steps found.", flush=True)
+
+    # Groq vision (skipped in dry-run)
+    vision_diagrams: list = []
+    if args.dry_run:
+        print("Dry-run: skipping Groq vision pass.", flush=True)
+    else:
+        print(f"Running Groq vision pipeline on {DOCX_PATH.name}…", flush=True)
+        _enriched_md, vision_diagrams = asyncio.run(_run_vision(api_key))
+        print(f"  → {len(vision_diagrams)} call-flow diagrams extracted.", flush=True)
+
+    # Align and render
+    rows = align_results(prose_flows, vision_diagrams)
+
+    if not rows:
+        print("WARNING: no figures found by either extractor.", flush=True)
+        sys.exit(0)
+
+    table = render_table(rows)
+
+    mode = "DRY-RUN (prose only)" if args.dry_run else "FULL COMPARISON"
+    header = f"# Extractor Comparison: 38413-i30.docx — {mode}\n\n"
+    output = header + table + "\n"
+
+    print("\n" + output)
+    OUTPUT_PATH.write_text(output, encoding="utf-8")
+    print(f"\nSaved to {OUTPUT_PATH}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
