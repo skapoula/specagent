@@ -136,7 +136,7 @@ include = [
 # ============================================================================
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]
 asyncio_mode = "auto"
 addopts = [
     "-ra",
@@ -210,7 +210,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG", "PLR2004"]
+"tests/**" = ["ARG", "PLR2004", "PLC0415"]
 "src/specagent/cli.py" = ["B008"]  # function call in default argument (typer pattern)
 
 [tool.ruff.lint.isort]
