@@ -283,6 +283,164 @@ class TestMermaidOutput:
 
 
 # ---------------------------------------------------------------------------
+# 3GPP-specific step patterns
+# ---------------------------------------------------------------------------
+
+# Pattern: [Conditional] prefix before Actor to Actor
+_CONDITIONAL_FLOW = """\
+Figure 4.2.2.2.2-1: Registration procedure
+
+1. UE to AMF: Registration Request
+
+2. [Conditional] new AMF to old AMF: Namf_Communication_UEContextTransfer (complete Registration Request)
+
+3. [Conditional] old AMF to new AMF: Response to Namf_Communication_UEContextTransfer (SUPI, UE Context)
+"""
+
+# Pattern: "The X sends Y to the Z" narrative form
+_SENDS_FLOW = """\
+Figure 4.2.2.3.2-1: UE-initiated Deregistration
+
+1. The UE sends NAS message Deregistration Request to the AMF
+
+2. [Conditional] AMF to SMF: Nsmf_PDUSession_ReleaseSMContext (SM Context ID)
+
+3. The SMF sends N4 Session Release Request to the UPF
+"""
+
+# Pattern: parenthetical step labels 7(A), 7(B)
+_PAREN_LABEL_FLOW = """\
+Figure 4.2.2.2.3-1: Registration with AMF re-allocation procedure
+
+1. UE to initial AMF: Registration Request
+
+7(A). initial AMF to target AMF: Namf_Communication_CreateUEContext Request
+
+7(B). target AMF to initial AMF: Namf_Communication_CreateUEContext Response
+"""
+
+# Pattern: "X responds with Y" / "X responds to Y with Z"
+_RESPONDS_FLOW = """\
+Figure 4.3.2.2.1-1: PDU Session Establishment
+
+1. UE to AMF: PDU Session Establishment Request
+
+2. AMF to SMF: Nsmf_PDUSession_CreateSMContext Request
+
+3. [Conditional] The SMF responds with Nsmf_PDUSession_CreateSMContext Response to the AMF
+"""
+
+# Pattern: range steps "6-7. Skipped" should be ignored
+_RANGE_SKIPPED_FLOW = """\
+Figure 4.2.2.2.4-1: UE Registration with ON-SNPN
+
+1. UE to AMF: Registration Request
+
+6-7. Skipped.
+
+8. AMF to UDM: Nudm_UECM_Registration
+"""
+
+# Pattern: "X invokes Nxxx_Service on Y" — implicit message
+_INVOKES_FLOW = """\
+Figure 4.2.2.2.2-1: Registration procedure
+
+1. UE to AMF: Registration Request
+
+12. new AMF invokes N5g-eir_EquipmentIdentityCheck_Get on EIR
+"""
+
+
+class TestConditionalPrefix:
+    """[Conditional] prefix before Actor to Actor is handled."""
+
+    @pytest.mark.unit
+    def test_conditional_step_is_extracted(self) -> None:
+        """[Conditional] Actor to Actor: msg is extracted as a normal step."""
+        flows = extract_prose_call_flows(_CONDITIONAL_FLOW)
+        assert len(flows) == 1
+        assert len(flows[0].steps) == 3
+
+    @pytest.mark.unit
+    def test_conditional_actors_correct(self) -> None:
+        """from_actor and to_actor are extracted without the [Conditional] prefix."""
+        flows = extract_prose_call_flows(_CONDITIONAL_FLOW)
+        step = flows[0].steps[1]  # step index 1: new AMF to old AMF
+        assert "AMF" in step.from_actor
+        assert "AMF" in step.to_actor
+
+    @pytest.mark.unit
+    def test_conditional_message_extracted(self) -> None:
+        """Message content is preserved after [Conditional] prefix is stripped."""
+        flows = extract_prose_call_flows(_CONDITIONAL_FLOW)
+        step = flows[0].steps[1]
+        assert "Namf_Communication_UEContextTransfer" in step.message
+
+
+class TestSendsPattern:
+    """'The X sends Y to the Z' narrative steps are extracted."""
+
+    @pytest.mark.unit
+    def test_sends_step_is_extracted(self) -> None:
+        """'The UE sends ... to the AMF' is extracted as a step."""
+        flows = extract_prose_call_flows(_SENDS_FLOW)
+        assert len(flows) == 1
+        # Steps 1 and 3 are sends-form; step 2 is actor-to-actor
+        assert len(flows[0].steps) == 3
+
+    @pytest.mark.unit
+    def test_sends_from_actor_correct(self) -> None:
+        """from_actor of a sends-form step is the subject of 'sends'."""
+        flows = extract_prose_call_flows(_SENDS_FLOW)
+        step = flows[0].steps[0]
+        assert step.from_actor == "UE"
+
+    @pytest.mark.unit
+    def test_sends_to_actor_correct(self) -> None:
+        """to_actor of a sends-form step is the object of 'to'."""
+        flows = extract_prose_call_flows(_SENDS_FLOW)
+        step = flows[0].steps[0]
+        assert step.to_actor == "AMF"
+
+    @pytest.mark.unit
+    def test_sends_message_extracted(self) -> None:
+        """Message is the payload of the sends-form step."""
+        flows = extract_prose_call_flows(_SENDS_FLOW)
+        step = flows[0].steps[0]
+        assert "Deregistration Request" in step.message
+
+
+class TestParenStepLabels:
+    """Parenthetical step labels like 7(A), 7(B) are matched."""
+
+    @pytest.mark.unit
+    def test_paren_label_steps_extracted(self) -> None:
+        """Steps labelled 7(A) and 7(B) are extracted."""
+        flows = extract_prose_call_flows(_PAREN_LABEL_FLOW)
+        assert len(flows) == 1
+        assert len(flows[0].steps) == 3
+
+    @pytest.mark.unit
+    def test_paren_label_actors_correct(self) -> None:
+        """Actors from 7(A) step are extracted correctly."""
+        flows = extract_prose_call_flows(_PAREN_LABEL_FLOW)
+        step_7a = flows[0].steps[1]
+        assert "AMF" in step_7a.from_actor
+        assert "AMF" in step_7a.to_actor
+
+
+class TestRangeSkipped:
+    """Range steps like '6-7. Skipped' are silently ignored."""
+
+    @pytest.mark.unit
+    def test_range_skipped_not_counted(self) -> None:
+        """'6-7. Skipped.' produces no step."""
+        flows = extract_prose_call_flows(_RANGE_SKIPPED_FLOW)
+        assert len(flows) == 1
+        assert len(flows[0].steps) == 2  # only steps 1 and 8
+
+
+# ---------------------------------------------------------------------------
 # Real document smoke test
 # ---------------------------------------------------------------------------
 
@@ -306,6 +464,10 @@ class TestRealDocument:
         flows = extract_prose_call_flows(text)
 
         assert len(flows) >= 38, f"Expected ≥38 flows, got {len(flows)}"
+        total_steps = sum(len(f.steps) for f in flows)
+        assert total_steps >= 380, (
+            f"Expected ≥380 total steps after improvements, got {total_steps}"
+        )
         # Every flow must have at least one step
         for flow in flows:
             assert len(flow.steps) >= 1, f"Flow {flow.figure_id!r} has no steps"
