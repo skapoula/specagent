@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from specagent.memgraph.connection import KuzuConnection
+from specagent.kuzu.connection import KuzuConnection
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -165,7 +165,7 @@ def test_get_dag_connection_returns_kuzu_connection(tmp_path: Path) -> None:
     """get_dag_connection() returns a KuzuConnection using KUZU_DB_PATH env var."""
     import os
 
-    from specagent.memgraph.connection import clear_dag_connection_cache, get_dag_connection
+    from specagent.kuzu.connection import clear_dag_connection_cache, get_dag_connection
 
     clear_dag_connection_cache()
     old = os.environ.get("KUZU_DB_PATH")

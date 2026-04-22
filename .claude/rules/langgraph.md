@@ -6,29 +6,19 @@ paths:
 
 # LangGraph Node Rules
 
-## Node Function Signature
+## Node Signature
+
 Every node MUST follow this exact signature:
+
 ```python
 def node_name(state: GraphState) -> GraphState:
     """Docstring explaining node purpose."""
-    # Implementation
+    # implementation
     return state
 ```
 
-## State Access Pattern
-```python
-# Read from state
-question = state.get("question", "")
-chunks = state.get("retrieved_chunks", [])
-
-# Write to state (create new dict, don't mutate)
-state["generation"] = answer
-state["citations"] = citations
-return state
-```
-
 ## Structured Output with Pydantic
-Define output schema as Pydantic model:
+
 ```python
 class GradeResult(BaseModel):
     relevant: Literal["yes", "no"]
@@ -37,16 +27,10 @@ class GradeResult(BaseModel):
 result = llm.with_structured_output(GradeResult).invoke(prompt)
 ```
 
-## Prompt Templates
-Store prompts as module constants:
-```python
-ROUTER_PROMPT = """You are a router for a 3GPP specification assistant.
-...
-"""
-```
-
 ## Error Handling
-Nodes should handle errors gracefully:
+
+Nodes must never raise — store errors in state:
+
 ```python
 try:
     result = llm.invoke(prompt)
@@ -55,8 +39,8 @@ except Exception as e:
     return state
 ```
 
-## Dataclasses for State Objects
-Use dataclasses from `graph/state.py`:
-- `RetrievedChunk` - Retrieved document chunk
-- `GradedChunk` - Chunk with relevance score
-- `Citation` - Source citation
+## State Objects
+
+Use dataclasses from `graph/state.py`: `RetrievedChunk`, `GradedChunk`, `Citation`.
+
+Each node is wrapped by `create_timed_node()` in `workflow.py` — elapsed ms accumulates in `state["node_timings"]`.

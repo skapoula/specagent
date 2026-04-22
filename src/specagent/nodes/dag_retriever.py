@@ -3,7 +3,7 @@
 Provides:
 - ``route_after_retriever``: conditional edge function — decides whether to
   activate the DAG retriever node or bypass it directly to the grader.
-- ``dag_retriever_node``: LangGraph node that queries the Memgraph DAG store
+- ``dag_retriever_node``: LangGraph node that queries the Kuzu DAG store
   and populates ``state["dag_chunks"]`` (separate lane, bypasses grader).
 
 Keyword heuristic recognises call-flow / procedure queries using:
@@ -21,7 +21,7 @@ from typing import Literal
 
 from specagent.config import settings
 from specagent.graph.state import GraphState, RetrievedChunk
-from specagent.memgraph.resources import get_dag_store
+from specagent.kuzu.resources import get_dag_store
 from specagent.nodes.retriever import _normalize_spec_id
 
 logger = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ def route_after_retriever(
 
 
 def dag_retriever_node(state: GraphState) -> GraphState:
-    """Query the Memgraph DAG store and populate state['dag_chunks'].
+    """Query the Kuzu DAG store and populate state['dag_chunks'].
 
     Args:
         state: Current graph state.
@@ -142,7 +142,7 @@ def dag_retriever_node(state: GraphState) -> GraphState:
     """
     question = state.get("rewritten_question") or state.get("question", "")
 
-    # Extract keyword tokens for the Memgraph query
+    # Extract keyword tokens for the Kuzu query
     matches = _KEYWORD_PATTERN.findall(question)
     keywords: list[str] = list(dict.fromkeys(m.lower() for m in matches)) if matches else [question]
 

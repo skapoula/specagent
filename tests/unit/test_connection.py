@@ -1,4 +1,4 @@
-"""Unit tests for specagent.memgraph.connection.KuzuConnection.
+"""Unit tests for specagent.kuzu.connection.KuzuConnection.
 
 The kuzu library is fully mocked — no real database is created.
 Tests must pass offline and without kuzu installed.
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from specagent.memgraph.connection import KuzuConnection
+from specagent.kuzu.connection import KuzuConnection
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ def _make_kuzu_result(rows: list[dict]) -> MagicMock:
 @pytest.fixture
 def mock_kuzu(tmp_path):
     """Patch the kuzu module so no real database is opened."""
-    with patch("specagent.memgraph.connection.kuzu") as mk:
+    with patch("specagent.kuzu.connection.kuzu") as mk:
         mk.Database.return_value = MagicMock()
         mk.Connection.return_value = MagicMock()
         # Schema init calls execute() for each DDL statement; return empty results.

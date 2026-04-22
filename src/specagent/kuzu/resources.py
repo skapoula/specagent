@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from specagent.memgraph.connection import KuzuConnection, get_dag_connection
-from specagent.memgraph.dag_store import CallFlowDagStore
+from specagent.kuzu.connection import KuzuConnection, get_dag_connection
+from specagent.kuzu.dag_store import CallFlowDagStore
 
 
 @lru_cache(maxsize=1)

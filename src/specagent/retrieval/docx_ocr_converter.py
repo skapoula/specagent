@@ -55,7 +55,7 @@ class ExtractedDiagram:
     """A call-flow or signal-flow diagram extracted from a .docx file.
 
     Produced by :func:`convert_docx_with_ocr` and consumed by the ingestor
-    to store the diagram as a DAG in Memgraph.
+    to store the diagram as a DAG in Kuzu.
     """
 
     image_type: str

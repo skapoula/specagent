@@ -1,6 +1,6 @@
 """Kuzu embedded graph database connection for the specagent DAG store.
 
-Replaces the Bolt-based MemgraphConnection with an in-process Kuzu database.
+Replaces the Bolt-based graph connection with an in-process Kuzu database.
 No external server or port required — the database is a directory on disk.
 """
 
