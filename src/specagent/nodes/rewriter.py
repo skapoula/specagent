@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from specagent.config import settings
 from specagent.llm import get_llm
+from specagent.nodes._common import record_llm_call
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -90,11 +91,7 @@ def rewriter_node(state: "GraphState") -> "GraphState":
 
         # Call LLM to rewrite the question
         rewritten_question = llm.invoke(prompt)
-        _call = llm.get_last_call()
-        if _call is not None:
-            _call.node = "rewriter"
-            _call.trace_id = state.get("trace_id", "")
-            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+        record_llm_call(state, llm, "rewriter")
         _pre_scores = [c.similarity_score for c in state.get("retrieved_chunks", [])]
         if _pre_scores:
             logger.debug(

@@ -9,6 +9,8 @@ All tests use synthetic Markdown snippets — no file I/O, no network.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from specagent.retrieval.prose_dag_extractor import (
@@ -641,23 +643,23 @@ class TestRealDocument:
 
     @pytest.mark.integration
     def test_extracts_flows_from_real_doc(self, tmp_path) -> None:
-        """Extracts at least 50 call-flow DAGs from the real 3GPP spec document."""
-        from pathlib import Path
-
+        """Extracts call-flow DAGs from the real 3GPP spec document (38300-i30.docx)."""
         from specagent.retrieval.converter import convert
         from specagent.retrieval.markdown_postprocessor import postprocess
+        from tests.conftest import DOCX_LARGE
 
-        doc = Path("data/docs/23502-j70.docx")
+        doc = DOCX_LARGE
         if not doc.exists():
             pytest.skip("Real document not present")
 
         text = postprocess(convert(doc))
         flows = extract_prose_call_flows(text)
 
-        assert len(flows) >= 38, f"Expected ≥38 flows, got {len(flows)}"
+        # Baseline calibrated empirically against 38300-i30.docx (TS 38.300 NR Overview)
+        assert len(flows) >= 10, f"Expected ≥10 flows, got {len(flows)}"
         total_steps = sum(len(f.steps) for f in flows)
-        assert total_steps >= 250, (
-            f"Expected ≥250 clean steps (NF-anchored extraction), got {total_steps}"
+        assert total_steps >= 20, (
+            f"Expected ≥20 clean steps (NF-anchored extraction), got {total_steps}"
         )
         # Every flow must have at least one step
         for flow in flows:
@@ -668,3 +670,34 @@ class TestRealDocument:
         for flow in flows[:10]:
             participants, steps = parse_sequence_diagram(flow.mermaid_content)
             assert len(steps) >= 1, f"Flow {flow.figure_id!r} mermaid produced no steps"
+
+
+# ---------------------------------------------------------------------------
+# Fix 6: sync guarantee test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSyncGuarantee:
+    """extract_prose_call_flows must remain a plain synchronous function.
+
+    Async callers must use asyncio.to_thread(extract_prose_call_flows, md).
+    """
+
+    def test_is_not_a_coroutine_function(self) -> None:
+        """extract_prose_call_flows must not be a coroutine function."""
+        assert inspect.iscoroutinefunction(extract_prose_call_flows) is False
+
+    def test_returns_list_for_call_flow_prose(self) -> None:
+        """extract_prose_call_flows returns a list for standard 3GPP call-flow prose."""
+        md = (
+            "Figure 5.1.3.1-1: UE-initiated service request\n\n"
+            "1. UE to AMF: Service Request\n\n"
+            "2. AMF to SMF: Nsmf_PDUSession_UpdateSMContext Request\n\n"
+            "3. SMF to UPF: N4 Session Modification Request\n"
+        )
+        result = extract_prose_call_flows(md)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], ProseCallFlow)
+        assert len(result[0].steps) >= 2

@@ -2,6 +2,7 @@
 
 import logging
 import re as _re
+import threading
 from typing import TYPE_CHECKING
 
 from specagent.config import settings
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _tokenizer: "PreTrainedTokenizerBase | None" = None
+_tokenizer_lock = threading.Lock()
 
 # Separator hierarchy for recursive splitting
 _SEPARATORS = ["\n\n", "\n", " ", ""]
@@ -32,20 +34,22 @@ def _get_tokenizer() -> "PreTrainedTokenizerBase":
     """
     global _tokenizer  # noqa: PLW0603
     if _tokenizer is None:
-        from transformers import AutoTokenizer
+        with _tokenizer_lock:
+            if _tokenizer is None:
+                from transformers import AutoTokenizer
 
-        model_id = settings.embedding_model
-        logger.info("Loading tokenizer %s", model_id)
-        try:
-            _tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
-                model_id, local_files_only=True, trust_remote_code=True
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"Tokenizer '{model_id}' is not in the local cache. "
-                "Run 'specagent download-model' to download it, "
-                "then restart the server."
-            ) from exc
+                model_id = settings.embedding_model
+                logger.info("Loading tokenizer %s", model_id)
+                try:
+                    _tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+                        model_id, local_files_only=True, trust_remote_code=True
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Tokenizer '{model_id}' is not in the local cache. "
+                        "Run 'specagent download-model' to download it, "
+                        "then restart the server."
+                    ) from exc
     assert _tokenizer is not None  # guaranteed by the if-block above
     return _tokenizer
 
@@ -84,6 +88,7 @@ def _merge_splits(splits: list[str], separator: str, chunk_size: int, overlap: i
                 if current:
                     # The separator that preceded this element is also gone
                     current_len -= sep_len
+            current_len = max(0, current_len)  # guard against sep-len underflow
             # Recalculate sep_addition after overlap trimming
             sep_addition = sep_len if current else 0
         current.append(split)
@@ -202,9 +207,9 @@ def chunk_with_metadata(text: str) -> list[tuple[str, str]]:
     last_header = ""
 
     for chunk_text in chunks:
-        match = _HEADER_RE.search(chunk_text)
-        if match:
-            last_header = match.group(1).strip()
+        matches = _HEADER_RE.findall(chunk_text)
+        if matches:
+            last_header = matches[-1].strip()
         result.append((chunk_text, last_header))
 
     return result

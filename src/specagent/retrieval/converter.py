@@ -40,16 +40,21 @@ SUPPORTED_EXTENSIONS = {
     ".zip",
 }
 
+import threading
+
 _md: "MarkItDown | None" = None
+_md_lock = threading.Lock()
 
 
 def _get_markitdown() -> "MarkItDown":
     """Return the MarkItDown singleton, initialising on first call."""
     global _md  # noqa: PLW0603
     if _md is None:
-        from markitdown import MarkItDown  # noqa: PLC0415 — lazy import keeps MarkItDown optional
+        with _md_lock:
+            if _md is None:
+                from markitdown import MarkItDown  # noqa: PLC0415
 
-        _md = MarkItDown()
+                _md = MarkItDown()
     return _md
 
 

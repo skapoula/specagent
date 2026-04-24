@@ -10,7 +10,6 @@ content-specific skip threshold; otherwise it runs:
 - Non-numerical content:     check runs when average_confidence < 0.70
 """
 
-import json
 import logging
 import re
 from typing import TYPE_CHECKING, Literal
@@ -18,6 +17,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field
 
 from specagent.llm import get_llm
+from specagent.nodes._common import format_spec_ref, parse_json_object, record_llm_call
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -57,13 +57,6 @@ Respond with ONLY a JSON object:
 {{"grounded": "no", "ungrounded_claims": ["claim 1", "claim 2"]}}
 
 Use "yes" if fully supported, "partial" if mostly supported, or "no" if significantly unsupported."""
-
-
-def _parse_hallucination_json(response: str) -> "HallucinationResult":
-    """Extract and parse a HallucinationResult from an LLM response string."""
-    json_match = re.search(r"\{.*\}", response, re.DOTALL)
-    raw = json_match.group(0) if json_match else response
-    return HallucinationResult(**json.loads(raw))
 
 
 def _contains_numerical_or_tabular_content(text: str) -> bool:
@@ -121,11 +114,10 @@ def _format_sources(graded_chunks: list) -> str:
     if not relevant_chunks:
         return "(No source documents provided)"
 
-    source_parts = []
-    for chunk in relevant_chunks:
-        prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
-        spec_num = chunk.spec_id[len(prefix) :]
-        source_parts.append(f"[{prefix} {spec_num} §{chunk.section}]: {chunk.content}")
+    source_parts = [
+        f"{format_spec_ref(chunk.spec_id, chunk.section)}: {chunk.content}"
+        for chunk in relevant_chunks
+    ]
     return "\n\n".join(source_parts)
 
 
@@ -174,13 +166,9 @@ def hallucination_check_node(state: "GraphState") -> "GraphState":
         check_ran = True
 
         response = llm.invoke(prompt)
-        _call = llm.get_last_call()
-        if _call is not None:
-            _call.node = "hallucination_check"
-            _call.trace_id = state.get("trace_id", "")
-            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+        record_llm_call(state, llm, "hallucination_check")
 
-        result = _parse_hallucination_json(response)
+        result = HallucinationResult(**parse_json_object(response))
         state["hallucination_check"] = _GROUNDED_MAP[result.grounded]
         state["ungrounded_claims"] = result.ungrounded_claims
 

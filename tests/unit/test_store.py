@@ -81,32 +81,15 @@ class TestIsEmptyGuard:
 
         assert store._is_empty is True
 
-    def test_is_empty_set_false_after_upsert(self):
+    def test_is_empty_set_false_after_upsert(self, real_chunk_record):
         """_is_empty becomes False after upsert_chunks writes at least one chunk."""
         store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
         assert store._is_empty is True
 
         mock_table = MagicMock()
-        mock_chunk = MagicMock()
-        mock_chunk.model_dump.return_value = {
-            "id": "test-id",
-            "doc_id": "doc-1",
-            "library": "lib",
-            "source": "file.pdf",
-            "content_hash": "abc123",
-            "title": "Test",
-            "content": "chunk text",
-            "embedding": [0.0] * 768,
-            "chunk_index": 0,
-            "created_at": "2024-01-01T00:00:00+00:00",
-            "metadata": "{}",
-            "file_type": "pdf",
-            "last_modified": "",
-            "page": 0,
-        }
 
         with patch("specagent.retrieval.store._open_table", return_value=mock_table):
-            store.upsert_chunks([mock_chunk])
+            store.upsert_chunks([real_chunk_record])
 
         assert store._is_empty is False
 
@@ -114,6 +97,7 @@ class TestIsEmptyGuard:
 # ──────────────────────────────────────────────────────────────────────────────
 # Failing tests for bug fixes
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 class TestStoreDeleteBugFixes:
@@ -165,7 +149,7 @@ class TestStoreDeleteBugFixes:
         mock_table = MagicMock()
         mock_table.count_rows.return_value = 2
         # First row has invalid JSON; second row has valid JSON
-        mock_table.search.return_value.select.return_value.to_list.return_value = [
+        mock_table.search.return_value.select.return_value.limit.return_value.to_list.return_value = [
             {
                 "doc_id": "bad-doc",
                 "source": "/specs/bad.docx",
@@ -177,8 +161,8 @@ class TestStoreDeleteBugFixes:
             },
             {
                 "doc_id": "good-doc",
-                "source": "/specs/good.docx",
-                "title": "Good Doc",
+                "source": "38413-i30.docx",
+                "title": "TS 38.413 NG Application Protocol",
                 "library": "lib",
                 "content_hash": "def",
                 "created_at": "2024-01-02",
@@ -200,7 +184,8 @@ class TestStoreDeleteBugFixes:
         asyncio.to_thread dispatches upsert_chunks to OS threads; without a lock
         concurrent table.add() calls corrupt the LanceDB table.
         """
-        import threading  # noqa: PLC0415
+        import threading
+
         store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
         assert hasattr(store, "_write_lock"), (
             "Store must expose _write_lock (threading.Lock) to serialize concurrent writes"
@@ -208,3 +193,115 @@ class TestStoreDeleteBugFixes:
         assert isinstance(store._write_lock, type(threading.Lock())), (
             "_write_lock must be a threading.Lock"
         )
+
+
+@pytest.mark.unit
+class TestTableLockThreadSafety:
+    """Fix 9: _table() must use double-checked locking to prevent concurrent opens."""
+
+    def test_table_opened_only_once_under_concurrent_access(self):
+        """_table() must call _open_table exactly once even under concurrent access."""
+        import threading
+        import time
+
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 0
+        open_count: list[int] = []
+        errors: list[Exception] = []
+
+        def slow_open(uri: str, table_name: str) -> MagicMock:
+            open_count.append(1)
+            time.sleep(0.05)  # hold lock long enough for other threads to arrive
+            return mock_table
+
+        def worker() -> None:
+            try:
+                store._table()
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch("specagent.retrieval.store._open_table", side_effect=slow_open):
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=5)
+
+        assert not errors, f"Thread errors: {errors}"
+        assert len(open_count) == 1, (
+            f"_open_table called {len(open_count)} times; expected exactly 1"
+        )
+
+    def test_store_has_table_lock(self):
+        """Store must expose _table_lock for thread-safe lazy initialisation."""
+        import threading
+
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        assert hasattr(store, "_table_lock")
+        assert isinstance(store._table_lock, type(threading.Lock()))
+
+
+@pytest.mark.unit
+class TestUpsertIsTrue:
+    """Fix 2: upsert_chunks must delete old chunks before inserting new ones."""
+
+    def test_delete_called_before_add(self, real_chunk_record):
+        """upsert_chunks must call table.delete for the chunk's doc_id before table.add."""
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 5
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            store.upsert_chunks([real_chunk_record])
+
+        call_names = [c[0] for c in mock_table.mock_calls]
+        assert "delete" in call_names, "table.delete() must be called during upsert"
+        assert "add" in call_names, "table.add() must be called during upsert"
+        delete_idx = call_names.index("delete")
+        add_idx = call_names.index("add")
+        assert delete_idx < add_idx, "delete must happen before add"
+
+    def test_delete_not_called_if_row_build_raises(self, real_chunk_record):
+        """upsert_chunks must not delete rows if serialisation fails before insert."""
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 3
+
+        bad = MagicMock()
+        bad.model_dump.side_effect = ValueError("boom")
+        bad.doc_id = real_chunk_record.doc_id
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            with pytest.raises(Exception):
+                store.upsert_chunks([bad])
+
+        mock_table.delete.assert_not_called()
+
+
+@pytest.mark.unit
+class TestRebuildFtsIndexReturnsBool:
+    """Fix 11: rebuild_fts_index must return bool instead of None."""
+
+    def test_returns_true_on_success(self):
+        """rebuild_fts_index() must return True when the FTS index is rebuilt."""
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 1
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            result = store.rebuild_fts_index()
+
+        assert result is True
+
+    def test_returns_false_on_failure(self):
+        """rebuild_fts_index() must return False when FTS rebuild raises."""
+        store = Store(uri="/tmp/test_lancedb", table_name="test_docs")
+        mock_table = MagicMock()
+        mock_table.count_rows.return_value = 1
+        mock_table.create_fts_index.side_effect = RuntimeError("FTS failed")
+
+        with patch("specagent.retrieval.store._open_table", return_value=mock_table):
+            result = store.rebuild_fts_index()
+
+        assert result is False

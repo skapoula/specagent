@@ -10,6 +10,7 @@ import re
 from typing import TYPE_CHECKING
 
 from specagent.llm import get_llm
+from specagent.nodes._common import format_spec_ref, record_llm_call
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -45,7 +46,7 @@ Answer:"""
 CITATION_PATTERN = re.compile(r"\[TS\s+(\d+\.\d+(?:-\d+)?)\s+§\s*([0-9A-Za-z.]+)\]")
 
 
-def generator_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915
+def generator_node(state: "GraphState") -> "GraphState":
     """
     Generate answer from graded chunks.
 
@@ -83,18 +84,14 @@ def generator_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915
         context_parts = []
         for idx, chunk in enumerate(relevant_chunks, start=1):
             # Format: **Chunk N** [TS XX.XXX §Y.Z] or [TR XX.XXX §Y.Z]: content
-            prefix = "TS" if chunk.spec_id.startswith("TS") else "TR"
-            spec_num = chunk.spec_id[len(prefix):]
-            source_ref = f"[{prefix} {spec_num} §{chunk.section}]"
+            source_ref = format_spec_ref(chunk.spec_id, chunk.section)
             context_parts.append(f"**Chunk {idx}** {source_ref}:\n{chunk.content}")
 
         # Append DAG chunks as a clearly-labelled separate section
         if dag_chunks:
             context_parts.append("\n--- Call Flow Diagrams ---")
             for dag_chunk in dag_chunks:
-                prefix = "TS" if dag_chunk.spec_id.startswith("TS") else "TR"
-                spec_num = dag_chunk.spec_id[len(prefix):]
-                source_ref = f"[{prefix} {spec_num} §{dag_chunk.section}]"
+                source_ref = format_spec_ref(dag_chunk.spec_id, dag_chunk.section)
                 context_parts.append(f"**{dag_chunk.title}** {source_ref}:\n{dag_chunk.content}")
 
         context = "\n\n".join(context_parts)
@@ -108,12 +105,9 @@ def generator_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915
 
         # Call LLM to generate answer
         generation = llm.invoke(prompt)
+        record_llm_call(state, llm, "generator")
         _call = llm.get_last_call()
         if _call is not None:
-            _call.node = "generator"
-            _call.trace_id = state.get("trace_id", "")
-            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
-
             try:
                 from specagent.tracing.rag_spans import emit_llm_usage_span  # noqa: PLC0415
 

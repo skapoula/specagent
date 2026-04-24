@@ -11,6 +11,15 @@ import pytest
 from specagent.retrieval.exceptions import IngestionError
 from tests.conftest import DOCX_SMALL, _make_png_bytes, make_docx_zip
 
+# Actual image inventory of DOCX_SMALL (38413-i30.docx — TS 38.413 NG-AP, 3.49 MB).
+# Confirmed by inspecting word/_rels/document.xml.rels.
+_DOCX_SMALL_TOTAL_IMAGES = 103
+_DOCX_SMALL_FIRST_MEDIA = "image1.emf"
+_DOCX_SMALL_FIRST_MIME = "image/x-emf"
+_DOCX_SMALL_PNG_COUNT = 1
+_DOCX_SMALL_EMF_COUNT = 101
+_DOCX_SMALL_WMF_COUNT = 1
+
 
 @pytest.mark.unit
 class TestExtractImages:
@@ -21,8 +30,7 @@ class TestExtractImages:
         from specagent.retrieval.docx_image_extractor import extract_images
 
         result = extract_images(DOCX_SMALL)
-        # DOCX_SMALL (38108-i40.docx) has 98 image relationships
-        assert len(result) == 98
+        assert len(result) == _DOCX_SMALL_TOTAL_IMAGES
 
     def test_returns_empty_for_docx_with_no_images(self, docx_no_images: Path) -> None:
         """A .docx with no embedded images returns an empty list."""
@@ -46,9 +54,9 @@ class TestExtractImages:
         from specagent.retrieval.docx_image_extractor import extract_images
 
         result = extract_images(DOCX_SMALL)
-        # First image relationship in 38108-i40.docx is rId9 → image1.emf
-        assert result[0].media_filename == "image1.emf"
-        assert result[0].mime_type == "image/x-emf"
+        # First image relationship in 38413-i30.docx is rId9 → image1.emf
+        assert result[0].media_filename == _DOCX_SMALL_FIRST_MEDIA
+        assert result[0].mime_type == _DOCX_SMALL_FIRST_MIME
 
     def test_png_images_have_correct_mime_type(self) -> None:
         """PNG files in the real .docx get mime_type image/png."""
@@ -56,7 +64,7 @@ class TestExtractImages:
 
         result = extract_images(DOCX_SMALL)
         png_images = [r for r in result if r.media_filename.endswith(".png")]
-        assert len(png_images) == 3
+        assert len(png_images) == _DOCX_SMALL_PNG_COUNT
         for img in png_images:
             assert img.mime_type == "image/png"
 
@@ -66,7 +74,7 @@ class TestExtractImages:
 
         result = extract_images(DOCX_SMALL)
         emf_images = [r for r in result if r.media_filename.endswith(".emf")]
-        assert len(emf_images) == 8
+        assert len(emf_images) == _DOCX_SMALL_EMF_COUNT
         for img in emf_images:
             assert img.mime_type == "image/x-emf"
 
@@ -76,7 +84,7 @@ class TestExtractImages:
 
         result = extract_images(DOCX_SMALL)
         wmf_images = [r for r in result if r.media_filename.endswith(".wmf")]
-        assert len(wmf_images) == 87
+        assert len(wmf_images) == _DOCX_SMALL_WMF_COUNT
         for img in wmf_images:
             assert img.mime_type == "image/x-wmf"
 

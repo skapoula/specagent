@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatErro
 from specagent.retrieval.markdown_postprocessor import postprocess
 from specagent.retrieval.prose_dag_extractor import extract_prose_call_flows
 from specagent.retrieval.resources import get_store
+from specagent.retrieval.spec_filename import parse_3gpp_release, release_paths
 from specagent.retrieval.store import ChunkRecord
 
 logger = logging.getLogger(__name__)
@@ -134,6 +136,17 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     if settings.enable_dag_storage and not diagrams:
         _store_prose_dags(text, doc_name=path.stem, source=source_str)
 
+    # ── 3d. Organise into 3gpp_rel_XX folder and write Markdown file ──────────
+    release = 0
+    paths = release_paths(path, settings.data_dir) if file_type == "docx" else None
+    if paths is not None:
+        docx_dest, md_dest = paths
+        release = parse_3gpp_release(path.stem) or 0
+        try:
+            await asyncio.to_thread(_write_release_files, path, text, docx_dest, md_dest)
+        except Exception as e:
+            raise IngestionError(f"Failed to write release files for {source_str!r}") from e
+
     # ── 4. Chunk, extracting section headers per chunk ─────────────────────────
     try:
         chunk_pairs = await asyncio.to_thread(chunk_with_metadata, text)
@@ -162,6 +175,8 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     ):
         chunk_meta = dict(metadata or {})
         chunk_meta["section_header"] = section_header
+        if release:
+            chunk_meta["release"] = release
         emb = embeddings[i]
         records.append(
             ChunkRecord(
@@ -179,6 +194,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
                 file_type=file_type,
                 last_modified=last_modified,
                 page=0,
+                release=release,
             )
         )
 
@@ -197,12 +213,14 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         )
         try:
             await asyncio.to_thread(store.delete_document, existing_doc_id)
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "New version of %s written (doc_id=%s) but old doc_id=%s could not be deleted",
+                "New version of %s written (doc_id=%s) but old doc_id=%s could not be deleted: %s",
                 source_str,
                 doc_id,
                 existing_doc_id,
+                exc,
+                exc_info=True,
             )
 
     logger.info(
@@ -258,6 +276,9 @@ async def ingest_folder(
     folder_path = Path(folder).expanduser().resolve()
     if not folder_path.exists() or not folder_path.is_dir():
         raise IngestionError(f"Folder not found or not a directory: {str(folder)!r}")
+    # Capture the store singleton once so the FTS rebuild below uses the same
+    # instance that all _ingest_one calls write into.
+    store = get_store()
 
     pattern = "**/*" if recursive else "*"
     candidates = sorted(
@@ -294,7 +315,7 @@ async def ingest_folder(
     # so that external deletes are reflected in hybrid search)
     if candidates:
         try:
-            await asyncio.to_thread(get_store().rebuild_fts_index)
+            await asyncio.to_thread(store.rebuild_fts_index)
         except Exception as fts_err:
             logger.warning("FTS index rebuild after ingest_folder failed: %s", fts_err)
 
@@ -378,3 +399,35 @@ def _extract_title(text: str, source: str) -> str:
         if stripped.startswith("#"):
             return stripped.lstrip("#").strip()[:200]
     return Path(source).name[:200]
+
+
+def _write_release_files(source: Path, text: str, docx_dest: Path, md_dest: Path) -> None:
+    """Copy the source .docx and write the Markdown into the release folder structure.
+
+    Creates parent directories as needed. Skips the docx copy if source and
+    destination are the same path (file already in the correct location).
+
+    Args:
+        source: Original source .docx path.
+        text: Postprocessed Markdown text to write.
+        docx_dest: Target path for the .docx copy.
+        md_dest: Target path for the .md file.
+    """
+    _mkdir(docx_dest.parent)
+    _mkdir(md_dest.parent)
+
+    if source.resolve() != docx_dest.resolve():
+        shutil.copy2(source, docx_dest)
+
+    md_dest.write_text(text, encoding="utf-8")
+    logger.info("Wrote release files: %s, %s", docx_dest, md_dest)
+
+
+def _mkdir(path: Path) -> None:
+    """Create directory tree, tolerating races where it already exists."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        raise IngestionError(f"Permission denied creating directory {path}") from e
+    except OSError as e:
+        raise IngestionError(f"Failed to create directory {path}") from e
