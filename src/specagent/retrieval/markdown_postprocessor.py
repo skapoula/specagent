@@ -86,7 +86,7 @@ def _strip_toc(text: str) -> str:
     removed = match.start()
     if removed > 0:
         logger.debug("_strip_toc: removed %d chars before first heading", removed)
-    return text[match.start():]
+    return text[match.start() :]
 
 
 def _strip_change_history(text: str) -> str:
@@ -150,7 +150,7 @@ def _fix_annex_headings(text: str) -> str:
         stripped = line.lstrip()
         if (
             stripped.startswith("Annex ")
-            and len(stripped) > 7
+            and len(stripped) > 6
             and stripped[6].isupper()
             and not stripped.startswith("#")
         ):

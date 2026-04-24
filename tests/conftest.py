@@ -26,13 +26,17 @@ from specagent.retrieval.resources import clear_resource_cache
 # Real test data — actual 3GPP .docx files from the project data directory
 # ---------------------------------------------------------------------------
 
-RAW_DATA_DIR = Path(__file__).parent.parent / "data" / "raw"
+REAL_DOCX_DIR = Path(__file__).parent.parent / "src" / "specagent" / "data" / "rel_18" / "doc"
+RAW_DATA_DIR = REAL_DOCX_DIR  # deprecated alias — use REAL_DOCX_DIR in new code
 
-# The three real .docx files available for tests.
-# 38108-i40.docx is the smallest (857 KB) and is the default for most tests.
-DOCX_SMALL = RAW_DATA_DIR / "38108-i40.docx"  # 857 KB, 98 images (87 wmf, 8 emf, 3 png)
-DOCX_MEDIUM = RAW_DATA_DIR / "38104-ic0.docx"  # 3.3 MB, 164 images
-DOCX_LARGE = RAW_DATA_DIR / "23502-j70.docx"  # 16.9 MB, 288 images
+# The three real 3GPP Release 18 .docx files available for tests.
+# Ordered by file size (smallest first).
+# 38413-i30.docx: TS 38.413 (NG Application Protocol), 3.49 MB, 103 images (101 emf, 1 wmf, 1 png)
+# 38331-i30.docx: TS 38.331 (Radio Resource Control),  4.07 MB,  71 images (16 emf, 55 wmf, 0 png)
+# 38300-i30.docx: TS 38.300 (NR Overall Description),  6.43 MB, 124 images (84 emf, 37 wmf, 3 png)
+DOCX_SMALL = REAL_DOCX_DIR / "38413-i30.docx"
+DOCX_MEDIUM = REAL_DOCX_DIR / "38331-i30.docx"
+DOCX_LARGE = REAL_DOCX_DIR / "38300-i30.docx"
 
 # =============================================================================
 # Configuration Fixtures
@@ -257,12 +261,82 @@ Each HARQ process handles one transport block at a time.
 
 ### 5.3.7 RRC Connection Re-establishment
 
-The RRC connection re-establishment procedure is used to re-establish RRC 
+The RRC connection re-establishment procedure is used to re-establish RRC
 connection after radio link failure.
 
 Timer T311 is started upon detection of radio link failure.
 """,
     }
+
+
+# =============================================================================
+# Real 3GPP Markdown Fixtures (session-scoped — conversion is expensive)
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def real_markdown_small_raw() -> str:
+    """Raw markdown from DOCX_SMALL (38413-i30.docx) via MarkItDown, no postprocessing.
+
+    Session-scoped: conversion runs once for the entire test session (~1-2 seconds).
+    Used by postprocessor integration tests as direct postprocess() input.
+    """
+    from specagent.retrieval.converter import convert
+
+    return convert(DOCX_SMALL)
+
+
+@pytest.fixture(scope="session")
+def real_markdown_small(real_markdown_small_raw: str) -> str:
+    """Postprocessed markdown from DOCX_SMALL (38413-i30.docx, TS 38.413 NG-AP).
+
+    Session-scoped: postprocessing runs once. Ready for chunker/embedder tests.
+    """
+    from specagent.retrieval.markdown_postprocessor import postprocess
+
+    return postprocess(real_markdown_small_raw)
+
+
+@pytest.fixture(scope="session")
+def real_paragraphs_small(real_markdown_small: str) -> list[str]:
+    """Non-empty double-newline paragraphs from DOCX_SMALL postprocessed markdown.
+
+    Real 3GPP text strings suitable as chunk/embed input without needing the tokenizer.
+    """
+    return [p.strip() for p in real_markdown_small.split("\n\n") if p.strip()]
+
+
+@pytest.fixture
+def real_chunk_sample(real_paragraphs_small: list[str]) -> str:
+    """A single representative 3GPP paragraph from DOCX_SMALL (length > 50 chars)."""
+    candidates = [p for p in real_paragraphs_small if len(p) > 50]
+    return candidates[0] if candidates else real_paragraphs_small[0]
+
+
+@pytest.fixture
+def real_chunk_record(real_chunk_sample: str) -> "object":
+    """A ChunkRecord built from real DOCX_SMALL content for store write tests."""
+    import uuid as _uuid
+
+    from specagent.retrieval.store import ChunkRecord
+
+    return ChunkRecord(
+        id=str(_uuid.uuid4()),
+        doc_id=str(_uuid.uuid4()),
+        library="3gpp-specs",
+        source="38413-i30.docx",
+        content_hash="real-hash-001",
+        title="TS 38.413 NG Application Protocol",
+        content=real_chunk_sample,
+        embedding=[0.0] * 768,
+        chunk_index=0,
+        created_at="2026-01-01T00:00:00Z",
+        metadata='{"section_header": "General"}',
+        file_type="docx",
+        last_modified="2026-01-01T00:00:00Z",
+        page=0,
+        release=18,
+    )
 
 
 # =============================================================================
@@ -509,14 +583,17 @@ def small_png() -> bytes:
 
 @pytest.fixture
 def large_png() -> bytes:
-    """Real PNG bytes from the smallest 3GPP docx (image4.png, 33 KB).
+    """Real PNG bytes extracted from DOCX_SMALL (38413-i30.docx, image2.png, 6.5 KB).
 
-    Above the 10 KB vision_min_image_bytes threshold.
+    Discovered dynamically so the fixture stays correct if DOCX_SMALL changes.
     """
-    import zipfile
-
     with zipfile.ZipFile(DOCX_SMALL) as zf:
-        return zf.read("word/media/image4.png")
+        png_names = [
+            n for n in zf.namelist() if n.startswith("word/media/") and n.lower().endswith(".png")
+        ]
+        if not png_names:
+            pytest.skip("DOCX_SMALL contains no PNG images")
+        return zf.read(png_names[0])
 
 
 @pytest.fixture
@@ -534,15 +611,11 @@ def docx_no_images(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def docx_one_image() -> Path:
-    """Real 3GPP .docx file (38108-i40.docx) — contains 98 embedded images."""
+    """Real 3GPP .docx file (38413-i30.docx) — use >= assertions for image counts."""
     return DOCX_SMALL
 
 
 @pytest.fixture
 def docx_three_images() -> Path:
-    """Real 3GPP .docx file (38108-i40.docx) — contains 98 embedded images.
-
-    Tests using this fixture verify that multiple images are processed;
-    assertions should use >= 3 rather than exactly 3.
-    """
+    """Real 3GPP .docx file (38413-i30.docx) — use >= 3 assertions for image counts."""
     return DOCX_SMALL

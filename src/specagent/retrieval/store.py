@@ -34,6 +34,7 @@ class ChunkRecord(BaseModel):
     file_type: str  # e.g. "pdf", "docx", "html", "url"; "unknown" if undetectable
     last_modified: str  # ISO 8601 from file mtime or HTTP Last-Modified; "" if unknown
     page: int  # 1-indexed page number; 0 = unknown or not applicable
+    release: int = 0  # 3GPP release number; 0 = unknown or not applicable
 
 
 def _lance_schema() -> pa.Schema:
@@ -60,6 +61,7 @@ def _lance_schema() -> pa.Schema:
             pa.field("file_type", pa.string()),
             pa.field("last_modified", pa.string()),
             pa.field("page", pa.int64()),
+            pa.field("release", pa.int64()),
         ]
     )
 
@@ -159,6 +161,8 @@ def _migrate_table(table: lancedb.table.Table) -> None:
         to_add["last_modified"] = "''"
     if "page" not in existing:
         to_add["page"] = "CAST(0 AS INT)"
+    if "release" not in existing:
+        to_add["release"] = "CAST(0 AS INT)"
     if not to_add:
         return
     try:
@@ -169,6 +173,11 @@ def _migrate_table(table: lancedb.table.Table) -> None:
 
 
 _SAFE_KEY = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+# Safety cap for list_documents full-table scans. LanceDB has no server-side
+# DISTINCT+GROUP BY, so pagination is done in Python after materialising rows.
+# This bound prevents OOM on very large indexes; a warning is logged when hit.
+_LIST_DOCUMENTS_ROW_CAP = 50_000
 
 
 def _build_where_clause(
@@ -197,7 +206,9 @@ def _build_where_clause(
         for key, value in filter.items():
             if not _SAFE_KEY.match(key):
                 raise StoreError(f"Invalid filter key: {key!r}")
-            if isinstance(value, int):
+            if isinstance(value, bool):
+                raise StoreError(f"Boolean filter values are not supported for key {key!r}")
+            elif isinstance(value, int):
                 conditions.append(f"{key} = {value}")
             else:
                 safe_val = str(value).replace("'", "''")
@@ -231,59 +242,60 @@ class Store:
         # Serialises concurrent table.add() calls — LanceDB does not support
         # concurrent writes to the same table from multiple OS threads.
         self._write_lock = threading.Lock()
+        # Guards the one-time table open so two threads don't race on first _table() call.
+        self._table_lock = threading.Lock()
 
     def _table(self) -> lancedb.table.Table:
         """Open and return the LanceDB table, creating scalar indexes on first call."""
         if self._cached_table is not None:
             return self._cached_table
-        table = _open_table(self._uri, self._table_name)
-        if not self._indexes_created:
-            _ensure_scalar_indexes(table)
-            self._indexes_created = True
-        self._cached_table = table
-        self._is_empty = table.count_rows() == 0
-        return table
+        with self._table_lock:
+            if self._cached_table is not None:  # re-check inside lock
+                return self._cached_table
+            table = _open_table(self._uri, self._table_name)
+            if not self._indexes_created:
+                _ensure_scalar_indexes(table)
+                self._indexes_created = True
+            self._is_empty = table.count_rows() == 0
+            self._cached_table = table  # written last so no thread sees a partial state
+        return self._cached_table
 
     def upsert_chunks(self, chunks: list[ChunkRecord], *, rebuild_fts: bool = True) -> None:
-        """Append a list of chunk records to the store.
+        """Replace-or-insert chunk records for their doc_ids.
 
-        Despite the name, this method is **append-only** (``table.add``), not a
-        true upsert. Deduplication is the caller's responsibility — ``ingest()``
-        handles it via content-hash checks before calling this method. Calling
-        this method directly with duplicate ``id`` values will insert duplicate rows.
+        Builds the new rows first (may raise without touching the table), then
+        deletes existing chunks for each affected doc_id, then inserts. This
+        ordering ensures that a serialisation failure never silently deletes data.
 
         Thread safety: ``_write_lock`` serialises concurrent calls from the
         ``asyncio.to_thread`` pool used by ``ingest_folder``. All callers must share
-        the same ``Store`` instance (i.e. go through ``get_store()``) to benefit
-        from this protection.
+        the same ``Store`` instance (via ``get_store()``) to benefit from this lock.
 
         Args:
-            chunks: Chunk records to insert.
-            rebuild_fts: If True (default), rebuild the full-text search index
-                after writing. Pass False during bulk ingest and call
-                ``rebuild_fts_index()`` once at the end.
+            chunks: Chunk records to upsert.
+            rebuild_fts: Rebuild the FTS index after writing. Pass False during
+                bulk ingest and call ``rebuild_fts_index()`` once at the end.
 
         Raises:
             StoreError: If the write fails.
         """
         if not chunks:
             return
-        # Acquire write lock before touching the table — LanceDB does not support
-        # concurrent writes from multiple OS threads (asyncio.to_thread uses a pool).
         with self._write_lock:
             try:
                 was_empty = self._is_empty
                 table = self._table()
+                # Build rows first — if serialisation raises, nothing is deleted.
                 rows = [c.model_dump() for c in chunks]
-                # Convert embeddings to float32 numpy arrays to satisfy the
-                # FixedSizeList<float32> Arrow schema — Python lists are typed as
-                # ListType and only cast correctly when the sizes match, while numpy
-                # arrays are always unambiguous.
                 for row in rows:
                     row["embedding"] = np.array(row["embedding"], dtype=np.float32)
+                # Delete existing chunks for each doc_id in this batch.
+                doc_ids = {c.doc_id for c in chunks}
+                for doc_id in doc_ids:
+                    safe_id = doc_id.replace("'", "''")
+                    table.delete(f"doc_id = '{safe_id}'")
                 table.add(rows)
                 self._is_empty = False
-                # Scalar indexes require at least one row — retry on the first write.
                 if was_empty:
                     _ensure_scalar_indexes(table)
                 logger.info("Upserted %d chunks (doc_id=%s)", len(chunks), chunks[0].doc_id)
@@ -295,6 +307,8 @@ class Store:
                         logger.warning(
                             "FTS index rebuild failed (hybrid search degraded): %s", fts_err
                         )
+            except StoreError:
+                raise
             except Exception as e:
                 raise StoreError(f"Failed to upsert {len(chunks)} chunks") from e
 
@@ -386,21 +400,23 @@ class Store:
         except Exception as e:
             raise StoreError(f"Failed to delete library {library!r}") from e
 
-    def rebuild_fts_index(self) -> None:
+    def rebuild_fts_index(self) -> bool:
         """Rebuild the full-text search index on the content column.
 
         Call this explicitly after bulk operations (e.g. ingest_folder) rather
         than relying on per-operation rebuilds.
 
-        Raises:
-            StoreError: If the rebuild fails critically.
+        Returns:
+            True if the index was rebuilt successfully, False if it failed.
         """
         try:
             table = self._table()
             table.create_fts_index("content", replace=True)
             logger.info("FTS index rebuilt on 'content'")
+            return True
         except Exception as fts_err:
             logger.warning("FTS index rebuild failed (hybrid search may be degraded): %s", fts_err)
+            return False
 
     def search(
         self,
@@ -507,10 +523,29 @@ class Store:
             if library is not None:
                 safe_lib = library.replace("'", "''")
                 q = q.where(f"library = '{safe_lib}'")
-            # Project only metadata columns — skip the embedding vector (~3 KB/row)
-            rows = q.select(
-                ["doc_id", "source", "title", "library", "content_hash", "created_at", "metadata"]
-            ).to_list()
+            # Project only metadata columns — skip the embedding vector (~3 KB/row).
+            # Row cap prevents OOM when the index is very large; see _LIST_DOCUMENTS_ROW_CAP.
+            rows = (
+                q.select(
+                    [
+                        "doc_id",
+                        "source",
+                        "title",
+                        "library",
+                        "content_hash",
+                        "created_at",
+                        "metadata",
+                    ]
+                )
+                .limit(_LIST_DOCUMENTS_ROW_CAP)
+                .to_list()
+            )
+            if len(rows) >= _LIST_DOCUMENTS_ROW_CAP:
+                logger.warning(
+                    "list_documents: row cap of %d reached; some documents may be omitted. "
+                    "Filter by library= to reduce the result set.",
+                    _LIST_DOCUMENTS_ROW_CAP,
+                )
 
             # Group by doc_id — keep first occurrence for metadata
             seen: dict[str, dict] = {}

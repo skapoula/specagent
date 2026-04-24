@@ -23,13 +23,13 @@ def test_chunk_empty_text_returns_empty_list():
 
 
 @pytest.mark.unit
-def test_chunk_with_metadata_returns_list_of_tuples():
+def test_chunk_with_metadata_returns_list_of_tuples(real_chunk_sample):
     """chunk_with_metadata() returns (text, section_header) tuples."""
     with patch("specagent.retrieval.chunker.chunk") as mock_chunk:
-        mock_chunk.return_value = ["Some content."]
+        mock_chunk.return_value = [real_chunk_sample]
         from specagent.retrieval import chunker
 
-        results = chunker.chunk_with_metadata("Some content.")
+        results = chunker.chunk_with_metadata(real_chunk_sample)
     assert isinstance(results, list)
     assert all(isinstance(item, tuple) and len(item) == 2 for item in results)
 
@@ -120,17 +120,17 @@ def test_get_tokenizer_raises_on_load_failure():
 
 
 @pytest.mark.unit
-def test_token_length_uses_tokenizer():
+def test_token_length_uses_tokenizer(real_chunk_sample):
     """_token_length() returns the number of token IDs returned by encode."""
     mock_tok = MagicMock()
     mock_tok.encode.return_value = [1, 2, 3, 4, 5]
     with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok):
         from specagent.retrieval import chunker
 
-        result = chunker._token_length("five tokens here right now")
+        result = chunker._token_length(real_chunk_sample)
 
     assert result == 5
-    mock_tok.encode.assert_called_once_with("five tokens here right now", add_special_tokens=False)
+    mock_tok.encode.assert_called_once_with(real_chunk_sample, add_special_tokens=False)
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ def test_token_length_uses_tokenizer():
 
 
 @pytest.mark.unit
-def test_merge_splits_creates_multiple_chunks():
+def test_merge_splits_creates_multiple_chunks(real_paragraphs_small):
     """_merge_splits() flushes a new chunk when the size limit is exceeded."""
     # Each word maps to one token: encode returns one id per word.
     mock_tok = MagicMock()
@@ -148,8 +148,8 @@ def test_merge_splits_creates_multiple_chunks():
     with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok):
         from specagent.retrieval import chunker
 
-        # 10 splits of 1 token each, chunk_size=3 tokens → must produce >1 chunk
-        result = chunker._merge_splits(["word"] * 10, " ", chunk_size=3, overlap=1)
+        # 10 real 3GPP paragraphs, chunk_size=3 tokens → must produce >1 chunk
+        result = chunker._merge_splits(real_paragraphs_small[:10], " ", chunk_size=3, overlap=1)
 
     assert len(result) > 1
 
@@ -178,17 +178,17 @@ def test_split_recursive_char_fallback_splits_oversized_text():
 
 
 @pytest.mark.unit
-def test_split_recursive_char_fallback_returns_single_chunk_when_fits():
+def test_split_recursive_char_fallback_returns_single_chunk_when_fits(real_chunk_sample):
     """_split_recursive() with empty separator returns the text unchanged if it fits."""
     mock_tok = MagicMock()
-    mock_tok.encode.return_value = list(range(3))  # only 3 tokens
+    mock_tok.encode.return_value = list(range(3))  # only 3 tokens — fits in chunk_size=5
 
     with patch("specagent.retrieval.chunker._get_tokenizer", return_value=mock_tok):
         from specagent.retrieval import chunker
 
-        result = chunker._split_recursive("tiny", [""], chunk_size=5, overlap=1)
+        result = chunker._split_recursive(real_chunk_sample, [""], chunk_size=5, overlap=1)
 
-    assert result == ["tiny"]
+    assert result == [real_chunk_sample]
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ def test_split_recursive_char_fallback_returns_single_chunk_when_fits():
 
 
 @pytest.mark.unit
-def test_chunk_min_token_fallback_preserves_raw_chunks():
+def test_chunk_min_token_fallback_preserves_raw_chunks(real_chunk_sample):
     """chunk() keeps raw chunks when all are below chunk_min_tokens."""
     mock_tok = MagicMock()
     # Always return 1 token so every chunk falls below any reasonable min
@@ -214,14 +214,14 @@ def test_chunk_min_token_fallback_preserves_raw_chunks():
 
         from specagent.retrieval import chunker
 
-        result = chunker.chunk("Short text that is below the minimum token floor.")
+        result = chunker.chunk(real_chunk_sample)
 
     # The min-token fallback must preserve the raw chunks rather than return []
     assert len(result) > 0
 
 
 @pytest.mark.unit
-def test_chunk_normal_path_filters_chunks_above_min_tokens():
+def test_chunk_normal_path_filters_chunks_above_min_tokens(real_chunk_sample):
     """chunk() normal path: filtered list is non-empty when tokens >= chunk_min_tokens."""
     mock_tok = MagicMock()
     # Return enough tokens to pass the min-token filter
@@ -238,7 +238,7 @@ def test_chunk_normal_path_filters_chunks_above_min_tokens():
 
         from specagent.retrieval import chunker
 
-        result = chunker.chunk("Some text with enough tokens to pass the filter.")
+        result = chunker.chunk(real_chunk_sample)
 
     assert len(result) > 0
 
@@ -249,13 +249,13 @@ def test_chunk_normal_path_filters_chunks_above_min_tokens():
 
 
 @pytest.mark.unit
-def test_split_recursive_no_separators_returns_text_as_is():
+def test_split_recursive_no_separators_returns_text_as_is(real_chunk_sample):
     """_split_recursive() with empty separator list returns [text] immediately."""
     from specagent.retrieval import chunker
 
-    result = chunker._split_recursive("any text", [], chunk_size=5, overlap=1)
+    result = chunker._split_recursive(real_chunk_sample, [], chunk_size=5, overlap=1)
 
-    assert result == ["any text"]
+    assert result == [real_chunk_sample]
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ def test_split_recursive_flushes_good_splits_before_oversized_chunk():
 
 
 @pytest.mark.unit
-def test_split_recursive_skips_empty_string_pieces():
+def test_split_recursive_skips_empty_string_pieces(real_chunk_sample):
     """_split_recursive() skips empty strings produced by consecutive separators."""
     mock_tok = MagicMock()
     mock_tok.encode.return_value = list(range(2))  # 2 tokens per piece
@@ -304,7 +304,7 @@ def test_split_recursive_skips_empty_string_pieces():
 
         # Leading and trailing separators produce empty strings in splits
         result = chunker._split_recursive(
-            "\n\nactual content\n\n", ["\n\n", "\n", " ", ""], chunk_size=50, overlap=5
+            f"\n\n{real_chunk_sample}\n\n", ["\n\n", "\n", " ", ""], chunk_size=50, overlap=5
         )
 
     # Empty strings must not appear in the result
@@ -317,7 +317,7 @@ def test_split_recursive_skips_empty_string_pieces():
 
 
 @pytest.mark.unit
-def test_merge_splits_no_remainder_after_loop():
+def test_merge_splits_no_remainder_after_loop(real_paragraphs_small):
     """_merge_splits() produces no trailing chunk when all splits are flushed in-loop."""
     mock_tok = MagicMock()
     # Each word = 5 tokens; chunk_size = 5 → each split exactly fills one chunk.
@@ -330,7 +330,9 @@ def test_merge_splits_no_remainder_after_loop():
         # After flushing, overlap trimming removes everything (overlap=0),
         # so the next split starts a fresh chunk, and no remainder is left after the loop
         # only when the last split precisely triggered a flush.
-        result = chunker._merge_splits(["a", "b"], "", chunk_size=5, overlap=0)
+        result = chunker._merge_splits(
+            [real_paragraphs_small[0], real_paragraphs_small[1]], "", chunk_size=5, overlap=0
+        )
 
     assert isinstance(result, list)
 
@@ -341,7 +343,7 @@ def test_merge_splits_no_remainder_after_loop():
 
 
 @pytest.mark.unit
-def test_merge_splits_overlap_trimming_empties_current():
+def test_merge_splits_overlap_trimming_empties_current(real_paragraphs_small):
     """_merge_splits() handles the case where overlap trimming empties the current buffer."""
     mock_tok = MagicMock()
     # Each split = 4 tokens; chunk_size = 5, overlap = 0 → trimming removes everything.
@@ -351,9 +353,9 @@ def test_merge_splits_overlap_trimming_empties_current():
         from specagent.retrieval import chunker
 
         # With chunk_size=5 and each split=4 tokens:
-        # First split: current=[a], current_len=4
+        # First split: current=[p0], current_len=4
         # Second split: 4+0+4=8 > 5 → flush, then trim (overlap=0): current becomes []
-        result = chunker._merge_splits(["a", "b", "c"], " ", chunk_size=5, overlap=0)
+        result = chunker._merge_splits(real_paragraphs_small[:3], " ", chunk_size=5, overlap=0)
 
     assert len(result) >= 2
 
@@ -370,3 +372,19 @@ def test_merge_splits_empty_splits_returns_empty_list():
         result = chunker._merge_splits([], " ", chunk_size=10, overlap=2)
 
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Real-document integration test (requires cached tokenizer model)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_chunk_real_docx_produces_nonempty_chunks(real_markdown_small):
+    """chunk() on real DOCX_SMALL markdown returns a non-empty list of non-blank strings."""
+    from specagent.retrieval.chunker import chunk
+
+    result = chunk(real_markdown_small)
+    assert len(result) > 0
+    assert all(isinstance(c, str) and c.strip() for c in result)

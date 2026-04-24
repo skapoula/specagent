@@ -1,4 +1,4 @@
-"""Integration tests for prose DAG extractor against real .docx files in data/raw/."""
+"""Integration tests for prose DAG extractor against real .docx files in data/rel_18/doc/."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from specagent.retrieval.prose_dag_extractor import extract_prose_call_flows
 
 logger = logging.getLogger(__name__)
 
-_RAW_DIR = Path(__file__).parents[2] / "data" / "raw"
+_RAW_DIR = Path(__file__).parents[2] / "src" / "specagent" / "data" / "rel_18" / "doc"
 
 
 def _discover_docx() -> list[Path]:
-    """Return all .docx files in data/raw/, sorted by name."""
+    """Return all .docx files in data/rel_18/doc/, sorted by name."""
     if not _RAW_DIR.exists():
         return []
     return sorted(_RAW_DIR.glob("*.docx"))
@@ -31,13 +31,13 @@ _DOCX_FILES = _discover_docx()
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/raw/")
+@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/rel_18/doc/")
 class TestDocxFlowExtraction:
     """Per-file smoke tests: each docx must yield at least one parseable flow or skip."""
 
     @pytest.mark.parametrize("docx_path", _DOCX_FILES, ids=_docx_ids(_DOCX_FILES))
     def test_extracts_at_least_one_flow(self, docx_path: Path) -> None:
-        """Each docx in data/raw produces at least one call-flow DAG."""
+        """Each docx in data/rel_18/doc/ produces at least one call-flow DAG."""
         text = postprocess(convert(docx_path))
         flows = extract_prose_call_flows(text)
         if not flows:
@@ -62,38 +62,41 @@ class TestDocxFlowExtraction:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/raw/")
+@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/rel_18/doc/")
 class TestImprovementsVisible:
-    """Confirm improvements yield observable results and baselines hold on 23502-j70.docx."""
+    """Baselines for prose call-flow extraction against 38300-i30.docx (TS 38.300 NR Overview).
+
+    Calibrated empirically: 10 flows, 20 steps, actors include AMF/UE/gNB.
+    """
 
     @pytest.fixture(scope="class")
-    def flows_23502(self) -> list:
-        target = _RAW_DIR / "23502-j70.docx"
+    def flows_38300(self) -> list:
+        target = _RAW_DIR / "38300-i30.docx"
         if not target.exists():
-            pytest.skip("23502-j70.docx not in data/raw/")
+            pytest.skip("38300-i30.docx not in data/rel_18/doc/")
         text = postprocess(convert(target))
         return extract_prose_call_flows(text)
 
-    def test_flow_count_meets_baseline(self, flows_23502: list) -> None:
-        """Flow count from 23502 is at least the baseline of 38."""
-        assert len(flows_23502) >= 38, f"Flow count regressed: got {len(flows_23502)}, expected ≥38"
+    def test_flow_count_meets_baseline(self, flows_38300: list) -> None:
+        """Flow count from 38300 meets the empirical baseline of 10."""
+        assert len(flows_38300) >= 10, f"Flow count regressed: got {len(flows_38300)}, expected ≥10"
 
-    def test_step_count_meets_baseline(self, flows_23502: list) -> None:
-        """Total step count from 23502 is at least the baseline of 250."""
-        total = sum(len(f.steps) for f in flows_23502)
-        assert total >= 250, f"Step count regressed: got {total}, expected ≥250"
+    def test_step_count_meets_baseline(self, flows_38300: list) -> None:
+        """Total step count from 38300 meets the empirical baseline of 20."""
+        total = sum(len(f.steps) for f in flows_38300)
+        assert total >= 20, f"Step count regressed: got {total}, expected ≥20"
 
-    def test_new_nf_names_appear(self, flows_23502: list) -> None:
-        """At least one of the new NF names (EIR, DN, SCEF, MBSF, 5GC, FN-RG, W-5GAN) appears."""
+    def test_known_nf_names_appear(self, flows_38300: list) -> None:
+        """At least one of the known NR actors (AMF, UE, gNB) appears in extracted flows."""
         all_actors = {
             actor
-            for flow in flows_23502
+            for flow in flows_38300
             for step in flow.steps
             for actor in (step.from_actor, step.to_actor)
         }
-        new_nf_set = {"EIR", "DN", "SCEF", "5GC", "MBSF", "MBSTF", "FN-RG", "W-5GAN"}
-        found = new_nf_set & all_actors
+        known_nf_set = {"AMF", "UE", "gNB"}
+        found = known_nf_set & all_actors
         assert found, (
-            f"None of the new NF names appeared in 23502-j70.docx. "
+            f"None of the expected NF names appeared in 38300-i30.docx. "
             f"Actor sample: {sorted(all_actors)[:20]}"
         )

@@ -8,14 +8,13 @@ For each retrieved chunk, determines:
 If average confidence is below threshold, triggers query rewriting.
 """
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
 from specagent.llm import get_llm
+from specagent.nodes._common import parse_json_object, record_llm_call
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -140,20 +139,9 @@ def grader_node(state: "GraphState") -> "GraphState":  # noqa: PLR0915 — auto-
 
             # Single LLM call to grade uncertain chunks
             response = llm.invoke(prompt)
-            _call = llm.get_last_call()
-            if _call is not None:
-                _call.node = "grader"
-                _call.trace_id = state.get("trace_id", "")
-                state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+            record_llm_call(state, llm, "grader")
 
-            # Parse batch JSON response
-            json_match = re.search(r"\{.*\}", response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-                parsed = json.loads(json_str)
-                batch_result = BatchGradeResult(**parsed)
-            else:
-                batch_result = BatchGradeResult(**json.loads(response))
+            batch_result = BatchGradeResult(**parse_json_object(response))
 
             # Verify we got the right number of grades
             if len(batch_result.grades) != len(llm_chunks):

@@ -108,6 +108,8 @@ evaluation/results/
 data/lancedb/
 data/qna/
 src/specagent/data/
+data/3gpp_rel_18/
+data/3gpp_rel_19/
 
 # -----------------------------------------------------------------------------
 # Model Files

@@ -8,14 +8,13 @@ Routes queries to either:
 Uses structured output from LLM to get routing decision with reasoning.
 """
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
 from specagent.llm import get_llm
+from specagent.nodes._common import parse_json_object, record_llm_call
 
 if TYPE_CHECKING:
     from specagent.graph.state import GraphState
@@ -56,35 +55,17 @@ def router_node(state: "GraphState") -> "GraphState":
     Returns:
         Updated state with route_decision set to "retrieve" or "reject"
     """
-    # Get question from state
     question = state.get("question", "")
 
     try:
-        # Initialize LLM (auto-selects based on config)
         llm = get_llm()
-
-        # Format prompt with question
         prompt = ROUTER_PROMPT.format(question=question)
 
-        # Call LLM
         response = llm.invoke(prompt)
-        _call = llm.get_last_call()
-        if _call is not None:
-            _call.node = "router"
-            _call.trace_id = state.get("trace_id", "")
-            state["llm_calls"] = [*list(state.get("llm_calls", [])), _call]
+        record_llm_call(state, llm, "router")
 
-        # Extract JSON from response (handle cases where LLM adds extra text)
-        json_match = re.search(r"\{.*\}", response, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            parsed = json.loads(json_str)
-            decision = RouteDecision(**parsed)
-        else:
-            # Fallback: try to parse the entire response
-            decision = RouteDecision(**json.loads(response))
+        decision = RouteDecision(**parse_json_object(response))
 
-        # Update state with decision
         state["route_decision"] = decision.route
         state["route_reasoning"] = decision.reasoning
 

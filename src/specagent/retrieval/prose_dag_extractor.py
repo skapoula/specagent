@@ -158,6 +158,11 @@ class ProseCallFlow:
 def extract_prose_call_flows(markdown: str) -> list[ProseCallFlow]:
     """Extract all call-flow procedures from postprocessed 3GPP Markdown.
 
+    This is a **synchronous, CPU-bound** function (regex-heavy parsing).
+    Async callers must not ``await`` it — dispatch via ``asyncio.to_thread``::
+
+        flows = await asyncio.to_thread(extract_prose_call_flows, markdown)
+
     Scans for ``Figure X: Title`` labels followed by numbered step lines
     of the form ``N. Actor to Actor: message`` within a lookahead window.
     Figures with no parseable steps are skipped.

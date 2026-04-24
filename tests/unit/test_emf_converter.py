@@ -54,6 +54,12 @@ class TestEmfMimeTypes:
 
 @pytest.mark.unit
 class TestConvertEmfToJpeg:
+    @pytest.fixture(autouse=True)
+    def inkscape_available(self):
+        """Simulate Inkscape being on PATH for all tests in this class."""
+        with patch("shutil.which", return_value="/usr/bin/inkscape"):
+            yield
+
     def test_returns_jpeg_bytes(self):
         """Successful conversion returns non-empty JPEG bytes."""
         with patch(
@@ -133,5 +139,18 @@ class TestConvertEmfToJpeg:
                 side_effect=subprocess.TimeoutExpired(cmd="inkscape", timeout=60),
             ),
             pytest.raises(IngestionError, match="timed out"),
+        ):
+            convert_emf_to_jpeg(b"fake-emf-content")
+
+
+@pytest.mark.unit
+class TestInkscapeGuard:
+    """Fix 16: shutil.which guard raises before creating temp files."""
+
+    def test_raises_ingestion_error_when_inkscape_missing(self):
+        """IngestionError is raised immediately when Inkscape is not on PATH."""
+        with (
+            patch("shutil.which", return_value=None),
+            pytest.raises(IngestionError, match="not installed or not on PATH"),
         ):
             convert_emf_to_jpeg(b"fake-emf-content")

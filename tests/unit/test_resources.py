@@ -34,7 +34,10 @@ def test_get_embedder_returns_text_embedding():
     from specagent.retrieval.resources import clear_resource_cache, get_embedder
 
     clear_resource_cache()
-    with patch("specagent.retrieval.resources.TextEmbedding") as mock_cls:
+    with (
+        patch("specagent.retrieval.resources.TextEmbedding") as mock_cls,
+        patch("specagent.retrieval.resources._validate_embedding_dim"),
+    ):
         mock_cls.return_value = MagicMock()
         result = get_embedder()
     assert result is mock_cls.return_value
@@ -63,6 +66,7 @@ def test_initialize_resources_success():
     with (
         patch("specagent.retrieval.resources.Store"),
         patch("specagent.retrieval.resources.TextEmbedding"),
+        patch("specagent.retrieval.resources._validate_embedding_dim"),
     ):
         result = initialize_resources()
     assert result == {"store": True, "embedder": True}

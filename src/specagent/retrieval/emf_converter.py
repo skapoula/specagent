@@ -48,6 +48,13 @@ def convert_emf_to_jpeg(emf_bytes: bytes, filetype: str = "emf", dpi: int = _DEF
         IngestionError: If Inkscape is not installed, fails to convert,
             exceeds the timeout, or Pillow cannot encode the result.
     """
+    import shutil  # noqa: PLC0415 — deferred so missing shutil never blocks import
+
+    if shutil.which(_INKSCAPE_BIN) is None:
+        raise IngestionError(
+            "Inkscape is not installed or not on PATH — EMF/WMF conversion unavailable. "
+            "Install Inkscape and ensure it is accessible as 'inkscape'."
+        )
     suffix = f".{filetype.lstrip('.')}"
     try:
         with tempfile.TemporaryDirectory() as tmpdir:

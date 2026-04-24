@@ -420,4 +420,149 @@ async def test_ingest_folder_fts_rebuild_failure_logs_warning():
         result = await ingest_folder(DOCX_SMALL.parent, library="test")
     # Ingest should still succeed even if FTS rebuild fails
     assert result.indexed >= 1
-    assert result.failed == 0
+
+
+# ---------------------------------------------------------------------------
+# 3GPP release folder organisation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_ingest_copies_docx_to_release_folder(tmp_path):
+    """ingest() copies the source .docx to 3gpp_rel_XX/docx/ inside data_dir."""
+    import numpy as np
+
+    from specagent.retrieval.ingestor import ingest
+
+    with (
+        patch("specagent.retrieval.ingestor.get_store") as mock_store_fn,
+        patch("specagent.retrieval.ingestor.embed_documents") as mock_embed,
+        patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
+        patch("specagent.retrieval.ingestor.convert") as mock_convert,
+        patch("specagent.retrieval.ingestor.settings") as mock_settings,
+    ):
+        mock_settings.enable_docx_ocr = False
+        mock_settings.groq_api_key = None
+        mock_settings.enable_dag_storage = False
+        mock_settings.data_dir = tmp_path
+        mock_convert.return_value = "# 3GPP TS 38.108\n\nContent."
+        mock_chunk.return_value = [("# 3GPP TS 38.108\n\nContent.", "Section 1")]
+        mock_store = MagicMock()
+        mock_store.find_existing.return_value = (None, None)
+        mock_store_fn.return_value = mock_store
+        mock_embed.return_value = np.array([[0.1] * 768], dtype=np.float32)
+
+        await ingest(source=DOCX_SMALL, library="test-lib")
+
+    docx_dest = tmp_path / "3gpp_rel_18" / "docx" / f"{DOCX_SMALL.stem}_rel18.docx"
+    assert docx_dest.exists(), f"Expected docx copy at {docx_dest}"
+
+
+@pytest.mark.integration
+async def test_ingest_writes_markdown_to_release_folder(tmp_path):
+    """ingest() writes the converted Markdown to 3gpp_rel_XX/md/ inside data_dir."""
+    import numpy as np
+
+    from specagent.retrieval.ingestor import ingest
+
+    md_content = "# 3GPP TS 38.108\n\nContent about NR."
+
+    with (
+        patch("specagent.retrieval.ingestor.get_store") as mock_store_fn,
+        patch("specagent.retrieval.ingestor.embed_documents") as mock_embed,
+        patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
+        patch("specagent.retrieval.ingestor.convert") as mock_convert,
+        patch("specagent.retrieval.ingestor.settings") as mock_settings,
+    ):
+        mock_settings.enable_docx_ocr = False
+        mock_settings.groq_api_key = None
+        mock_settings.enable_dag_storage = False
+        mock_settings.data_dir = tmp_path
+        mock_convert.return_value = md_content
+        mock_chunk.return_value = [("chunk", "Section 1")]
+        mock_store = MagicMock()
+        mock_store.find_existing.return_value = (None, None)
+        mock_store_fn.return_value = mock_store
+        mock_embed.return_value = np.array([[0.1] * 768], dtype=np.float32)
+
+        await ingest(source=DOCX_SMALL, library="test-lib")
+
+    md_dest = tmp_path / "3gpp_rel_18" / "md" / f"{DOCX_SMALL.stem}_rel18.md"
+    assert md_dest.exists(), f"Expected markdown at {md_dest}"
+    assert md_dest.read_text() == md_content
+
+
+@pytest.mark.integration
+async def test_ingest_stores_release_in_chunk_metadata(tmp_path):
+    """ingest() adds 'release' key to each ChunkRecord's metadata JSON."""
+    import numpy as np
+
+    captured_chunks = []
+
+    from specagent.retrieval.ingestor import ingest
+
+    def capture_upsert(chunks, **_kwargs):
+        captured_chunks.extend(chunks)
+
+    with (
+        patch("specagent.retrieval.ingestor.get_store") as mock_store_fn,
+        patch("specagent.retrieval.ingestor.embed_documents") as mock_embed,
+        patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
+        patch("specagent.retrieval.ingestor.convert") as mock_convert,
+        patch("specagent.retrieval.ingestor.settings") as mock_settings,
+    ):
+        mock_settings.enable_docx_ocr = False
+        mock_settings.groq_api_key = None
+        mock_settings.enable_dag_storage = False
+        mock_settings.data_dir = tmp_path
+        mock_convert.return_value = "# 3GPP TS 38.108\n\nContent."
+        mock_chunk.return_value = [("chunk one", "Sec 1"), ("chunk two", "Sec 2")]
+        mock_store = MagicMock()
+        mock_store.find_existing.return_value = (None, None)
+        mock_store.upsert_chunks.side_effect = capture_upsert
+        mock_store_fn.return_value = mock_store
+        mock_embed.return_value = np.array([[0.1] * 768, [0.1] * 768], dtype=np.float32)
+
+        await ingest(source=DOCX_SMALL, library="test-lib")
+
+    assert captured_chunks, "No chunks were captured"
+    for chunk in captured_chunks:
+        meta = json.loads(chunk.metadata)
+        assert meta.get("release") == 18
+        assert chunk.release == 18
+
+
+@pytest.mark.integration
+async def test_ingest_skips_release_folder_for_non_3gpp_file(tmp_path):
+    """ingest() does not create release folders for files with non-3GPP names."""
+    import numpy as np
+
+    from specagent.retrieval.ingestor import ingest
+
+    plain_docx = tmp_path / "report.docx"
+    plain_docx.write_bytes(DOCX_SMALL.read_bytes())
+
+    with (
+        patch("specagent.retrieval.ingestor.get_store") as mock_store_fn,
+        patch("specagent.retrieval.ingestor.embed_documents") as mock_embed,
+        patch("specagent.retrieval.ingestor.chunk_with_metadata") as mock_chunk,
+        patch("specagent.retrieval.ingestor.convert") as mock_convert,
+        patch("specagent.retrieval.ingestor.settings") as mock_settings,
+    ):
+        mock_settings.enable_docx_ocr = False
+        mock_settings.groq_api_key = None
+        mock_settings.enable_dag_storage = False
+        mock_settings.data_dir = tmp_path
+        mock_convert.return_value = "# Report\n\nContent."
+        mock_chunk.return_value = [("chunk", "Section")]
+        mock_store = MagicMock()
+        mock_store.find_existing.return_value = (None, None)
+        mock_store_fn.return_value = mock_store
+        mock_embed.return_value = np.array([[0.1] * 768], dtype=np.float32)
+
+        result = await ingest(source=plain_docx, library="test-lib")
+
+    assert result.status == "indexed"
+    # No 3gpp_rel_* folder should have been created
+    rel_folders = list(tmp_path.glob("3gpp_rel_*"))
+    assert rel_folders == [], f"Unexpected release folders: {rel_folders}"

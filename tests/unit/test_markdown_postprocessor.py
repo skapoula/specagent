@@ -2,7 +2,6 @@
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _normalize_nbsp
 # ---------------------------------------------------------------------------
@@ -127,7 +126,9 @@ class TestStripChangeHistory:
         """'# Annex L' heading form triggers stripping."""
         from specagent.retrieval.markdown_postprocessor import _strip_change_history
 
-        text = "# K.1 Content\n\nBody.\n\n# Annex L (informative): Change history\n\n| Date | Rev |\n"
+        text = (
+            "# K.1 Content\n\nBody.\n\n# Annex L (informative): Change history\n\n| Date | Rev |\n"
+        )
         result = _strip_change_history(text)
         assert "# Annex L" not in result
         assert "K.1 Content" in result
@@ -220,9 +221,7 @@ class TestFixAnnexHeadings:
         from specagent.retrieval.markdown_postprocessor import _fix_annex_headings
 
         text = (
-            "Body.\n\n"
-            "Annex A (informative):\n\nA content.\n\n"
-            "Annex B (normative):\n\nB content.\n"
+            "Body.\n\nAnnex A (informative):\n\nA content.\n\nAnnex B (normative):\n\nB content.\n"
         )
         result = _fix_annex_headings(text)
         assert "# Annex A (informative):" in result
@@ -295,3 +294,35 @@ class TestPostprocess:
         text = "# Title\n\nContent with regular spaces.\n"
         result = postprocess(text)
         assert result == text
+
+
+# ---------------------------------------------------------------------------
+# Real-document integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPostprocessOnRealDocx:
+    """Smoke tests: postprocess() behaves correctly on real 3GPP markdown."""
+
+    def test_postprocess_real_docx_returns_nonempty(self, real_markdown_small_raw):
+        """postprocess() on real DOCX_SMALL markdown returns a non-empty string."""
+        from specagent.retrieval.markdown_postprocessor import postprocess
+
+        result = postprocess(real_markdown_small_raw)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_postprocess_real_docx_strips_nbsp(self, real_markdown_small_raw):
+        """postprocess() removes all non-breaking spaces from real 3GPP markdown."""
+        from specagent.retrieval.markdown_postprocessor import postprocess
+
+        result = postprocess(real_markdown_small_raw)
+        assert "\xa0" not in result
+
+    def test_postprocess_real_docx_is_idempotent(self, real_markdown_small):
+        """postprocess() on already-postprocessed output is a no-op."""
+        from specagent.retrieval.markdown_postprocessor import postprocess
+
+        result = postprocess(real_markdown_small)
+        assert result == real_markdown_small

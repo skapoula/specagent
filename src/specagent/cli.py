@@ -9,12 +9,14 @@ Commands:
 """
 
 import logging
-import typer
 
 # Configure a basic handler so logger.error() calls in CLI commands reach stderr.
 # uvicorn sets up its own logging for the `serve` command; this covers the rest.
 # Respect LOG_LEVEL env var so rate-limit / vision warnings are visible at runtime.
 import os as _os
+
+import typer
+
 _log_level = getattr(logging, _os.environ.get("LOG_LEVEL", "WARNING").upper(), logging.WARNING)
 logging.basicConfig(level=_log_level, format="%(levelname)s: %(message)s")
 del _os, _log_level
@@ -170,15 +172,21 @@ def index(
 
     console.print(f"[blue]Indexing {target_dir} into library '{target_lib}'...[/blue]")
 
-    result = asyncio.run(
-        ingest_folder(
-            folder=target_dir,
-            library=target_lib,
-            metadata=None,
-            recursive=True,
-            max_concurrency=max_concurrency,
+    from specagent.retrieval.exceptions import IngestionError  # noqa: PLC0415
+
+    try:
+        result = asyncio.run(
+            ingest_folder(
+                folder=target_dir,
+                library=target_lib,
+                metadata=None,
+                recursive=True,
+                max_concurrency=max_concurrency,
+            )
         )
-    )
+    except IngestionError as e:
+        typer.echo(f"Ingestion failed: {e}", err=True)
+        raise typer.Exit(code=1)
 
     console.print("[green]Indexing complete![/green]")
     console.print(f"  Total files : {result.total_files}")
