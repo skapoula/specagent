@@ -6,9 +6,40 @@ from specagent.retrieval.exceptions import IngestionError
 from specagent.retrieval.ingestor import (
     _extract_title,
     _mkdir,
+    _read_last_modified,
     _write_release_files,
 )
 from tests.conftest import DOCX_SMALL
+
+# ---------------------------------------------------------------------------
+# _read_last_modified — filesystem stat with OSError fallback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_read_last_modified_returns_iso_string(tmp_path):
+    f = tmp_path / "doc.docx"
+    f.write_bytes(b"x")
+    result = _read_last_modified(f)
+    assert result  # non-empty
+    assert "T" in result  # ISO 8601 datetime separator
+
+
+@pytest.mark.unit
+def test_read_last_modified_falls_back_to_empty_string_and_warns(tmp_path, caplog):
+    import logging
+    from unittest.mock import patch
+
+    f = tmp_path / "missing.docx"
+    with (
+        patch("pathlib.Path.stat", side_effect=OSError("no stat")),
+        caplog.at_level(logging.WARNING, logger="specagent.retrieval.ingestor"),
+    ):
+        result = _read_last_modified(f)
+
+    assert result == ""
+    assert any("last_modified" in r.message for r in caplog.records)
+
 
 # ---------------------------------------------------------------------------
 # _extract_title — pure string function, no I/O

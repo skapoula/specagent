@@ -86,11 +86,7 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         raise IngestionError(f"Cannot read file {source_str!r}") from e
 
     file_type = path.suffix.lstrip(".").lower() or "unknown"
-    try:
-        mtime = path.stat().st_mtime
-        last_modified = datetime.fromtimestamp(mtime, UTC).isoformat()
-    except OSError:
-        last_modified = ""
+    last_modified = _read_last_modified(path)
 
     # ── 2. Dedup check ─────────────────────────────────────────────────────────
     new_hash = hashlib.sha256(raw_bytes).hexdigest()
@@ -390,6 +386,16 @@ def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
             logger.info("Stored call-flow DAG %r (%d steps)", dag_id, len(steps))
         except Exception as exc:
             logger.warning("DAG storage failed for %r: %s — continuing ingest", dag_id, exc)
+
+
+def _read_last_modified(path: Path) -> str:
+    """Return the ISO 8601 mtime for *path*, or '' if stat() raises."""
+    try:
+        mtime = path.stat().st_mtime
+        return datetime.fromtimestamp(mtime, UTC).isoformat()
+    except OSError:
+        logger.warning("Could not read mtime for %s — last_modified will be empty", path)
+        return ""
 
 
 def _extract_title(text: str, source: str) -> str:
