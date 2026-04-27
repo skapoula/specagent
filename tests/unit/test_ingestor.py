@@ -1,5 +1,7 @@
 """Tests for ingestor helpers using real docx files — no pipeline mocks."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from specagent.retrieval.exceptions import IngestionError
@@ -28,7 +30,6 @@ def test_read_last_modified_returns_iso_string(tmp_path):
 @pytest.mark.unit
 def test_read_last_modified_falls_back_to_empty_string_and_warns(tmp_path, caplog):
     import logging
-    from unittest.mock import patch
 
     f = tmp_path / "missing.docx"
     with (
@@ -90,7 +91,6 @@ def test_mkdir_tolerates_existing_directory(tmp_path):
 
 @pytest.mark.unit
 def test_mkdir_raises_ingestion_error_on_permission_denied(tmp_path):
-    from unittest.mock import patch
 
     with (
         patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")),
@@ -101,7 +101,6 @@ def test_mkdir_raises_ingestion_error_on_permission_denied(tmp_path):
 
 @pytest.mark.unit
 def test_mkdir_raises_ingestion_error_on_oserror(tmp_path):
-    from unittest.mock import patch
 
     with (
         patch("pathlib.Path.mkdir", side_effect=OSError("filesystem error")),
@@ -168,8 +167,6 @@ async def test_ingest_real_docx_indexes_successfully(tmp_path):
 
     store = Store(uri=str(tmp_path / "db"), table_name="docs")
 
-    from unittest.mock import patch
-
     with patch("specagent.retrieval.ingestor.get_store", return_value=store):
         result = await ingest(source=DOCX_SMALL, library="test-real")
 
@@ -186,8 +183,6 @@ async def test_ingest_real_docx_dedup_skips_unchanged(tmp_path):
     from specagent.retrieval.store import Store
 
     store = Store(uri=str(tmp_path / "db"), table_name="docs")
-
-    from unittest.mock import patch
 
     with patch("specagent.retrieval.ingestor.get_store", return_value=store):
         first = await ingest(source=DOCX_SMALL, library="test-real")
@@ -207,8 +202,6 @@ async def test_ingest_real_docx_stores_release_number(tmp_path):
     from specagent.retrieval.store import Store
 
     store = Store(uri=str(tmp_path / "db"), table_name="docs")
-
-    from unittest.mock import patch
 
     with (
         patch("specagent.retrieval.ingestor.get_store", return_value=store),
@@ -236,8 +229,6 @@ async def test_ingest_real_docx_section_headers_populated(tmp_path):
 
     store = Store(uri=str(tmp_path / "db"), table_name="docs")
 
-    from unittest.mock import patch
-
     with patch("specagent.retrieval.ingestor.get_store", return_value=store):
         result = await ingest(source=DOCX_SMALL, library="test-real")
 
@@ -245,3 +236,148 @@ async def test_ingest_real_docx_section_headers_populated(tmp_path):
     headers = [json.loads(c.metadata).get("section_header", "") for c in chunks]
     # At least some chunks must have a non-empty section header
     assert any(h for h in headers), "Expected at least one chunk with a section header"
+
+
+# ---------------------------------------------------------------------------
+# Issue 1: doc_id propagation to DAG helpers (TDD — tests added before fix)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_store_diagrams_as_dags_receives_non_empty_doc_id():
+    """_store_diagrams_as_dags must pass the doc_id through to dag_store."""
+    from unittest.mock import MagicMock, patch
+
+    from specagent.retrieval.ingestor import _store_diagrams_as_dags
+
+    mock_dag_store = MagicMock()
+    mock_diagram = MagicMock()
+    mock_diagram.caption = "Test flow"
+    mock_diagram.placeholder_name = "image0.png"
+    mock_diagram.mermaid_content = "```mermaid\nsequenceDiagram\n  A->>B: msg\n  B-->>A: ack\n```"
+    mock_diagram.prose_description = "A call flow."
+
+    with (
+        patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
+        patch("specagent.retrieval.ingestor.parse_sequence_diagram", return_value=([], [])),
+    ):
+        _store_diagrams_as_dags(
+            [mock_diagram], doc_name="TS23.502", source="/path/to/doc.docx", doc_id="test-uuid-1234"
+        )
+
+    call_kwargs = mock_dag_store.store_call_flow_dag.call_args.kwargs
+    assert call_kwargs["doc_id"] == "test-uuid-1234"
+    assert call_kwargs["doc_id"] != ""
+
+
+@pytest.mark.unit
+def test_store_prose_dags_receives_non_empty_doc_id():
+    """_store_prose_dags must pass the doc_id through to dag_store."""
+    from unittest.mock import MagicMock, patch
+
+    from specagent.retrieval.ingestor import _store_prose_dags
+
+    mock_dag_store = MagicMock()
+    mock_flow = MagicMock()
+    mock_flow.title = "Registration flow"
+    mock_flow.mermaid_content = "```mermaid\nsequenceDiagram\n  UE->>AMF: msg\n```"
+    mock_flow.participants = []
+    mock_flow.steps = []
+
+    with (
+        patch("specagent.retrieval.ingestor.get_dag_store", return_value=mock_dag_store),
+        patch("specagent.retrieval.ingestor.extract_prose_call_flows", return_value=[mock_flow]),
+    ):
+        _store_prose_dags(
+            "# Doc\n\nSome text",
+            doc_name="TS23.502",
+            source="/path/to/doc.docx",
+            doc_id="test-uuid-5678",
+        )
+
+    call_kwargs = mock_dag_store.store_call_flow_dag.call_args.kwargs
+    assert call_kwargs["doc_id"] == "test-uuid-5678"
+    assert call_kwargs["doc_id"] != ""
+
+
+# ---------------------------------------------------------------------------
+# Issue 3: asyncio.to_thread wrapping of DAG store calls (TDD)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_ingest_calls_dag_store_via_to_thread(tmp_path):
+    """Kuzu DAG store calls must be dispatched via asyncio.to_thread."""
+    import asyncio
+    from unittest.mock import MagicMock, patch
+
+    from specagent.retrieval.ingestor import ingest
+    from specagent.retrieval.store import Store
+
+    store = Store(uri=str(tmp_path / "db"), table_name="docs")
+    to_thread_calls: list = []
+    original_to_thread = asyncio.to_thread
+
+    async def spy_to_thread(func, *args, **kwargs):
+        to_thread_calls.append(func)
+        return await original_to_thread(func, *args, **kwargs)
+
+    with (
+        patch("specagent.retrieval.ingestor.get_store", return_value=store),
+        patch("specagent.retrieval.ingestor.asyncio.to_thread", side_effect=spy_to_thread),
+        patch("specagent.retrieval.ingestor.settings") as mock_settings,
+        patch("specagent.retrieval.ingestor.get_dag_store", return_value=MagicMock()),
+        patch("specagent.retrieval.ingestor._store_diagrams_as_dags") as mock_dags,
+    ):
+        mock_settings.enable_docx_ocr = False
+        mock_settings.groq_api_key = None
+        mock_settings.enable_dag_storage = True
+        mock_settings.data_dir = tmp_path
+        # Trigger diagram path: we'll patch convert_docx_ocr to return a diagram
+        mock_diagram = MagicMock()
+        mock_diagram.caption = "Test"
+        mock_diagram.placeholder_name = "image0.png"
+        mock_diagram.mermaid_content = "```mermaid\nsequenceDiagram\n  A->>B: go\n  B-->>A: ok\n```"
+        mock_diagram.prose_description = ""
+        mock_settings.enable_docx_ocr = False  # Use plain convert path
+        # Store prose DAGs will be triggered (no diagrams from plain convert)
+        await ingest(source=DOCX_SMALL, library="test-lib")
+
+    # _store_prose_dags (or _store_diagrams_as_dags) must appear in to_thread calls
+    from specagent.retrieval.ingestor import _store_prose_dags
+
+    assert _store_prose_dags in to_thread_calls
+
+
+# ---------------------------------------------------------------------------
+# Issue 11: estimate_vision_calls helper (TDD)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_estimate_vision_calls_returns_zero_for_empty_folder(tmp_path):
+    """estimate_vision_calls returns 0 when no .docx files are present."""
+    from specagent.retrieval.ingestor import estimate_vision_calls
+
+    count = estimate_vision_calls(tmp_path)
+    assert count == 0
+
+
+@pytest.mark.unit
+def test_estimate_vision_calls_counts_images_in_docx(tmp_path):
+    """estimate_vision_calls counts images across .docx files without converting."""
+    from unittest.mock import patch
+
+    from specagent.retrieval.ingestor import estimate_vision_calls
+
+    # Create a fake .docx file (content doesn't matter since extract_images is mocked)
+    (tmp_path / "test.docx").write_bytes(b"fake docx")
+
+    mock_image = MagicMock()
+    with patch(
+        "specagent.retrieval.ingestor.extract_images",
+        return_value=[mock_image, mock_image, mock_image],
+    ):
+        count = estimate_vision_calls(tmp_path)
+
+    assert count == 3

@@ -106,6 +106,9 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
 
     ingest_status = "replaced" if existing_doc_id is not None else "indexed"
 
+    # Assign doc_id early so DAG storage can reference the same ID written to LanceDB.
+    doc_id = str(uuid.uuid4())
+
     # ── 3. Convert to Markdown ─────────────────────────────────────────────────
     diagrams = []
     try:
@@ -126,11 +129,11 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
 
     # ── 3b. Store call-flow diagrams as DAGs (fire-and-forget) ────────────────
     if settings.enable_dag_storage and diagrams:
-        _store_diagrams_as_dags(diagrams, doc_name=path.stem, source=source_str)
+        await asyncio.to_thread(_store_diagrams_as_dags, diagrams, path.stem, source_str, doc_id)
 
     # ── 3c. Extract prose call-flow DAGs from Markdown (non-OCR path) ─────────
     if settings.enable_dag_storage and not diagrams:
-        _store_prose_dags(text, doc_name=path.stem, source=source_str)
+        await asyncio.to_thread(_store_prose_dags, text, path.stem, source_str, doc_id)
 
     # ── 3d. Organise into 3gpp_rel_XX folder and write Markdown file ──────────
     release = 0
@@ -162,7 +165,6 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
         raise IngestionError(f"Embedding failed for {source_str!r}") from e
 
     # ── 6. Build records with per-chunk section header in metadata ─────────────
-    doc_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
     records = []
@@ -328,15 +330,15 @@ async def ingest_folder(
     )
 
 
-def _store_prose_dags(text: str, doc_name: str, source: str) -> None:
+def _store_prose_dags(text: str, doc_name: str, source: str, doc_id: str) -> None:
     """Store prose-extracted call-flow DAGs in Kuzu (best-effort, never raises).
 
     Args:
         text: Postprocessed Markdown text from the document.
         doc_name: Stem of the source document filename (e.g. ``"TS23.502"``).
         source: Full path string of the source document.
+        doc_id: UUID assigned to this document in LanceDB (used to link nodes).
     """
-
     flows = extract_prose_call_flows(text)
     if not flows:
         return
@@ -346,7 +348,7 @@ def _store_prose_dags(text: str, doc_name: str, source: str) -> None:
         try:
             dag_store.store_call_flow_dag(
                 dag_id=dag_id,
-                doc_id="",
+                doc_id=doc_id,
                 source=source,
                 title=flow.title,
                 mermaid_content=flow.mermaid_content,
@@ -359,13 +361,14 @@ def _store_prose_dags(text: str, doc_name: str, source: str) -> None:
             logger.warning("Prose DAG storage failed for %r: %s — continuing ingest", dag_id, exc)
 
 
-def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
+def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str, doc_id: str) -> None:
     """Store call-flow diagrams as DAGs in Kuzu (best-effort, never raises).
 
     Args:
         diagrams: List of :class:`~specagent.retrieval.docx_ocr_converter.ExtractedDiagram`.
         doc_name: Stem of the source document filename (e.g. ``"TS23.502"``).
         source: Full path string of the source document.
+        doc_id: UUID assigned to this document in LanceDB (used to link nodes).
     """
     dag_store = get_dag_store()
     for diagram in diagrams:
@@ -375,7 +378,7 @@ def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
             participants, steps = parse_sequence_diagram(diagram.mermaid_content)
             dag_store.store_call_flow_dag(
                 dag_id=dag_id,
-                doc_id="",  # not yet assigned at this pipeline stage
+                doc_id=doc_id,
                 source=source,
                 title=caption,
                 mermaid_content=diagram.mermaid_content,
@@ -386,6 +389,24 @@ def _store_diagrams_as_dags(diagrams: list, doc_name: str, source: str) -> None:
             logger.info("Stored call-flow DAG %r (%d steps)", dag_id, len(steps))
         except Exception as exc:
             logger.warning("DAG storage failed for %r: %s — continuing ingest", dag_id, exc)
+
+
+def estimate_vision_calls(folder: Path) -> int:
+    """Count images in all .docx files under folder without converting them.
+
+    Args:
+        folder: Directory to scan recursively for .docx files.
+
+    Returns:
+        Total number of images across all .docx files found.
+    """
+    total = 0
+    for p in folder.rglob("*.docx"):
+        try:
+            total += len(extract_images(p))
+        except Exception:
+            pass
+    return total
 
 
 def _read_last_modified(path: Path) -> str:

@@ -467,4 +467,70 @@ class TestLifespan:
                     pass
 
 
+# ---------------------------------------------------------------------------
+# Issue 12: multi-worker + OCR warning logged at startup (TDD)
+# ---------------------------------------------------------------------------
 
+
+@pytest.mark.unit
+class TestMultiWorkerOcrWarning:
+    def test_warning_logged_when_workers_gt_1_and_ocr_enabled(self, caplog) -> None:
+        """lifespan logs a WARNING when api_workers > 1 and enable_docx_ocr=True."""
+        import logging
+
+        with (
+            patch(
+                "specagent.api.main.initialize_resources",
+                return_value={"store": True, "embedder": True},
+            ),
+            patch("specagent.api.main.settings") as ms,
+            caplog.at_level(logging.WARNING, logger="specagent.api.main"),
+        ):
+            ms.enable_tracing = False
+            ms.enable_langsmith = False
+            ms.api_workers = 2
+            ms.enable_docx_ocr = True
+
+            from fastapi.testclient import TestClient
+
+            from specagent.api.main import app
+
+            with TestClient(app):
+                pass
+
+        assert any(
+            "rate limiter" in r.message.lower() or "worker" in r.message.lower()
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+        )
+
+    def test_no_warning_when_single_worker(self, caplog) -> None:
+        """No multi-worker warning when api_workers == 1."""
+        import logging
+
+        with (
+            patch(
+                "specagent.api.main.initialize_resources",
+                return_value={"store": True, "embedder": True},
+            ),
+            patch("specagent.api.main.settings") as ms,
+            caplog.at_level(logging.WARNING, logger="specagent.api.main"),
+        ):
+            ms.enable_tracing = False
+            ms.enable_langsmith = False
+            ms.api_workers = 1
+            ms.enable_docx_ocr = True
+
+            from fastapi.testclient import TestClient
+
+            from specagent.api.main import app
+
+            with TestClient(app):
+                pass
+
+        rate_limiter_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "rate limiter" in r.message.lower()
+        ]
+        assert len(rate_limiter_warnings) == 0
