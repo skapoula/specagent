@@ -5,13 +5,11 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt
-
-from typing import Any
 
 if TYPE_CHECKING:
     from specagent.retrieval.docx_image_extractor import ExtractedImage
@@ -53,14 +51,12 @@ def _wait_retry_after(retry_state: Any) -> float:
         try:
             wait = float(retry_after_raw)
             if wait > 0:
-                logger.warning(
-                    "Groq 429 rate limit; sleeping %.1f s (Retry-After header)", wait
-                )
+                logger.warning("Groq 429 rate limit; sleeping %.1f s (Retry-After header)", wait)
                 return wait
         except (ValueError, TypeError):
             pass
     # Fallback: capped exponential (attempt 1→4 s, 2→8 s … capped at 60 s)
-    return min(2.0 ** retry_state.attempt_number * 2.0, 60.0)
+    return min(2.0**retry_state.attempt_number * 2.0, 60.0)
 
 
 class ImageAnalysisResult(BaseModel):
@@ -89,18 +85,18 @@ class ImageAnalysisResult(BaseModel):
 async def analyze_image(
     image: ExtractedImage,
     api_key: str,
-    model: str = _DEFAULT_MODEL,
+    model: str | None = None,
 ) -> ImageAnalysisResult:
     """Send an image to the Groq vision API and return structured Markdown.
 
-    Acquires a rate-limit slot before each attempt.  Uses ``tenacity`` for
-    retry on transient server errors (429, 503, 504, timeout).
+    Acquires a rate-limit slot on every attempt (including retries).  Uses
+    ``tenacity`` for retry on transient server errors (429, 503, 504, timeout).
 
     Args:
         image: :class:`~specagent.retrieval.docx_image_extractor.ExtractedImage`
             containing raw bytes and metadata.
         api_key: Groq API key.  Never logged.
-        model: Groq vision model identifier.
+        model: Groq vision model identifier.  Defaults to ``settings.vision_model``.
 
     Returns:
         :class:`ImageAnalysisResult` with ``markdown_content`` populated.
@@ -110,12 +106,9 @@ async def analyze_image(
         VisionError: If the API call fails after all retries.
     """
     if not api_key:
-        raise ConfigurationError(
-            "api_key must be non-empty to call the Groq vision API."
-        )
+        raise ConfigurationError("api_key must be non-empty to call the Groq vision API.")
 
-    await _get_rate_limiter().acquire()
-
+    _model = model or settings.vision_model
     encoded = base64.b64encode(image.image_bytes).decode("ascii")
     data_url = f"data:{image.mime_type};base64,{encoded}"
     _headers = {
@@ -130,9 +123,10 @@ async def analyze_image(
         reraise=True,
     )
     async def _call() -> ImageAnalysisResult:
+        await _get_rate_limiter().acquire()
         async with httpx.AsyncClient(timeout=30.0) as client:
             body: dict = {
-                "model": model,
+                "model": _model,
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {
@@ -150,24 +144,15 @@ async def analyze_image(
                     "type": "json_schema",
                     "json_schema": _RESPONSE_JSON_SCHEMA,
                 },
-                "max_tokens": 1024,
+                "max_tokens": settings.vision_max_tokens,
                 "temperature": 0.0,
             }
-            response = await client.post(
-                _GROQ_CHAT_URL, headers=_headers, json=body
-            )
+            response = await client.post(_GROQ_CHAT_URL, headers=_headers, json=body)
             # Fallback: if Groq rejects response_format, retry without it
-            if (
-                response.status_code == 400
-                and "response_format" in response.text
-            ):
-                logger.warning(
-                    "response_format not supported by model; retrying without it"
-                )
+            if response.status_code == 400 and "response_format" in response.text:
+                logger.warning("response_format not supported by model; retrying without it")
                 body = {k: v for k, v in body.items() if k != "response_format"}
-                response = await client.post(
-                    _GROQ_CHAT_URL, headers=_headers, json=body
-                )
+                response = await client.post(_GROQ_CHAT_URL, headers=_headers, json=body)
             response.raise_for_status()
 
         raw_content = response.json()["choices"][0]["message"]["content"]
@@ -189,7 +174,7 @@ async def correct_mermaid_diagram(
     validation_errors: str,
     diagram_type: str,
     api_key: str,
-    model: str = _DEFAULT_MODEL,
+    model: str | None = None,
 ) -> ImageAnalysisResult:
     """Re-submit an image with validation errors to obtain a corrected Mermaid diagram.
 
@@ -203,7 +188,7 @@ async def correct_mermaid_diagram(
         validation_errors: Human-readable description of the failures.
         diagram_type: Locked image_type from the first analysis attempt.
         api_key: Groq API key. Never logged.
-        model: Groq vision model identifier.
+        model: Groq vision model identifier.  Defaults to ``settings.vision_model``.
 
     Returns:
         ImageAnalysisResult with image_type locked to diagram_type.
@@ -213,12 +198,9 @@ async def correct_mermaid_diagram(
         VisionError: If the API call fails after retries.
     """
     if not api_key:
-        raise ConfigurationError(
-            "api_key must be non-empty to call the Groq vision API."
-        )
+        raise ConfigurationError("api_key must be non-empty to call the Groq vision API.")
 
-    await _get_rate_limiter().acquire()
-
+    _model = model or settings.vision_model
     encoded = base64.b64encode(image.image_bytes).decode("ascii")
     data_url = f"data:{image.mime_type};base64,{encoded}"
 
@@ -238,12 +220,13 @@ async def correct_mermaid_diagram(
         reraise=True,
     )
     async def _call() -> ImageAnalysisResult:
+        await _get_rate_limiter().acquire()
         _headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
         body: dict = {
-            "model": model,
+            "model": _model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {
@@ -261,7 +244,7 @@ async def correct_mermaid_diagram(
                 "type": "json_schema",
                 "json_schema": _RESPONSE_JSON_SCHEMA,
             },
-            "max_tokens": 1024,
+            "max_tokens": settings.vision_max_tokens,
             "temperature": 0.0,
         }
         async with httpx.AsyncClient(timeout=30.0) as client:

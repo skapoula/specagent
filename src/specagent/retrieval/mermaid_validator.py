@@ -21,20 +21,22 @@ logger = logging.getLogger(__name__)
 
 _FENCED_MERMAID_RE = re.compile(r"```mermaid\n([\s\S]*?)```", re.MULTILINE)
 
-_VALID_DIAGRAM_HEADERS = frozenset([
-    "sequenceDiagram",
-    "stateDiagram-v2",
-    "graph",
-    "flowchart",
-    "classDiagram",
-    "erDiagram",
-    "gantt",
-    "pie",
-    "gitGraph",
-    "mindmap",
-    "timeline",
-    "xychart-beta",
-])
+_VALID_DIAGRAM_HEADERS = frozenset(
+    [
+        "sequenceDiagram",
+        "stateDiagram-v2",
+        "graph",
+        "flowchart",
+        "classDiagram",
+        "erDiagram",
+        "gantt",
+        "pie",
+        "gitGraph",
+        "mindmap",
+        "timeline",
+        "xychart-beta",
+    ]
+)
 
 
 def validate_mermaid(content: str) -> tuple[bool, str]:
@@ -103,19 +105,31 @@ def _check_has_content(inner: str) -> bool:
 
 
 def _check_bracket_balance(inner: str) -> bool:
-    """Return True if brackets, parentheses, and braces balance."""
-    counts: dict[str, int] = dict.fromkeys("[](){}", 0)
-    in_string = False
-    for char in inner:
-        if char == '"':
-            in_string = not in_string
-        if not in_string and char in counts:
-            counts[char] += 1
-    return (
-        counts["["] == counts["]"]
-        and counts["("] == counts[")"]
-        and counts["{"] == counts["}"]
-    )
+    """Return True if brackets, parentheses, and braces balance.
+
+    Skips %% comment lines. Handles both single-quoted and double-quoted strings.
+    """
+    opens = {"[": "]", "(": ")", "{": "}"}
+    closes = {v: k for k, v in opens.items()}
+    stack: list[str] = []
+    in_string: str | None = None  # None, '"', or "'"
+
+    for line in inner.splitlines():
+        if line.strip().startswith("%%"):
+            continue
+        for char in line:
+            if in_string:
+                if char == in_string:
+                    in_string = None
+            elif char in ('"', "'"):
+                in_string = char
+            elif char in opens:
+                stack.append(opens[char])
+            elif char in closes:
+                if not stack or stack[-1] != char:
+                    return False
+                stack.pop()
+    return len(stack) == 0
 
 
 def _check_with_mmdc(inner: str) -> tuple[bool, str]:
@@ -130,14 +144,16 @@ def _check_with_mmdc(inner: str) -> tuple[bool, str]:
         ) as tmp:
             tmp.write(inner)
             tmp_path = Path(tmp.name)
-        result = subprocess.run(
-            ["mmdc", "-i", str(tmp_path), "-o", "/dev/null"],
-            capture_output=True,
-            text=True,
-            timeout=settings.mermaid_mmdc_timeout,
-            check=False,
-        )
-        tmp_path.unlink(missing_ok=True)
+        try:
+            result = subprocess.run(
+                ["mmdc", "-i", str(tmp_path), "-o", "/dev/null"],
+                capture_output=True,
+                text=True,
+                timeout=settings.mermaid_mmdc_timeout,
+                check=False,
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
         if result.returncode != 0:
             return False, result.stderr.strip() or "mmdc validation failed."
         return True, ""
@@ -149,4 +165,7 @@ def _check_with_mmdc(inner: str) -> tuple[bool, str]:
             "mmdc validation timed out after %ds — treating as valid.",
             settings.mermaid_mmdc_timeout,
         )
+        return True, ""
+    except OSError:
+        logger.debug("mmdc subprocess OS error — skipping Tier 2 Mermaid validation.")
         return True, ""

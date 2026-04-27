@@ -90,6 +90,7 @@ class TestValidateMermaid:
                 type("S", (), {"mermaid_validate_with_mmdc": False, "mermaid_mmdc_timeout": 10})(),
             )
             from specagent.retrieval.mermaid_validator import validate_mermaid
+
             validate_mermaid(content)
         mock_run.assert_not_called()
 
@@ -101,3 +102,77 @@ class TestValidateMermaid:
         valid, reason = validate_mermaid(content)
         assert valid is True
         assert reason == ""
+
+
+# ---------------------------------------------------------------------------
+# Issue 9: _check_with_mmdc cleans up temp file even on OSError (TDD)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCheckWithMmdcTempFileCleanup:
+    def test_temp_file_deleted_on_oserror(self, tmp_path, monkeypatch) -> None:
+        """Temp file must be deleted even when subprocess.run raises OSError."""
+        from pathlib import Path
+        from unittest.mock import patch
+
+        created_paths: list[Path] = []
+        original_NamedTemporaryFile = __import__("tempfile").NamedTemporaryFile
+
+        def tracking_ntf(**kwargs):
+            f = original_NamedTemporaryFile(**kwargs)
+            created_paths.append(Path(f.name))
+            return f
+
+        with (
+            patch("tempfile.NamedTemporaryFile", side_effect=tracking_ntf),
+            patch("subprocess.run", side_effect=OSError("permission denied")),
+            patch(
+                "specagent.retrieval.mermaid_validator.settings",
+                mermaid_validate_with_mmdc=True,
+                mermaid_mmdc_timeout=10,
+            ),
+        ):
+            from specagent.retrieval.mermaid_validator import _check_with_mmdc
+
+            _check_with_mmdc("sequenceDiagram\n  A->>B: msg\n")
+
+        # All created temp files must have been cleaned up
+        for p in created_paths:
+            assert not p.exists(), f"Temp file {p} was not cleaned up"
+
+
+# ---------------------------------------------------------------------------
+# Issue 10: _check_bracket_balance handles %% comments and apostrophes (TDD)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCheckBracketBalance:
+    def test_comment_line_with_unbalanced_bracket_passes(self) -> None:
+        """%% comment lines with unbalanced [ must not cause false negatives."""
+        from specagent.retrieval.mermaid_validator import _check_bracket_balance
+
+        inner = "sequenceDiagram\n  A->>B: msg\n  %% unmatched [ bracket in comment\n"
+        assert _check_bracket_balance(inner) is True
+
+    def test_label_with_apostrophe_passes(self) -> None:
+        """Labels like \"UE's response\" must not be treated as unbalanced."""
+        from specagent.retrieval.mermaid_validator import _check_bracket_balance
+
+        inner = 'sequenceDiagram\n  A->>B: "UE\'s response"\n  B-->>A: ack\n'
+        assert _check_bracket_balance(inner) is True
+
+    def test_genuinely_unbalanced_brace_fails(self) -> None:
+        """An unbalanced { outside strings/comments must return False."""
+        from specagent.retrieval.mermaid_validator import _check_bracket_balance
+
+        inner = "graph TD\n  A{Open brace without close\n  B --> A\n"
+        assert _check_bracket_balance(inner) is False
+
+    def test_balanced_brackets_pass(self) -> None:
+        """All paired brackets return True."""
+        from specagent.retrieval.mermaid_validator import _check_bracket_balance
+
+        inner = "graph TD\n  A[Node] --> B(Circle)\n  B --> C{Diamond}\n"
+        assert _check_bracket_balance(inner) is True
