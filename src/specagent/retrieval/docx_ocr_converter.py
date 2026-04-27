@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -31,23 +32,36 @@ _IMAGE_PLACEHOLDER_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # MIME types accepted by the Groq vision API.
 # Windows vector formats (EMF, WMF) and other non-web-native types are excluded —
 # the API returns a 400 for them, which is non-retryable and wastes quota.
-_VISION_SUPPORTED_MIME_TYPES = frozenset([
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-])
+_VISION_SUPPORTED_MIME_TYPES = frozenset(
+    [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+    ]
+)
 
-_DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset([
-    "call_flow",
-    "state_machine",
-    "block_diagram",
-    "flowchart",
-    "network_topology",
-])
+_DIAGRAM_TYPES_REQUIRING_VALIDATION = frozenset(
+    [
+        "call_flow",
+        "state_machine",
+        "block_diagram",
+        "flowchart",
+        "network_topology",
+    ]
+)
 
 # Diagram types that are stored as DAGs (signal/call-flow diagrams only).
 _DAG_DIAGRAM_TYPES = frozenset(["call_flow"])
+
+
+def _warn_if_inkscape_missing() -> None:
+    """Log a prominent warning if Inkscape is not installed."""
+    if shutil.which("inkscape") is None:
+        logger.warning(
+            "Inkscape not found on PATH. EMF/WMF diagrams (common in 3GPP .docx files) "
+            "will be silently skipped. Install Inkscape to enable diagram extraction."
+        )
 
 
 @dataclass
@@ -78,11 +92,14 @@ def _prose_fallback_result(
     result: ImageAnalysisResult, placeholder_name: str
 ) -> ImageAnalysisResult:
     """Return result with markdown_content replaced by prose_fallback or a marker."""
-    fallback = (
-        result.prose_fallback
-        or f"_[Diagram: {placeholder_name} — validation failed]_"
+    fallback = result.prose_fallback or f"_[Diagram: {placeholder_name} — validation failed]_"
+    return result.model_copy(
+        update={
+            "markdown_content": fallback,
+            "skipped": True,
+            "skip_reason": "mermaid_validation_failed_prose_fallback",
+        }
     )
-    return result.model_copy(update={"markdown_content": fallback})
 
 
 async def _apply_mermaid_validation(
@@ -113,16 +130,22 @@ async def _apply_mermaid_validation(
             api_key=api_key,
         )
     except VisionError as exc:
-        logger.warning("Correction API call failed for %s: %s — using prose fallback",
-                       image.placeholder_name, exc)
+        logger.warning(
+            "Correction API call failed for %s: %s — using prose fallback",
+            image.placeholder_name,
+            exc,
+        )
         return _prose_fallback_result(result, image.placeholder_name)
 
     valid2, reason2 = validate_mermaid(corrected.markdown_content)
     if valid2:
         return corrected
 
-    logger.warning("Corrected Mermaid still invalid for %s: %s — using prose fallback",
-                   image.placeholder_name, reason2)
+    logger.warning(
+        "Corrected Mermaid still invalid for %s: %s — using prose fallback",
+        image.placeholder_name,
+        reason2,
+    )
     return _prose_fallback_result(corrected, image.placeholder_name)
 
 
@@ -164,6 +187,8 @@ async def convert_docx_with_ocr(
             f"convert_docx_with_ocr expects a .docx file; got {docx_path.suffix!r}"
         )
 
+    _warn_if_inkscape_missing()
+
     # ── Pass 1: MarkItDown → Markdown with placeholders ────────────────────
     raw_markdown = await asyncio.to_thread(convert, docx_path)
     if not raw_markdown.strip():
@@ -181,35 +206,33 @@ async def convert_docx_with_ocr(
         return raw_markdown, []
 
     # ── Pass 2b: Analyse images (sequential — rate-limiter paces calls) ────
-    # Results are keyed by the image's sequential index in the extracted list.
-    # This matches MarkItDown's placeholder order regardless of the URL format
-    # it uses (filename-based or data-URI-based) — see _stitch() for details.
-    results: dict[int, ImageAnalysisResult] = {}
-    for idx, raw_image in enumerate(images):
+    # Results are keyed by placeholder_name (e.g. "image0.png") so that
+    # _stitch() can match by URL rather than insertion order, guarding against
+    # MarkItDown reordering placeholders across versions.
+    results: dict[str, ImageAnalysisResult] = {}
+    for raw_image in images:
         image = await _prepare_image(raw_image, docx_path.name)
         if image is None:
             continue
         try:
             result = await analyze_image(image, api_key=api_key)
             result = await _apply_mermaid_validation(result, image, api_key)
-            results[idx] = result
+            results[image.placeholder_name] = result
             logger.info(
-                "Analysed %s (index %d) in %s: type=%s",
+                "Analysed %s in %s: type=%s",
                 image.placeholder_name,
-                idx,
                 docx_path.name,
                 result.image_type,
             )
         except VisionError as exc:
             logger.warning(
-                "Vision analysis failed for %s (index %d) in %s: %s — keeping placeholder",
+                "Vision analysis failed for %s in %s: %s — keeping placeholder",
                 image.placeholder_name,
-                idx,
                 docx_path.name,
                 exc,
             )
 
-    captions = {i: images[i].caption for i in range(len(images)) if images[i].caption}
+    captions: dict[str, str] = {img.placeholder_name: img.caption for img in images if img.caption}
 
     # ── Collect call-flow diagrams for DAG storage ─────────────────────────
     diagrams: list[ExtractedDiagram] = [
@@ -217,10 +240,10 @@ async def convert_docx_with_ocr(
             image_type=result.image_type,
             mermaid_content=result.markdown_content,
             prose_description=result.prose_fallback,
-            caption=captions.get(idx, ""),
-            placeholder_name=result.placeholder_name,
+            caption=captions.get(name, ""),
+            placeholder_name=name,
         )
-        for idx, result in results.items()
+        for name, result in results.items()
         if result.image_type in _DAG_DIAGRAM_TYPES and not result.skipped
     ]
 
@@ -312,36 +335,36 @@ async def _convert_emf_image(image: ExtractedImage, doc_name: str) -> ExtractedI
 
 def _stitch(
     markdown: str,
-    results: dict[int, ImageAnalysisResult],
-    captions: dict[int, str] | None = None,
+    results: dict[str, ImageAnalysisResult],
+    captions: dict[str, str] | None = None,
 ) -> str:
     """Replace image placeholders with analysed Markdown content.
 
-    Matching is done by sequential counter. Optionally prepends a
-    ``**Figure: <caption>**`` heading when a caption is available.
+    Matching is done by placeholder_name (the filename in the URL), not by
+    insertion order, so reordering of MarkItDown output across versions cannot
+    silently swap diagram content.
 
     Args:
         markdown: Raw Markdown with ``![alt](url)`` placeholders.
-        results: Mapping of sequential image index → analysis result.
-        captions: Optional mapping of sequential image index → caption text.
+        results: Mapping of placeholder_name → analysis result.
+        captions: Optional mapping of placeholder_name → caption text.
 
     Returns:
         Markdown with analysed placeholders replaced by their content.
     """
     if captions is None:
         captions = {}
-    counter = 0
 
     def _replace(match: re.Match[str]) -> str:
-        nonlocal counter
-        idx = counter
-        counter += 1
-        if idx in results and not results[idx].skipped:
-            content = results[idx].markdown_content
-            caption = captions.get(idx, "")
+        url = match.group(1)
+        # Normalise: strip any path prefix, keep only the filename
+        key = url.rsplit("/", 1)[-1]
+        result = results.get(key)
+        if result is not None and not result.skipped:
+            caption = captions.get(key, "")
             if caption:
-                return f"\n**Figure: {caption}**\n\n{content}"
-            return content
+                return f"\n**Figure: {caption}**\n\n{result.markdown_content}"
+            return result.markdown_content
         return match.group(0)
 
     return _IMAGE_PLACEHOLDER_RE.sub(_replace, markdown)

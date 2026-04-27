@@ -385,11 +385,37 @@ class Settings(BaseSettings):
         ge=1,
         description="Maximum image size in bytes to send to vision API. Larger images are skipped.",
     )
+    vision_max_tokens: int = Field(
+        default=4096,
+        ge=256,
+        le=32768,
+        description=(
+            "Max output tokens for Groq vision API calls. "
+            "3GPP call-flow diagrams with 30–50 steps require ~2000 tokens. "
+            "Env var: VISION_MAX_TOKENS."
+        ),
+    )
     vision_max_retries: int = Field(
         default=5,
         ge=1,
         le=10,
         description="Maximum tenacity retries for transient Groq vision API errors.",
+    )
+    vision_cache_path: Path = Field(
+        default=Path("data/vision_cache/results.json"),
+        description=(
+            "Path to the disk-backed JSON cache for Groq vision API results. "
+            "Keyed by image content SHA-256 to avoid re-submitting unchanged images. "
+            "Env var: VISION_CACHE_PATH."
+        ),
+    )
+    vision_max_calls_per_run: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Maximum vision API calls allowed per ingest_folder run. "
+            "0 = unlimited. Env var: VISION_MAX_CALLS_PER_RUN."
+        ),
     )
     vision_diagram_types: list[str] = Field(
         default=[
@@ -545,6 +571,7 @@ class Settings(BaseSettings):
         "processed_data_dir",
         "journal_dir",
         "kuzu_db_path",
+        "vision_cache_path",
     )
     @classmethod
     def resolve_path(cls, v: Path) -> Path:

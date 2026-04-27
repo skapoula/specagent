@@ -210,6 +210,14 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize resources: %s", e)
         raise RuntimeError(f"Startup failed: {e}") from e
 
+    if settings.api_workers > 1 and settings.enable_docx_ocr:
+        logger.warning(
+            "api_workers=%d with enable_docx_ocr=True: the vision rate limiter "
+            "is not safe across multiple workers. Set api_workers=1 or use "
+            "VISION_MAX_CALLS_PER_RUN to cap per-worker quota.",
+            settings.api_workers,
+        )
+
     if settings.enable_tracing:
         from specagent.tracing.phoenix import setup_tracing  # noqa: PLC0415
 
