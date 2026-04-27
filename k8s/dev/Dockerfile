@@ -1,5 +1,5 @@
 # =============================================================================
-# SpecAgent k3s Development Container
+# Claude, Codex  k3s Development Container
 # =============================================================================
 # Build and push to your registry:
 #   docker build -t your-registry/specagent-dev:latest -f k8s/dev/Dockerfile .
@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tree \
     vim \
     htop \
+    nano \
     ca-certificates \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
@@ -41,8 +42,17 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel --break-system-packages
 
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x ./kubectl \
+    && mv ./kubectl /usr/local/bin/kubectl
+
+# Install Claude Code CLI (native installer)
+# We install it to a system-wide directory so it's baked into the image
+RUN curl -fsSL https://claude.ai/install.sh | CLAUDE_DIR=/usr/local bash
+
+# Install Codex CLI (via npm)
+RUN npm install -g @openai/codex
 
 # Install heavy Python dependencies (cached layers)
 RUN pip install --no-cache-dir --break-system-packages numpy>=1.26.0 lancedb>=0.14.0
