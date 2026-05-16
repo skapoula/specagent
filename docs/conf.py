@@ -38,7 +38,7 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "plans"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "plans", "diagrams", "README.md"]
 
 # ---------------------------------------------------------------------------
 # MyST (Markdown) settings
@@ -46,11 +46,6 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "plans"]
 
 myst_enable_extensions = ["colon_fence", "deflist", "attrs_inline"]
 
-# ---------------------------------------------------------------------------
-# Mermaid diagrams
-# ---------------------------------------------------------------------------
-
-mermaid_version = ""  # use bundled JS — no CDN version pinning needed
 
 # ---------------------------------------------------------------------------
 # AutoAPI — discovers src/specagent automatically

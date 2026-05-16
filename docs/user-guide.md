@@ -4,7 +4,7 @@ SpecAgent answers technical questions about 3GPP telecommunications specificatio
 
 ## How It Works
 
-```mermaid
+```{mermaid}
 flowchart LR
     A[You ask a question] --> B[Agent checks relevance]
     B --> C[Agent retrieves spec sections]
@@ -58,13 +58,13 @@ Install SpecAgent and build your index before querying. See [Installation](./ins
 
 ## Common Issues
 
-| Symptom | Fix |
-|---|---|
-| `GROQ_API_KEY not set` error | Set the environment variable: `export GROQ_API_KEY=your_key` |
-| Answer says "I cannot find information" | Run `specagent index` to build the index, or verify your docs directory contains spec files |
-| Very slow first query | Run `specagent download-model` first; the embedding model downloads on first use if not cached |
-| Port 8000 already in use | Run `specagent serve --port 8001` to use a different port |
-| Citations missing from answer | The retrieved chunks may not contain spec section headers; ensure source files are well-formatted |
+| Symptom                                 | Fix                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `GROQ_API_KEY not set` error            | Set the environment variable: `export GROQ_API_KEY=your_key`                                      |
+| Answer says "I cannot find information" | Run `specagent index` to build the index, or verify your docs directory contains spec files       |
+| Very slow first query                   | Run `specagent download-model` first; the embedding model downloads on first use if not cached    |
+| Port 8000 already in use                | Run `specagent serve --port 8001` to use a different port                                         |
+| Citations missing from answer           | The retrieved chunks may not contain spec section headers; ensure source files are well-formatted |
 
 ## Getting Help
 

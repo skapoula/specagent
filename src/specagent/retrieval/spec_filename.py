@@ -1,9 +1,9 @@
 """Utilities for parsing 3GPP release numbers from spec filenames and computing output paths.
 
-3GPP filename convention: <spec_number>-<major><minor><editorial>.<ext>
+3GPP filename convention: ``<spec_number>-<major><minor><editorial>.<ext>``
 The major version character encodes the release in base-36:
-  a=10 (Rel-10), b=11, ..., i=18, j=19, ..., z=35
-  0-9 encode releases 0-9 (pre-Rel-10 / legacy).
+letters a–z encode releases 10–35 (a=Rel-10, b=Rel-11, …, i=Rel-18, j=Rel-19);
+digits 0–9 encode legacy pre-Rel-10 releases.
 """
 
 import re

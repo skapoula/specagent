@@ -1,12 +1,14 @@
 """DAG retriever node and router for the agentic RAG pipeline.
 
 Provides:
+
 - ``route_after_retriever``: conditional edge function — decides whether to
   activate the DAG retriever node or bypass it directly to the grader.
 - ``dag_retriever_node``: LangGraph node that queries the Kuzu DAG store
   and populates ``state["dag_chunks"]`` (separate lane, bypasses grader).
 
 Keyword heuristic recognises call-flow / procedure queries using:
+
 - Procedural verbs and nouns: "procedure", "flow", "sequence", "steps", "call flow", etc.
 - 3GPP participant names: "UE", "AMF", "gNB", "SMF", "UPF", "AUSF", "UDM", etc.
 - Common procedure names: "registration", "handover", "authentication", "PDU session", etc.
@@ -31,51 +33,55 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Procedural trigger keywords — at least one must appear in the query.
-_PROCEDURE_KEYWORDS = frozenset([
-    "procedure",
-    "call flow",
-    "call-flow",
-    "message flow",
-    "message sequence",
-    "sequence",
-    "steps",
-    "flow",
-    "registration",
-    "handover",
-    "authentication",
-    "pdu session",
-    "attach",
-    "detach",
-    "mobility",
-    "setup",
-    "establishment",
-    "release",
-    "handoff",
-    "during",
-    "walk me through",
-    "what happens when",
-    "how does",
-])
+_PROCEDURE_KEYWORDS = frozenset(
+    [
+        "procedure",
+        "call flow",
+        "call-flow",
+        "message flow",
+        "message sequence",
+        "sequence",
+        "steps",
+        "flow",
+        "registration",
+        "handover",
+        "authentication",
+        "pdu session",
+        "attach",
+        "detach",
+        "mobility",
+        "setup",
+        "establishment",
+        "release",
+        "handoff",
+        "during",
+        "walk me through",
+        "what happens when",
+        "how does",
+    ]
+)
 
 # 3GPP participant / network function names — presence implies a call-flow query.
-_PARTICIPANT_KEYWORDS = frozenset([
-    "ue",
-    "gnb",
-    "amf",
-    "smf",
-    "upf",
-    "ausf",
-    "udm",
-    "udr",
-    "pcf",
-    "nssf",
-    "nrf",
-    "seaf",
-    "arpf",
-    "sidf",
-    "n3iwf",
-    "af",
-])
+_PARTICIPANT_KEYWORDS = frozenset(
+    [
+        "ue",
+        "gnb",
+        "amf",
+        "smf",
+        "upf",
+        "ausf",
+        "udm",
+        "udr",
+        "pcf",
+        "nssf",
+        "nrf",
+        "seaf",
+        "arpf",
+        "sidf",
+        "n3iwf",
+        "af",
+    ]
+)
 
 # Combined set for the regex (sorted longest-first avoids partial matches).
 _ALL_KEYWORDS = sorted(

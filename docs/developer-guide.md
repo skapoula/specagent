@@ -68,7 +68,7 @@ flowchart TD
 ::::{grid} 1 1 2 2
 :gutter: 2
 
-:::{card} router
+:::{grid-item-card} router
 **LLM calls:** 1 (`RouteDecision`)
 
 **Reads:** `question`
@@ -78,7 +78,7 @@ flowchart TD
 Classifies query as `"retrieve"` (3GPP-related) or `"reject"` (off-topic). Defaults to `"retrieve"` on LLM error.
 :::
 
-:::{card} retriever
+:::{grid-item-card} retriever
 **LLM calls:** 0 (embedding only)
 
 **Reads:** `question` / `rewritten_question`, `library_filter`
@@ -88,7 +88,7 @@ Classifies query as `"retrieve"` (3GPP-related) or `"reject"` (off-topic). Defau
 Hybrid BM25 + ANN search against LanceDB. Embeds query with `"search_query: "` prefix (nomic asymmetric requirement). Returns top-`retrieval_top_k` (default 10) chunks.
 :::
 
-:::{card} dag_retriever _(optional)_
+:::{grid-item-card} dag*retriever *(optional)\_
 **LLM calls:** 0 (Kuzu only)
 
 **Reads:** `question` / `rewritten_question`
@@ -98,7 +98,7 @@ Hybrid BM25 + ANN search against LanceDB. Embeds query with `"search_query: "` p
 Reached only when `ENABLE_DAG_RETRIEVAL=true` AND the question contains call-flow keywords (`procedure`, `UE`, `AMF`, `gNB`, …). Queries Kuzu by keyword; results injected as `RetrievedChunk` with `section="Call Flow Diagram"`. Gracefully degrades on Kuzu error.
 :::
 
-:::{card} grader
+:::{grid-item-card} grader
 **LLM calls:** 0–1 (batched `BatchGradeResult` for mid-range)
 
 **Reads:** `question` / `rewritten_question`, `retrieved_chunks`
@@ -115,7 +115,7 @@ Grades only top-3 chunks by similarity. Auto-grades on extremes; batches mid-ran
 
 :::
 
-:::{card} rewriter
+:::{grid-item-card} rewriter
 **LLM calls:** 1
 
 **Reads:** `question` (always original), `retrieved_chunks`, `rewrite_count`
@@ -125,7 +125,7 @@ Grades only top-3 chunks by similarity. Auto-grades on extremes; batches mid-ran
 Reformulates query with 3GPP terminology hints and context from the first 5 chunks. Always rewrites from the original question, never from a prior rewrite.
 :::
 
-:::{card} generator
+:::{grid-item-card} generator
 **LLM calls:** 1 (`temperature=0.0`)
 
 **Reads:** `question`, `graded_chunks`, `dag_chunks`
@@ -135,7 +135,7 @@ Reformulates query with 3GPP terminology hints and context from the first 5 chun
 Filters to `relevant="yes"` chunks, sorts by similarity descending, appends DAG chunks as a separate section. Parses `[TS XX.XXX §Y.Z]` citations via regex.
 :::
 
-:::{card} hallucination_check
+:::{grid-item-card} hallucination_check
 **LLM calls:** 0–1 (skipped above confidence threshold)
 
 **Reads:** `generation`, `average_confidence`, `graded_chunks`
@@ -370,7 +370,7 @@ graph LR
 
 ### Keyword Query
 
-```cypher
+```text
 UNWIND $keywords AS kw
 MATCH (d:CallFlowDag)-[:HAS_STEP]->(s:DagStep)
 WHERE toLower(s.message) CONTAINS toLower(kw)

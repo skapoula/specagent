@@ -102,17 +102,15 @@ def should_retrieve(state: GraphState) -> Literal["retrieve", "reject"]:
 
 
 def should_rewrite(state: GraphState) -> Literal["rewrite", "generate"]:
-    """
-    Conditional edge: Decide if query needs rewriting.
+    """Decide if the query needs rewriting.
 
-    Uses a fast similarity heuristic first, then checks quality metrics:
-        1. If top-3 chunks have high similarity (>= threshold), skip rewriting
-        2. Otherwise, rewrite if:
-           - Average confidence is below threshold OR relevant chunk percentage is below threshold
-           - Haven't exceeded max rewrites
+    Fast path: skip rewriting when top-3 chunks have average similarity >=
+    ``settings.high_similarity_threshold``. Otherwise rewrite when
+    ``average_confidence`` is low OR fewer than half the graded chunks are
+    relevant, as long as ``rewrite_count < max_rewrites``.
 
     Returns:
-        "rewrite" to reformulate query, "generate" to proceed
+        "rewrite" to reformulate the query, "generate" to proceed.
     """
     rewrite_count = state.get("rewrite_count", 0)
     _override = state.get("max_rewrites_override")
@@ -182,41 +180,14 @@ def should_regenerate(state: GraphState) -> Literal["regenerate", "finish"]:
 
 
 def build_graph() -> CompiledStateGraph:
-    """
-    Build and compile the agentic RAG graph.
+    """Build and compile the agentic RAG graph.
 
-    Graph structure:
-        START
-          │
-          ▼
-        [router]
-          │
-          ├── reject ──────────────────────────────────► END
-          │
-          └── retrieve
-                │
-                ▼
-            [retriever]
-                │
-                ▼
-            [grader]
-                │
-                ├── rewrite ──► [rewriter] ──► [retriever] (loop)
-                │
-                └── generate
-                      │
-                      ▼
-                  [generator]
-                      │
-                      ▼
-              [hallucination_check]
-                      │
-                      ├── regenerate ──► [generator] (retry once)
-                      │
-                      └── finish ──────────────────────► END
+    Wires router → retriever → grader → generator → hallucination_check with
+    conditional edges for DAG retrieval, query rewriting, and regeneration.
+    Each node is wrapped with timing and optional Phoenix OTel spans.
 
     Returns:
-        Compiled LangGraph ready for execution
+        Compiled LangGraph ready for invocation.
     """
     # Initialize graph with state schema
     workflow = StateGraph(GraphState)

@@ -1,12 +1,8 @@
-"""
-Arize Phoenix tracing integration.
+"""Arize Phoenix tracing integration.
 
 Sets up OpenTelemetry tracing for observability of the RAG pipeline.
 Traces are sent to a local Phoenix instance for visualization.
-
-Usage:
-    from specagent.tracing import setup_tracing
-    setup_tracing()  # Call once at application startup
+Call ``setup_tracing()`` once at application startup.
 """
 
 import functools
@@ -22,20 +18,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def setup_tracing() -> None:
-    """
-    Initialize Phoenix tracing with OpenTelemetry.
+    """Initialize Phoenix tracing with OpenTelemetry.
 
     Should be called once at application startup before any
-    LangChain/LangGraph operations.
-
-    Requires Phoenix server running at settings.phoenix_endpoint.
-
-    Example:
-        # Start Phoenix server first:
-        # phoenix serve
-
-        from specagent.tracing import setup_tracing
-        setup_tracing()
+    LangChain/LangGraph operations. Requires Phoenix server running at
+    ``settings.phoenix_endpoint``. No-op when ``settings.enable_tracing``
+    is False.
     """
     if not settings.enable_tracing:
         return
@@ -66,19 +54,15 @@ def setup_tracing() -> None:
 
 
 def traced(name: str | None = None) -> Callable[[F], F]:
-    """
-    Decorator to add tracing span to a function.
+    """Decorator that wraps a function in an OpenTelemetry span.
 
     Args:
-        name: Span name (defaults to function name)
+        name: Span name. Defaults to the decorated function's ``__name__``.
 
     Returns:
-        Decorated function with tracing
-
-    Example:
-        @traced("my_custom_span")
-        def my_function():
-            ...
+        Decorated function with an OTel span around each call.
+        No-op when ``settings.enable_tracing`` is False or OpenTelemetry is
+        not installed.
     """
 
     def decorator(func: F) -> F:
@@ -114,17 +98,12 @@ def traced(name: str | None = None) -> Callable[[F], F]:
 
 
 def add_span_attributes(**attributes: Any) -> None:
-    """
-    Add attributes to the current span.
+    """Add key-value attributes to the currently active OTel span.
 
     Args:
-        **attributes: Key-value pairs to add as span attributes
-
-    Example:
-        add_span_attributes(
-            query="What is NR?",
-            chunks_retrieved=10,
-        )
+        **attributes: Attribute names and values. Only ``str``, ``int``,
+            ``float``, and ``bool`` values are passed through directly;
+            all others are coerced to ``str``.
     """
     if not settings.enable_tracing:
         return
@@ -191,7 +170,9 @@ def create_phoenix_node_wrapper(
             tracer = trace.get_tracer("specagent.nodes")
             with tracer.start_as_current_span(node_name) as span:
                 span.set_attribute("node.name", node_name)
-                span.set_attribute("session.id", state.get("trace_id", "") if isinstance(state, dict) else "")
+                span.set_attribute(
+                    "session.id", state.get("trace_id", "") if isinstance(state, dict) else ""
+                )
                 result = node_func(state)
                 if isinstance(result, dict) and result.get("error"):
                     span.set_attribute("node.error", str(result["error"]))

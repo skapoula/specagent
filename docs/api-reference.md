@@ -12,8 +12,6 @@ No authentication is required by default. CORS is restricted to origins listed i
 
 ## Endpoints
 
----
-
 ### GET /health
 
 **Description:** Returns the current health status and whether the vector index has been loaded.
@@ -21,11 +19,13 @@ No authentication is required by default. CORS is restricted to origins listed i
 **Authentication:** None
 
 **Request Example:**
-```http
+
+```text
 GET /health
 ```
 
 **Response Example:**
+
 ```json
 {
   "status": "ok",
@@ -36,10 +36,10 @@ GET /health
 
 **Response Fields:**
 
-| Field | Type | Description |
-|---|---|---|
-| `status` | string | Always `"ok"` when the server is running |
-| `version` | string | The installed SpecAgent version |
+| Field          | Type    | Description                                    |
+| -------------- | ------- | ---------------------------------------------- |
+| `status`       | string  | Always `"ok"` when the server is running       |
+| `version`      | string  | The installed SpecAgent version                |
 | `index_loaded` | boolean | Whether the LanceDB index has been initialized |
 
 ---
@@ -52,15 +52,16 @@ GET /health
 
 **Parameters:**
 
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `question` | string | Yes | Natural language question (3–1000 characters) |
-| `verbose` | boolean | No | Include node timings and metadata in the response (default: `false`) |
-| `max_rewrites` | integer | No | Maximum query rewrites for this request, 0–5 (default: `2`) |
-| `library` | string \| null | No | Restrict retrieval to documents tagged with this library name |
+| Name           | Type           | Required | Description                                                          |
+| -------------- | -------------- | -------- | -------------------------------------------------------------------- |
+| `question`     | string         | Yes      | Natural language question (3–1000 characters)                        |
+| `verbose`      | boolean        | No       | Include node timings and metadata in the response (default: `false`) |
+| `max_rewrites` | integer        | No       | Maximum query rewrites for this request, 0–5 (default: `2`)          |
+| `library`      | string \| null | No       | Restrict retrieval to documents tagged with this library name        |
 
 **Request Example:**
-```http
+
+```text
 POST /query
 Content-Type: application/json
 
@@ -73,6 +74,7 @@ Content-Type: application/json
 ```
 
 **Response Example:**
+
 ```json
 {
   "answer": "NR carrier aggregation supports a maximum of 16 component carriers per UE [TS 38.101 §5.4.1]. Each component carrier can be independently configured with different numerologies and bandwidths [TS 38.331 §6.3.2].",
@@ -109,31 +111,32 @@ Content-Type: application/json
 
 **Response Fields:**
 
-| Field | Type | Description |
-|---|---|---|
-| `answer` | string | Generated answer with inline citations in `[TS XX.XXX §Y.Z]` format |
-| `citations` | array | List of citation objects extracted from the answer |
-| `citations[].spec_id` | string | 3GPP spec number, e.g. `"38.101"` |
-| `citations[].section` | string | Section reference, e.g. `"5.4.1"` |
-| `citations[].chunk_preview` | string | First 120 characters of the source chunk |
-| `confidence` | float | Composite confidence score, 0.0–1.0 |
-| `metadata.rewrites` | integer | Number of query rewrites performed |
-| `metadata.chunks_retrieved` | integer | Number of chunks fetched from the index |
-| `metadata.chunks_used` | integer | Number of chunks used for generation |
-| `metadata.latency_ms` | integer | Total pipeline latency in milliseconds |
-| `metadata.hallucination_check` | string | Result: `"grounded"`, `"partial"`, or `"not_grounded"` |
-| `metadata.rewritten_question` | string \| null | The rewritten question if rewriting occurred |
-| `metadata.node_timings` | object | Per-node latency in milliseconds (only when `verbose: true`) |
+| Field                          | Type           | Description                                                         |
+| ------------------------------ | -------------- | ------------------------------------------------------------------- |
+| `answer`                       | string         | Generated answer with inline citations in `[TS XX.XXX §Y.Z]` format |
+| `citations`                    | array          | List of citation objects extracted from the answer                  |
+| `citations[].spec_id`          | string         | 3GPP spec number, e.g. `"38.101"`                                   |
+| `citations[].section`          | string         | Section reference, e.g. `"5.4.1"`                                   |
+| `citations[].chunk_preview`    | string         | First 120 characters of the source chunk                            |
+| `confidence`                   | float          | Composite confidence score, 0.0–1.0                                 |
+| `metadata.rewrites`            | integer        | Number of query rewrites performed                                  |
+| `metadata.chunks_retrieved`    | integer        | Number of chunks fetched from the index                             |
+| `metadata.chunks_used`         | integer        | Number of chunks used for generation                                |
+| `metadata.latency_ms`          | integer        | Total pipeline latency in milliseconds                              |
+| `metadata.hallucination_check` | string         | Result: `"grounded"`, `"partial"`, or `"not_grounded"`              |
+| `metadata.rewritten_question`  | string \| null | The rewritten question if rewriting occurred                        |
+| `metadata.node_timings`        | object         | Per-node latency in milliseconds (only when `verbose: true`)        |
 
 **Error Responses:**
 
-| Code | Error | Meaning |
-|---|---|---|
-| 422 | `off_topic` | The question is not about 3GPP specifications |
-| 500 | `pipeline_error` | The agent pipeline encountered an unrecoverable error |
-| 500 | `internal_error` | Unexpected server error |
+| Code | Error            | Meaning                                               |
+| ---- | ---------------- | ----------------------------------------------------- |
+| 422  | `off_topic`      | The question is not about 3GPP specifications         |
+| 500  | `pipeline_error` | The agent pipeline encountered an unrecoverable error |
+| 500  | `internal_error` | Unexpected server error                               |
 
 **Error Response Example:**
+
 ```json
 {
   "detail": {
@@ -157,8 +160,8 @@ Run a single question through the pipeline.
 specagent query "Your question here" [--verbose]
 ```
 
-| Option | Description |
-|---|---|
+| Option            | Description                                                     |
+| ----------------- | --------------------------------------------------------------- |
 | `--verbose`, `-v` | Print retrieval details, node timings, and confidence breakdown |
 
 ### specagent serve
@@ -169,11 +172,11 @@ Start the FastAPI server.
 specagent serve [--host HOST] [--port PORT] [--reload]
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `--host` | `0.0.0.0` | Bind address |
-| `--port` | `8000` | Bind port |
-| `--reload` | off | Enable hot-reload (development only) |
+| Option     | Default   | Description                          |
+| ---------- | --------- | ------------------------------------ |
+| `--host`   | `0.0.0.0` | Bind address                         |
+| `--port`   | `8000`    | Bind port                            |
+| `--reload` | off       | Enable hot-reload (development only) |
 
 ### specagent index
 
@@ -183,12 +186,12 @@ Ingest documents into the LanceDB vector index.
 specagent index [--docs-dir DIR] [--library NAME] [--force] [--max-concurrency N]
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `--docs-dir` | `./data/specs` | Directory containing spec files to ingest |
-| `--library` | `default` | Tag to assign to all ingested documents |
-| `--force` | off | Re-ingest files even if they are already indexed (by content hash) |
-| `--max-concurrency` | `4` | Number of concurrent ingestion workers |
+| Option              | Default        | Description                                                        |
+| ------------------- | -------------- | ------------------------------------------------------------------ |
+| `--docs-dir`        | `./data/specs` | Directory containing spec files to ingest                          |
+| `--library`         | `default`      | Tag to assign to all ingested documents                            |
+| `--force`           | off            | Re-ingest files even if they are already indexed (by content hash) |
+| `--max-concurrency` | `4`            | Number of concurrent ingestion workers                             |
 
 ### specagent benchmark
 
@@ -198,11 +201,11 @@ Run the TSpec-LLM evaluation benchmark.
 specagent benchmark [--dataset FILE] [--output-dir DIR] [--limit N]
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `--dataset` | built-in test set | Path to a JSON benchmark dataset file |
+| Option         | Default               | Description                                    |
+| -------------- | --------------------- | ---------------------------------------------- |
+| `--dataset`    | built-in test set     | Path to a JSON benchmark dataset file          |
 | `--output-dir` | `./benchmark_results` | Directory for JSON and Markdown output reports |
-| `--limit` | all | Limit evaluation to the first N questions |
+| `--limit`      | all                   | Limit evaluation to the first N questions      |
 
 ### specagent download-model
 
@@ -224,12 +227,12 @@ specagent version
 
 ## Key Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GROQ_API_KEY` | Yes (unless using custom endpoint) | — | Groq cloud API key |
-| `GROQ_MODEL` | No | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model ID |
-| `CUSTOM_ENDPOINT_URL` | No | — | OpenAI-compatible LLM endpoint (overrides Groq) |
-| `LANCEDB_URI` | No | `data/lancedb` | Path or S3 URI for the vector index |
-| `EMBEDDING_MODEL` | No | `nomic-ai/nomic-embed-text-v1.5` | FastEmbed model name |
-| `RETRIEVAL_TOP_K` | No | `10` | Number of chunks to retrieve per query |
-| `CORS_ALLOW_ORIGINS` | No | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
+| Variable              | Required                           | Default                                     | Description                                     |
+| --------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| `GROQ_API_KEY`        | Yes (unless using custom endpoint) | —                                           | Groq cloud API key                              |
+| `GROQ_MODEL`          | No                                 | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model ID                                   |
+| `CUSTOM_ENDPOINT_URL` | No                                 | —                                           | OpenAI-compatible LLM endpoint (overrides Groq) |
+| `LANCEDB_URI`         | No                                 | `data/lancedb`                              | Path or S3 URI for the vector index             |
+| `EMBEDDING_MODEL`     | No                                 | `nomic-ai/nomic-embed-text-v1.5`            | FastEmbed model name                            |
+| `RETRIEVAL_TOP_K`     | No                                 | `10`                                        | Number of chunks to retrieve per query          |
+| `CORS_ALLOW_ORIGINS`  | No                                 | `http://localhost:3000`                     | Comma-separated list of allowed CORS origins    |

@@ -73,19 +73,10 @@ class ExtractedDiagram:
     """
 
     image_type: str
-    """Diagram type, e.g. ``call_flow``."""
-
     mermaid_content: str
-    """Validated Mermaid block for this diagram."""
-
     prose_description: str
-    """One-sentence plain-English description (from ``prose_fallback``)."""
-
     caption: str
-    """Figure caption text extracted from the .docx file (may be empty)."""
-
     placeholder_name: str
-    """MarkItDown placeholder, e.g. ``image0.png`` (used as fallback ID)."""
 
 
 def _prose_fallback_result(
@@ -162,21 +153,20 @@ async def convert_docx_with_ocr(
     the Groq vision API.  Each result is stitched back into the Markdown at
     the corresponding placeholder position.
 
-    Size filtering:
-    * Images smaller than ``settings.vision_min_image_bytes`` (default 10 KB)
-      are skipped as logos / decorative elements.
-    * Images larger than ``settings.vision_max_image_bytes`` (default 20 MB)
-      are skipped to avoid oversized payloads.
+    Images smaller than ``settings.vision_min_image_bytes`` (default 10 KB)
+    are skipped as logos or decorative elements. Images larger than
+    ``settings.vision_max_image_bytes`` (default 20 MB) are skipped to avoid
+    oversized payloads.
 
     Args:
         docx_path: Resolved path to the ``.docx`` file.
         api_key: Groq API key for vision calls.
 
     Returns:
-        Tuple of ``(markdown, diagrams)`` where:
-        - ``markdown`` is the enriched Markdown string with placeholders replaced.
-        - ``diagrams`` is a list of :class:`ExtractedDiagram` for call-flow
-          diagrams found in the document (used by the ingestor for DAG storage).
+        Tuple of ``(markdown_text, diagrams)``. ``markdown_text`` is the
+        enriched Markdown string with image placeholders replaced by analysed
+        content. ``diagrams`` is a list of :class:`ExtractedDiagram` for
+        call-flow diagrams found in the document.
 
     Raises:
         UnsupportedFormatError: If ``docx_path`` suffix is not ``.docx``.
