@@ -26,6 +26,8 @@ extensions = [
     "sphinx_autodoc_typehints",
     "autoapi.extension",
     "myst_parser",
+    "sphinx_design",
+    "sphinxcontrib.mermaid",
 ]
 
 # ---------------------------------------------------------------------------
@@ -42,7 +44,13 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "plans"]
 # MyST (Markdown) settings
 # ---------------------------------------------------------------------------
 
-myst_enable_extensions = ["colon_fence", "deflist"]
+myst_enable_extensions = ["colon_fence", "deflist", "attrs_inline"]
+
+# ---------------------------------------------------------------------------
+# Mermaid diagrams
+# ---------------------------------------------------------------------------
+
+mermaid_version = ""  # use bundled JS — no CDN version pinning needed
 
 # ---------------------------------------------------------------------------
 # AutoAPI — discovers src/specagent automatically
