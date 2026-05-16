@@ -848,3 +848,116 @@ class TestConvertDocxWithOcr:
         assert "content-image0.png" in markdown
         assert "content-image1.png" in markdown
         assert "data:image/x-emf" not in markdown
+
+
+# ---------------------------------------------------------------------------
+# Real-API tests — no mocks, full pipeline end-to-end
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.real_api
+@pytest.mark.slow
+class TestConvertDocxWithOcrRealAPI:
+    """End-to-end tests: DOCX_SMALL → extract_images → Inkscape → Groq Vision API.
+
+    Each test runs the full pipeline against 38413-i30_rel18.docx (TS 38.413 NG-AP).
+    Only the first 3 images are sent to Groq to keep runtime and quota usage bounded.
+
+    Prerequisites:
+        - GROQ_API_KEY set in /workspace/.env
+        - inkscape on PATH (sudo apt-get install -y inkscape)
+
+    Run: pytest -m real_api -v
+    """
+
+    @pytest.fixture(autouse=True)
+    def _limit_images_to_three(self) -> None:
+        """Wrap extract_images to return only the first 3 real images from the docx.
+
+        The real extract_images() runs against the actual ZIP — EMF bytes are genuine.
+        We slice the result so each test makes at most 3 Groq Vision API calls.
+        """
+        from specagent.retrieval import docx_image_extractor as _mod
+
+        real_fn = _mod.extract_images
+
+        def _limited(path):
+            return real_fn(path)[:3]
+
+        with patch(
+            "specagent.retrieval.docx_ocr_converter.extract_images",
+            side_effect=_limited,
+        ):
+            yield
+
+    async def test_real_pipeline_returns_nonempty_markdown(
+        self,
+        inkscape_available: None,
+        groq_api_key: str,
+    ) -> None:
+        """Full pipeline completes without error and returns non-empty markdown."""
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        markdown, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key=groq_api_key)
+
+        assert markdown.strip()
+        assert "#" in markdown  # MarkItDown always produces headings for 3GPP specs
+        assert isinstance(diagrams, list)
+
+    async def test_real_pipeline_emf_images_rasterised_to_jpeg(
+        self,
+        inkscape_available: None,
+        groq_api_key: str,
+    ) -> None:
+        """Inkscape rasterises EMF images to JPEG before they reach the Groq Vision API."""
+        from specagent.retrieval import groq_vision_client as _mod
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        received_mime_types: list[str] = []
+        real_analyze = _mod.analyze_image
+
+        async def _spy(image, *, api_key, model=None):
+            received_mime_types.append(image.mime_type)
+            return await real_analyze(image, api_key=api_key)
+
+        with patch("specagent.retrieval.docx_ocr_converter.analyze_image", side_effect=_spy):
+            await convert_docx_with_ocr(DOCX_SMALL, api_key=groq_api_key)
+
+        assert len(received_mime_types) > 0, "No images passed the size filter"
+        _vision_supported = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+        assert all(m in _vision_supported for m in received_mime_types)
+        # DOCX_SMALL has 101 EMFs — first 3 should all be rasterised to JPEG
+        assert "image/jpeg" in received_mime_types
+
+    async def test_real_pipeline_diagrams_list_shape(
+        self,
+        inkscape_available: None,
+        groq_api_key: str,
+    ) -> None:
+        """Diagrams returned by the pipeline have the correct ExtractedDiagram shape."""
+        from specagent.retrieval.docx_ocr_converter import ExtractedDiagram, convert_docx_with_ocr
+
+        _, diagrams = await convert_docx_with_ocr(DOCX_SMALL, api_key=groq_api_key)
+
+        assert isinstance(diagrams, list)
+        for d in diagrams:
+            assert isinstance(d, ExtractedDiagram)
+            assert d.image_type
+            assert d.placeholder_name
+            if d.image_type == "call_flow":
+                assert d.mermaid_content  # call_flow results must carry Mermaid content
+
+    async def test_real_pipeline_pass1_text_survives_stitching(
+        self,
+        inkscape_available: None,
+        groq_api_key: str,
+    ) -> None:
+        """Pass 1 markdown structure (headings, prose) is preserved after image stitching."""
+        from specagent.retrieval.docx_ocr_converter import convert_docx_with_ocr
+
+        markdown, _ = await convert_docx_with_ocr(DOCX_SMALL, api_key=groq_api_key)
+
+        # Structural integrity: headings present, output larger than trivial
+        assert "#" in markdown
+        assert len(markdown) > 500

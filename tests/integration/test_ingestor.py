@@ -454,7 +454,9 @@ async def test_ingest_copies_docx_to_release_folder(tmp_path):
 
         await ingest(source=DOCX_SMALL, library="test-lib")
 
-    docx_dest = tmp_path / "3gpp_rel_18" / "docx" / f"{DOCX_SMALL.stem}_rel18.docx"
+    from specagent.retrieval.spec_filename import release_paths
+
+    docx_dest, _ = release_paths(DOCX_SMALL, tmp_path)
     assert docx_dest.exists(), f"Expected docx copy at {docx_dest}"
 
 
@@ -487,7 +489,9 @@ async def test_ingest_writes_markdown_to_release_folder(tmp_path):
 
         await ingest(source=DOCX_SMALL, library="test-lib")
 
-    md_dest = tmp_path / "3gpp_rel_18" / "md" / f"{DOCX_SMALL.stem}_rel18.md"
+    from specagent.retrieval.spec_filename import release_paths
+
+    _, md_dest = release_paths(DOCX_SMALL, tmp_path)
     assert md_dest.exists(), f"Expected markdown at {md_dest}"
     assert md_dest.read_text() == md_content
 

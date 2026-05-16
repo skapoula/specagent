@@ -6,7 +6,10 @@ The major version character encodes the release in base-36:
   0-9 encode releases 0-9 (pre-Rel-10 / legacy).
 """
 
+import re
 from pathlib import Path
+
+_REL_SUFFIX_RE = re.compile(r"_rel\d+$")
 
 
 def parse_3gpp_release(stem: str) -> int | None:
@@ -51,7 +54,8 @@ def release_paths(source: Path, data_dir: Path) -> "tuple[Path, Path] | None":
         return None
     rel_str = f"{release:02d}"
     folder = data_dir / f"3gpp_rel_{rel_str}"
-    suffixed_stem = f"{source.stem}_rel{rel_str}"
+    base_stem = _REL_SUFFIX_RE.sub("", source.stem)
+    suffixed_stem = f"{base_stem}_rel{rel_str}"
     return (
         folder / "docx" / f"{suffixed_stem}.docx",
         folder / "md" / f"{suffixed_stem}.md",

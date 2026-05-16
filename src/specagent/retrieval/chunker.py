@@ -3,16 +3,28 @@
 import logging
 import re as _re
 import threading
-from typing import TYPE_CHECKING
 
 from specagent.config import settings
 
-if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizerBase
-
 logger = logging.getLogger(__name__)
 
-_tokenizer: "PreTrainedTokenizerBase | None" = None
+
+class _TokenizersAdapter:
+    """Thin wrapper around tokenizers.Tokenizer with a transformers-compatible interface."""
+
+    def __init__(self, tok: object) -> None:
+        self._tok = tok
+
+    def encode(self, text: str, *, add_special_tokens: bool = False) -> list[int]:
+        """Encode text to token IDs."""
+        return self._tok.encode(text, add_special_tokens=add_special_tokens).ids  # type: ignore[attr-defined]
+
+    def decode(self, ids: list[int]) -> str:
+        """Decode token IDs to text."""
+        return self._tok.decode(ids)  # type: ignore[attr-defined]
+
+
+_tokenizer: _TokenizersAdapter | None = None
 _tokenizer_lock = threading.Lock()
 
 # Separator hierarchy for recursive splitting
@@ -22,34 +34,34 @@ _SEPARATORS = ["\n\n", "\n", " ", ""]
 _HEADER_RE = _re.compile(r"^#{1,6}\s+(.+)$", _re.MULTILINE)
 
 
-def _get_tokenizer() -> "PreTrainedTokenizerBase":
+def _get_tokenizer() -> _TokenizersAdapter:
     """Return the tokenizer singleton, loading it on first call.
 
     Uses settings.embedding_model as the model ID so the tokenizer always
-    matches the configured embedding model.
+    matches the configured embedding model. Loads tokenizer.json directly
+    from the HuggingFace local cache — no transformers dependency required.
 
     Raises:
         RuntimeError: If the tokenizer is not cached locally. Run
-            'python -m specagent download-model' to download it.
+            'specagent download-model' to download it.
     """
     global _tokenizer  # noqa: PLW0603
     if _tokenizer is None:
         with _tokenizer_lock:
             if _tokenizer is None:
-                from transformers import AutoTokenizer
+                from huggingface_hub import try_to_load_from_cache
+                from tokenizers import Tokenizer
 
                 model_id = settings.embedding_model
                 logger.info("Loading tokenizer %s", model_id)
-                try:
-                    _tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
-                        model_id, local_files_only=True, trust_remote_code=True
-                    )
-                except Exception as exc:
+                cached_path = try_to_load_from_cache(model_id, "tokenizer.json")
+                if not isinstance(cached_path, str):
                     raise RuntimeError(
                         f"Tokenizer '{model_id}' is not in the local cache. "
                         "Run 'specagent download-model' to download it, "
                         "then restart the server."
-                    ) from exc
+                    )
+                _tokenizer = _TokenizersAdapter(Tokenizer.from_file(cached_path))
     assert _tokenizer is not None  # guaranteed by the if-block above
     return _tokenizer
 

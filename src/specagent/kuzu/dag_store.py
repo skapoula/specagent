@@ -67,10 +67,11 @@ MERGE (d)-[:HAS_STEP]->(s)
 """
 
 _QUERY_BY_KEYWORD = """\
+UNWIND $keywords AS kw
 MATCH (d:CallFlowDag)-[:HAS_STEP]->(s:DagStep)
-WHERE any(kw IN $keywords WHERE toLower(s.message) CONTAINS toLower(kw))
-   OR any(kw IN $keywords WHERE toLower(d.prose_description) CONTAINS toLower(kw))
-   OR any(kw IN $keywords WHERE toLower(d.title) CONTAINS toLower(kw))
+WHERE toLower(s.message) CONTAINS toLower(kw)
+   OR toLower(d.prose_description) CONTAINS toLower(kw)
+   OR toLower(d.title) CONTAINS toLower(kw)
 RETURN DISTINCT d.dag_id AS dag_id,
        d.doc_id AS doc_id,
        d.source AS source,

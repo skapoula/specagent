@@ -69,6 +69,54 @@ def test_extract_title_truncates_long_heading():
     assert len(result) <= 200
 
 
+@pytest.mark.unit
+def test_extract_title_skips_foreword_heading():
+    """When the first heading is 'Foreword', the next meaningful heading is returned."""
+    text = "# Foreword\n\nBoilerplate.\n\n# 1 Scope\n\nActual content."
+    assert _extract_title(text, "/f.docx") == "1 Scope"
+
+
+@pytest.mark.unit
+def test_extract_title_3gpp_cover_table_combines_spec_num_and_title():
+    """Raw 3GPP cover-page table yields 'spec_num: title' without boilerplate."""
+    raw = (
+        "| 3GPP TS 23.502 V19.7.0 (2026-03) | |\n"
+        "| Technical Specification | |\n"
+        "| 3rd Generation Partnership Project;  Technical Specification Group Services and System Aspects;"
+        "  Procedures for the 5G System (5GS);  Stage 2  (Release 19) | |\n"
+        "\n# Foreword\n\nForeword content.\n\n# 1 Scope\n\nScope text."
+    )
+    result = _extract_title(raw, "/data/23502-j70.docx")
+    assert result == "3GPP TS 23.502: Procedures for the 5G System (5GS); Stage 2"
+
+
+@pytest.mark.unit
+def test_extract_title_3gpp_cover_without_spec_num_returns_title_only():
+    """Cover metadata without a spec-number line still yields the title."""
+    raw = (
+        "| 3rd Generation Partnership Project;  Technical Specification Group RAN;"
+        "  NR; Radio Resource Control (RRC); Protocol specification;  (Release 18) | |\n"
+    )
+    assert _extract_title(raw, "/data/38331-i30.docx") == (
+        "NR; Radio Resource Control (RRC); Protocol specification"
+    )
+
+
+@pytest.mark.unit
+def test_extract_title_3gpp_cover_takes_priority_over_heading():
+    """Cover-page table match wins even when a # heading appears earlier in the text."""
+    raw = (
+        "# Foreword\n\n"
+        "| 3GPP TS 38.300 V18.0.0 (2024-06) | |\n"
+        "| Technical Specification | |\n"
+        "| 3rd Generation Partnership Project;  Technical Specification Group RAN;"
+        "  NR; NR and NG-RAN Overall Description; Stage 2;  (Release 18) | |\n"
+    )
+    result = _extract_title(raw, "/data/38300-i30.docx")
+    assert "NR and NG-RAN Overall Description" in result
+    assert "Foreword" not in result
+
+
 # ---------------------------------------------------------------------------
 # _mkdir — pure filesystem function, no pipeline involvement
 # ---------------------------------------------------------------------------

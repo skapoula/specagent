@@ -1,4 +1,4 @@
-"""Integration tests for prose DAG extractor against real .docx files in data/rel_18/doc/."""
+"""Integration tests for prose DAG extractor against real .docx files in data/3gpp/docx/."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from specagent.retrieval.prose_dag_extractor import extract_prose_call_flows
 
 logger = logging.getLogger(__name__)
 
-_RAW_DIR = Path(__file__).parents[2] / "src" / "specagent" / "data" / "rel_18" / "doc"
+_RAW_DIR = Path(__file__).parents[2] / "data" / "3gpp" / "docx"
 
 
 def _discover_docx() -> list[Path]:
-    """Return all .docx files in data/rel_18/doc/, sorted by name."""
+    """Return all .docx files in data/3gpp/docx/, sorted by name."""
     if not _RAW_DIR.exists():
         return []
     return sorted(_RAW_DIR.glob("*.docx"))
@@ -31,13 +31,13 @@ _DOCX_FILES = _discover_docx()
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/rel_18/doc/")
+@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/3gpp/docx/")
 class TestDocxFlowExtraction:
     """Per-file smoke tests: each docx must yield at least one parseable flow or skip."""
 
     @pytest.mark.parametrize("docx_path", _DOCX_FILES, ids=_docx_ids(_DOCX_FILES))
     def test_extracts_at_least_one_flow(self, docx_path: Path) -> None:
-        """Each docx in data/rel_18/doc/ produces at least one call-flow DAG."""
+        """Each docx in data/3gpp/docx/ produces at least one call-flow DAG."""
         text = postprocess(convert(docx_path))
         flows = extract_prose_call_flows(text)
         if not flows:
@@ -62,7 +62,7 @@ class TestDocxFlowExtraction:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/rel_18/doc/")
+@pytest.mark.skipif(not _DOCX_FILES, reason="No .docx files found in data/3gpp/docx/")
 class TestImprovementsVisible:
     """Baselines for prose call-flow extraction against 38300-i30.docx (TS 38.300 NR Overview).
 
@@ -71,9 +71,9 @@ class TestImprovementsVisible:
 
     @pytest.fixture(scope="class")
     def flows_38300(self) -> list:
-        target = _RAW_DIR / "38300-i30.docx"
+        target = _RAW_DIR / "38300-i30_rel18.docx"
         if not target.exists():
-            pytest.skip("38300-i30.docx not in data/rel_18/doc/")
+            pytest.skip("38300-i30_rel18.docx not in data/3gpp/docx/")
         text = postprocess(convert(target))
         return extract_prose_call_flows(text)
 

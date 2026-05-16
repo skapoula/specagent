@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=("/workspace/.env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -520,7 +520,7 @@ class Settings(BaseSettings):
         ),
     )
     enable_dag_storage: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable DAG storage for detected call-flow diagrams during .docx OCR ingest. "
             "Env var: ENABLE_DAG_STORAGE."

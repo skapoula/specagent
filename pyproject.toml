@@ -148,6 +148,7 @@ markers = [
     "integration: Integration tests (may require mocked services)",
     "e2e: End-to-end tests (full pipeline)",
     "slow: Slow tests (skip with -m 'not slow')",
+    "real_api: Tests that call real external APIs — require GROQ_API_KEY and inkscape",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

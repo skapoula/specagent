@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
+import re
 import shutil
 import uuid
 from datetime import UTC, datetime
@@ -16,6 +18,7 @@ from specagent.kuzu.mermaid_parser import parse_sequence_diagram
 from specagent.kuzu.resources import get_dag_store
 from specagent.retrieval.chunker import chunk_with_metadata
 from specagent.retrieval.converter import SUPPORTED_EXTENSIONS, convert, convert_docx_ocr
+from specagent.retrieval.docx_image_extractor import extract_images
 from specagent.retrieval.embedder import embed_documents
 from specagent.retrieval.exceptions import IngestionError, UnsupportedFormatError
 from specagent.retrieval.markdown_postprocessor import postprocess
@@ -25,6 +28,19 @@ from specagent.retrieval.spec_filename import parse_3gpp_release, release_paths
 from specagent.retrieval.store import ChunkRecord
 
 logger = logging.getLogger(__name__)
+
+_MAX_TITLE_LENGTH = 200
+# Matches "3GPP TS XX.XXX" or "3GPP TR XX.XXX" in the cover-page table
+_3GPP_SPEC_NUM_RE = re.compile(r"3GPP\s+(T[SR])\s+(\d+\.\d+)")
+# Matches boilerplate leading parts in the semicolon-separated 3GPP cover metadata cell
+_3GPP_BOILERPLATE_RE = re.compile(
+    r"^(3rd Generation Partnership Project"
+    r"|Technical (Specification|Report) Group\b"
+    r"|TSG\b"
+    r"|\(Release\b)"
+)
+# Strips a trailing "(Release N)" appended to the last metadata segment (e.g. "Stage 2  (Release 19)")
+_RELEASE_SUFFIX_RE = re.compile(r"\s*\(Release\s+\d+\)\s*$")
 
 
 class IngestResult(BaseModel):
@@ -124,8 +140,8 @@ async def ingest(  # noqa: PLR0912, PLR0915 — pre-existing complexity; pipelin
     if not text.strip():
         raise IngestionError(f"No text could be extracted from {source_str!r}")
 
-    text = postprocess(text)
     title = _extract_title(text, source_str)
+    text = postprocess(text)
 
     # ── 3b. Store call-flow diagrams as DAGs (fire-and-forget) ────────────────
     if settings.enable_dag_storage and diagrams:
@@ -420,12 +436,48 @@ def _read_last_modified(path: Path) -> str:
 
 
 def _extract_title(text: str, source: str) -> str:
-    """Infer a document title from the first Markdown heading or source path."""
+    """Extract document title from the cover-page table or first Markdown heading.
+
+    For 3GPP .docx files the cover-page table contains a spec-number row
+    (``3GPP TS XX.XXX``) and a semicolon-separated metadata row.  When both
+    are found the result is ``"3GPP TS XX.XXX: <spec title>"``.  Boilerplate
+    parts (organisation name, TSG name, ``(Release N)``) are filtered out.
+
+    Must be called on the **raw** converted text before ``postprocess()`` runs,
+    because ``_strip_toc`` removes the cover-page table.
+
+    Falls back to the first non-"Foreword" ``#`` heading, then to the filename.
+    """
+    spec_num = ""
+
     for line in text.splitlines():
         stripped = line.strip()
+
+        if not spec_num:
+            m = _3GPP_SPEC_NUM_RE.search(stripped)
+            if m:
+                spec_num = f"3GPP {m.group(1)} {m.group(2)}"
+
+        if "3rd Generation Partnership Project" in stripped and stripped.count(";") >= 2:
+            inner = stripped.strip("|").strip()
+            parts = [p.strip().split("|")[0].strip() for p in inner.split(";")]
+            title_parts = []
+            for p in parts:
+                if not p or _3GPP_BOILERPLATE_RE.match(p):
+                    continue
+                title_parts.append(_RELEASE_SUFFIX_RE.sub("", p).strip())
+            title_parts = [p for p in title_parts if p]
+            if title_parts:
+                title = "; ".join(title_parts)
+                prefix = f"{spec_num}: " if spec_num else ""
+                return f"{prefix}{title}"[:_MAX_TITLE_LENGTH]
+
         if stripped.startswith("#"):
-            return stripped.lstrip("#").strip()[:200]
-    return Path(source).name[:200]
+            heading = stripped.lstrip("#").strip()
+            if heading.lower() != "foreword":
+                return heading[:_MAX_TITLE_LENGTH]
+
+    return Path(source).name[:_MAX_TITLE_LENGTH]
 
 
 def _write_release_files(source: Path, text: str, docx_dest: Path, md_dest: Path) -> None:
@@ -453,7 +505,9 @@ def _write_release_files(source: Path, text: str, docx_dest: Path, md_dest: Path
 def _mkdir(path: Path) -> None:
     """Create directory tree, tolerating races where it already exists."""
     try:
-        path.mkdir(parents=True, exist_ok=True)
+        # Use os.makedirs to avoid pathlib.Path.stat() calls added in Python 3.13
+        # (Path.mkdir exist_ok now calls is_dir() → stat() which can break mocked tests)
+        os.makedirs(path, exist_ok=True)
     except PermissionError as e:
         raise IngestionError(f"Permission denied creating directory {path}") from e
     except OSError as e:

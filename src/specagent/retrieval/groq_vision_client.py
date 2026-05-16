@@ -13,6 +13,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt
 
 if TYPE_CHECKING:
     from specagent.retrieval.docx_image_extractor import ExtractedImage
+from specagent.config import settings
 from specagent.retrieval._vision_helpers import (
     _KNOWN_DIAGRAM_TYPES,
     _MERMAID_SUBTYPE,

@@ -26,17 +26,17 @@ from specagent.retrieval.resources import clear_resource_cache
 # Real test data — actual 3GPP .docx files from the project data directory
 # ---------------------------------------------------------------------------
 
-REAL_DOCX_DIR = Path(__file__).parent.parent / "src" / "specagent" / "data" / "rel_18" / "doc"
+REAL_DOCX_DIR = Path(__file__).parent.parent / "data" / "3gpp" / "docx"
 RAW_DATA_DIR = REAL_DOCX_DIR  # deprecated alias — use REAL_DOCX_DIR in new code
 
 # The three real 3GPP Release 18 .docx files available for tests.
 # Ordered by file size (smallest first).
-# 38413-i30.docx: TS 38.413 (NG Application Protocol), 3.49 MB, 103 images (101 emf, 1 wmf, 1 png)
-# 38331-i30.docx: TS 38.331 (Radio Resource Control),  4.07 MB,  71 images (16 emf, 55 wmf, 0 png)
-# 38300-i30.docx: TS 38.300 (NR Overall Description),  6.43 MB, 124 images (84 emf, 37 wmf, 3 png)
-DOCX_SMALL = REAL_DOCX_DIR / "38413-i30.docx"
-DOCX_MEDIUM = REAL_DOCX_DIR / "38331-i30.docx"
-DOCX_LARGE = REAL_DOCX_DIR / "38300-i30.docx"
+# 38413-i30_rel18.docx: TS 38.413 (NG Application Protocol), 3.49 MB, 103 images (101 emf, 1 wmf, 1 png)
+# 38331-i30_rel18.docx: TS 38.331 (Radio Resource Control),  4.07 MB,  71 images (16 emf, 55 wmf, 0 png)
+# 38300-i30_rel18.docx: TS 38.300 (NR Overall Description),  6.43 MB, 124 images (84 emf, 37 wmf, 3 png)
+DOCX_SMALL = REAL_DOCX_DIR / "38413-i30_rel18.docx"
+DOCX_MEDIUM = REAL_DOCX_DIR / "38331-i30_rel18.docx"
+DOCX_LARGE = REAL_DOCX_DIR / "38300-i30_rel18.docx"
 
 # =============================================================================
 # Configuration Fixtures
@@ -619,3 +619,27 @@ def docx_one_image() -> Path:
 def docx_three_images() -> Path:
     """Real 3GPP .docx file (38413-i30.docx) — use >= 3 assertions for image counts."""
     return DOCX_SMALL
+
+
+# ---------------------------------------------------------------------------
+# Real external API fixtures (used by tests marked real_api)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def inkscape_available() -> None:
+    """Skip the requesting test if Inkscape is not on PATH."""
+    import shutil
+
+    if shutil.which("inkscape") is None:
+        pytest.skip("inkscape not on PATH — install with: sudo apt-get install -y inkscape")
+
+
+@pytest.fixture
+def groq_api_key() -> str:
+    """Return the Groq API key from settings; skip if not configured."""
+    from specagent.config import settings
+
+    if not settings.groq_api_key:
+        pytest.skip("GROQ_API_KEY not set — add it to /workspace/.env")
+    return settings.groq_api_key
