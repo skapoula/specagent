@@ -188,3 +188,6 @@ CLAUDE.local.md
 .claude/CLAUDE.local.md
 .claude/settings.local.json
 .worktrees/
+
+# CodeGraphContext per-repo KuzuDB graph (large binary, rebuildable)
+.codegraphcontext/
