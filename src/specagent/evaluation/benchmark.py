@@ -13,6 +13,7 @@ from specagent.evaluation.models import (
     BenchmarkQuestion,
     BenchmarkReport,
     BenchmarkResult,
+    load_benchmark_questions,
 )
 from specagent.evaluation.stats import (
     compute_report_metrics,
@@ -20,30 +21,10 @@ from specagent.evaluation.stats import (
 
 logger = logging.getLogger(__name__)
 
-
-def load_benchmark_questions(dataset_path: Path) -> list[BenchmarkQuestion]:
-    """Load benchmark questions from a JSON file.
-
-    Args:
-        dataset_path: Path to the JSON benchmark dataset.
-
-    Returns:
-        List of BenchmarkQuestion objects.
-    """
-    with dataset_path.open() as f:
-        data: list[dict[str, Any]] = json.load(f)
-    return [
-        BenchmarkQuestion(
-            id=item.get("id", ""),
-            question=item.get("question", ""),
-            answer=item.get("answer", ""),
-            difficulty=item.get("difficulty", ""),
-            correct_option=item.get("correct_option", ""),
-            spec_references=item.get("spec_references", []),
-            category=item.get("category", ""),
-        )
-        for item in data
-    ]
+# load_benchmark_questions lives in models.py (it builds BenchmarkQuestion from the
+# TSpec-LLM JSON shape); re-exported here because the CLI and the benchmark tests
+# reach for it on this module.
+__all__ = ["load_benchmark_questions", "run_benchmark"]
 
 
 def _perform_health_check() -> None:
