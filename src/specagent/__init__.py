@@ -1,5 +1,4 @@
-"""
-SpecAgent: Agentic RAG for 3GPP Telecommunications Specifications
+"""SpecAgent: agentic RAG for 3GPP telecommunications specifications.
 
 This package provides an agentic RAG (Retrieval-Augmented Generation) system
 specifically designed for querying 3GPP Release 18 specifications using
