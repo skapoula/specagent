@@ -1,5 +1,6 @@
 """Unit tests for the CLI commands."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,7 +8,17 @@ from typer.testing import CliRunner
 
 from specagent.cli import app
 
-runner = CliRunner()
+# Rich colourises and wraps help output when it thinks it is on a terminal, which
+# splits option names across escape sequences and line breaks. Pin a plain, wide
+# console so substring assertions test the command, not the renderer.
+runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI styling; cli.py's module-level Console is built before the env above."""
+    return _ANSI_RE.sub("", text)
 
 _DEFAULT_HOST = "0.0.0.0"
 _DEFAULT_PORT = 8000
@@ -169,7 +180,7 @@ class TestQueryCommand:
         with patch("specagent.graph.workflow.run_query", return_value=r):
             result = runner.invoke(app, ["query", "What is HARQ?"])
         assert result.exit_code == 0
-        assert "3GPP TS 38.214" in result.output
+        assert "3GPP TS 38.214" in _plain(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -408,12 +419,12 @@ class TestDownloadModelCommand:
     """Tests for the download-model command."""
 
     @patch("specagent.retrieval.resources.get_embedder")
-    @patch("transformers.AutoTokenizer")
+    @patch("huggingface_hub.hf_hub_download")
     @patch("specagent.config.settings")
-    def test_download_model_success(self, mock_settings, mock_tokenizer_cls, mock_get_embedder):
+    def test_download_model_success(self, mock_settings, mock_hf_download, mock_get_embedder):
         """download-model downloads tokenizer and embedder successfully."""
         mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
-        mock_tokenizer_cls.from_pretrained.return_value = MagicMock()
+        mock_hf_download.return_value = "/cache/tokenizer.json"
         mock_get_embedder.return_value = MagicMock()
 
         result = runner.invoke(app, ["download-model"])
@@ -421,12 +432,12 @@ class TestDownloadModelCommand:
         assert result.exit_code == 0
         assert "ready" in result.output.lower()
 
-    @patch("transformers.AutoTokenizer")
+    @patch("huggingface_hub.hf_hub_download")
     @patch("specagent.config.settings")
-    def test_download_model_tokenizer_failure_exits_1(self, mock_settings, mock_tokenizer_cls):
+    def test_download_model_tokenizer_failure_exits_1(self, mock_settings, mock_hf_download):
         """download-model exits with code 1 when tokenizer download fails."""
         mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
-        mock_tokenizer_cls.from_pretrained.side_effect = OSError("network error")
+        mock_hf_download.side_effect = OSError("network error")
 
         result = runner.invoke(app, ["download-model"])
 
@@ -434,14 +445,14 @@ class TestDownloadModelCommand:
         assert "failed" in result.output.lower()
 
     @patch("specagent.retrieval.resources.get_embedder")
-    @patch("transformers.AutoTokenizer")
+    @patch("huggingface_hub.hf_hub_download")
     @patch("specagent.config.settings")
     def test_download_model_embedder_failure_exits_1(
-        self, mock_settings, mock_tokenizer_cls, mock_get_embedder
+        self, mock_settings, mock_hf_download, mock_get_embedder
     ):
         """download-model exits with code 1 when embedder download fails."""
         mock_settings.embedding_model = "nomic-ai/nomic-embed-text-v1.5"
-        mock_tokenizer_cls.from_pretrained.return_value = MagicMock()
+        mock_hf_download.return_value = "/cache/tokenizer.json"
         mock_get_embedder.side_effect = RuntimeError("ONNX download failed")
 
         result = runner.invoke(app, ["download-model"])
