@@ -80,22 +80,24 @@ def test_chunk_with_metadata_updates_header_when_new_heading_found():
 @pytest.mark.unit
 def test_get_tokenizer_caches_instance():
     """_get_tokenizer() returns the same object on repeated calls."""
-    mock_tok = MagicMock()
-    with patch("transformers.AutoTokenizer") as mock_auto:
-        mock_auto.from_pretrained.return_value = mock_tok
+    with (
+        patch("huggingface_hub.try_to_load_from_cache", return_value="/cache/tokenizer.json"),
+        patch("tokenizers.Tokenizer") as mock_tokenizer_cls,
+    ):
+        mock_tokenizer_cls.from_file.return_value = MagicMock()
         from specagent.retrieval import chunker
 
         original = chunker._tokenizer
         chunker._tokenizer = None
         try:
             t1 = chunker._get_tokenizer()
-            # Second call must not invoke from_pretrained again
+            # Second call must not load the tokenizer file again
             t2 = chunker._get_tokenizer()
         finally:
             chunker._tokenizer = original
 
     assert t1 is t2
-    mock_auto.from_pretrained.assert_called_once()
+    mock_tokenizer_cls.from_file.assert_called_once()
 
 
 @pytest.mark.unit
@@ -106,8 +108,8 @@ def test_get_tokenizer_raises_on_load_failure():
     original = chunker._tokenizer
     chunker._tokenizer = None
     try:
-        with patch("transformers.AutoTokenizer") as mock_auto:
-            mock_auto.from_pretrained.side_effect = OSError("not cached")
+        # try_to_load_from_cache returns a non-str sentinel when the file is absent
+        with patch("huggingface_hub.try_to_load_from_cache", return_value=None):
             with pytest.raises(RuntimeError, match="not in the local cache"):
                 chunker._get_tokenizer()
     finally:

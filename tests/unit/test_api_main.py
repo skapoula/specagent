@@ -5,6 +5,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _stub_lifespan_settings(mock_settings, *, enable_tracing: bool) -> None:
+    """Fill the settings attributes lifespan reads.
+
+    A bare MagicMock makes `settings.api_workers > 1` raise TypeError, which
+    surfaces as "Startup failed" from every TestClient in this module.
+    """
+    mock_settings.enable_tracing = enable_tracing
+    mock_settings.api_workers = 1
+    mock_settings.enable_docx_ocr = False
+
+
+
 @pytest.fixture
 def client():
     """Provide a TestClient with mocked resource initialization."""
@@ -15,7 +27,7 @@ def client():
         ),
         patch("specagent.api.main.settings") as mock_settings,
     ):
-        mock_settings.enable_tracing = False
+        _stub_lifespan_settings(mock_settings, enable_tracing=False)
         from fastapi.testclient import TestClient
 
         from specagent.api.main import app
@@ -34,7 +46,7 @@ def client_with_tracing():
         ),
         patch("specagent.api.main.settings") as mock_settings,
     ):
-        mock_settings.enable_tracing = True
+        _stub_lifespan_settings(mock_settings, enable_tracing=True)
         from fastapi.testclient import TestClient
 
         from specagent.api.main import app
@@ -424,7 +436,7 @@ class TestLifespan:
             patch("specagent.api.main.initialize_resources", side_effect=_fake_init),
             patch("specagent.api.main.settings") as ms,
         ):
-            ms.enable_tracing = False
+            _stub_lifespan_settings(ms, enable_tracing=False)
             from fastapi.testclient import TestClient
 
             from specagent.api.main import app
@@ -442,7 +454,7 @@ class TestLifespan:
             ),
             patch("specagent.api.main.settings") as ms,
         ):
-            ms.enable_tracing = True
+            _stub_lifespan_settings(ms, enable_tracing=True)
             from fastapi.testclient import TestClient
 
             from specagent.api.main import app

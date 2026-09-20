@@ -618,6 +618,9 @@ class TestVisionMaxTokens:
             patch(
                 "specagent.retrieval.groq_vision_client.settings",
                 vision_max_tokens=8192,
+                # the call also reads settings.vision_model; a MagicMock there
+                # makes the request body unserialisable
+                vision_model="test-vision-model",
             ),
         ):
             await analyze_image(_make_image(), api_key="test-key")
@@ -654,6 +657,9 @@ class TestVisionMaxTokens:
             patch(
                 "specagent.retrieval.groq_vision_client.settings",
                 vision_max_tokens=4096,
+                # the call also reads settings.vision_model; a MagicMock there
+                # makes the request body unserialisable
+                vision_model="test-vision-model",
             ),
         ):
             await correct_mermaid_diagram(
