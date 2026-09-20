@@ -183,6 +183,9 @@ target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint]
 select = [
     "E",      # pycodestyle errors
@@ -199,15 +202,24 @@ select = [
     "ERA",    # eradicate (commented code)
     "PL",     # Pylint
     "RUF",    # Ruff-specific rules
+    "ANN",    # flake8-annotations: type hints on public signatures
+    "D100",   # docstrings on public modules/classes/functions (master-code-style.md)
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D400",
+    "D415",
 ]
 ignore = [
+    "ANN401", # bans typing.Any; the rule requires annotations, not the absence of Any
     "E501",   # line too long (handled by formatter)
     "PLR0913", # too many arguments
     "PLR2004", # magic value comparison
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ARG", "PLR2004", "PLC0415"]
+"tests/**" = ["ARG", "PLR2004", "PLC0415", "ANN", "D"]
 "src/specagent/cli.py" = ["B008"]  # function call in default argument (typer pattern)
 
 [tool.ruff.lint.isort]
