@@ -195,7 +195,7 @@ def test_check_answer_correctness_incorrect():
 @pytest.mark.unit
 def test_check_answer_correctness_with_llm_judge():
     """Test LLM-as-judge for semantic matching."""
-    with patch("specagent.evaluation.benchmark.llm_judge_answer") as mock_judge:
+    with patch("specagent.evaluation.judge.llm_judge_answer") as mock_judge:
         mock_judge.return_value = True
 
         # Use an answer that won't match fuzzy matching to force LLM judge
@@ -242,7 +242,7 @@ def test_run_benchmark_with_limit(sample_tspec_dataset, mock_graph_response, tmp
     questions = load_benchmark_questions(sample_tspec_dataset)
 
     with patch("specagent.graph.workflow.run_query") as mock_run_query:
-        with patch("specagent.evaluation.benchmark.llm_judge_answer", return_value=False):
+        with patch("specagent.evaluation.judge.llm_judge_answer", return_value=False):
             mock_run_query.return_value = mock_graph_response("Q", "16", 1000.0)
 
             report = run_benchmark(
@@ -261,7 +261,7 @@ def test_run_benchmark_accuracy_by_difficulty(sample_tspec_dataset, mock_graph_r
     questions = load_benchmark_questions(sample_tspec_dataset)
 
     with patch("specagent.graph.workflow.run_query") as mock_run_query:
-        with patch("specagent.evaluation.benchmark.llm_judge_answer", return_value=False):
+        with patch("specagent.evaluation.judge.llm_judge_answer", return_value=False):
             # Return correct for Easy, incorrect for Intermediate and Hard
             mock_run_query.side_effect = [
                 mock_graph_response("Q1", "16", 1000.0),  # Easy - correct
@@ -488,7 +488,7 @@ def test_benchmark_question_creation():
 
 def test_compute_confidence_distribution():
     """Test confidence distribution computation."""
-    from specagent.evaluation.benchmark import compute_confidence_distribution
+    from specagent.evaluation.stats import compute_confidence_distribution
 
     results = [
         BenchmarkResult(
@@ -558,7 +558,7 @@ def test_compute_confidence_distribution():
 
 def test_compute_confidence_distribution_empty():
     """Test confidence distribution with no results."""
-    from specagent.evaluation.benchmark import compute_confidence_distribution
+    from specagent.evaluation.stats import compute_confidence_distribution
 
     distribution = compute_confidence_distribution([])
 
@@ -568,7 +568,7 @@ def test_compute_confidence_distribution_empty():
 
 def test_confidence_statistics():
     """Test confidence statistics computation."""
-    from specagent.evaluation.benchmark import compute_confidence_stats
+    from specagent.evaluation.stats import compute_confidence_stats
 
     results = [
         BenchmarkResult(
@@ -614,7 +614,7 @@ def test_confidence_statistics():
 
 def test_confidence_by_correctness():
     """Test confidence analysis by answer correctness."""
-    from specagent.evaluation.benchmark import analyze_confidence_by_correctness
+    from specagent.evaluation.stats import analyze_confidence_by_correctness
 
     results = [
         BenchmarkResult(
@@ -757,7 +757,7 @@ def test_load_benchmark_questions_answer_no_colon(tmp_path):
 
 def test_compute_confidence_stats_empty_results():
     """compute_confidence_stats() returns zeros for empty results list."""
-    from specagent.evaluation.benchmark import compute_confidence_stats
+    from specagent.evaluation.stats import compute_confidence_stats
 
     result = compute_confidence_stats([])
     assert result == {"mean": 0.0, "median": 0.0, "min": 0.0, "max": 0.0, "std": 0.0}
@@ -928,7 +928,7 @@ def test_llm_judge_answer_yes_with_str_response():
     get_llm().invoke() always returns str (per LLMProtocol); the old
     hasattr(response, 'content') branch has been removed as dead code.
     """
-    from specagent.evaluation.benchmark import llm_judge_answer
+    from specagent.evaluation.judge import llm_judge_answer
 
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = "yes"
@@ -938,7 +938,7 @@ def test_llm_judge_answer_yes_with_str_response():
 
 def test_llm_judge_answer_no_str_response():
     """llm_judge_answer returns False when LLM returns string 'no'."""
-    from specagent.evaluation.benchmark import llm_judge_answer
+    from specagent.evaluation.judge import llm_judge_answer
 
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = "no"
@@ -948,7 +948,7 @@ def test_llm_judge_answer_no_str_response():
 
 def test_llm_judge_answer_exception_falls_back_to_fuzzy():
     """llm_judge_answer falls back to substring match when LLM raises."""
-    from specagent.evaluation.benchmark import llm_judge_answer
+    from specagent.evaluation.judge import llm_judge_answer
 
     with patch("specagent.llm.factory.get_llm", side_effect=RuntimeError("no llm")):
         # "16" in "16 processes" → True
@@ -1003,7 +1003,7 @@ class TestBenchmarkBugFixes:
         branch in the original code is dead code that should be removed.
         """
         from unittest.mock import MagicMock, patch  # noqa: PLC0415
-        from specagent.evaluation.benchmark import llm_judge_answer  # noqa: PLC0415
+        from specagent.evaluation.judge import llm_judge_answer  # noqa: PLC0415
 
         mock_llm = MagicMock()
         # invoke() returns plain str — no .content attribute

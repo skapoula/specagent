@@ -259,7 +259,7 @@ def benchmark(
 @app.command(name="download-model")
 def download_model() -> None:
     """Download the tokenizer and embedding model to the local cache."""
-    from transformers import AutoTokenizer
+    from huggingface_hub import hf_hub_download
 
     from specagent.config import settings
     from specagent.retrieval.resources import get_embedder
@@ -268,7 +268,9 @@ def download_model() -> None:
 
     console.print(f"[blue]Downloading tokenizer: {model_id}[/blue]")
     try:
-        AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)  # nosec B615
+        # chunker._get_tokenizer() reads tokenizer.json straight out of the cache,
+        # so fetch exactly that file — transformers is not a dependency here.
+        hf_hub_download(model_id, "tokenizer.json")
         console.print("[green]Tokenizer downloaded.[/green]")
     except Exception as e:
         console.print(f"[red]Tokenizer download failed: {e}[/red]")

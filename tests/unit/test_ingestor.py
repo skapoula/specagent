@@ -141,7 +141,7 @@ def test_mkdir_tolerates_existing_directory(tmp_path):
 def test_mkdir_raises_ingestion_error_on_permission_denied(tmp_path):
 
     with (
-        patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")),
+        patch("os.makedirs", side_effect=PermissionError("denied")),
         pytest.raises(IngestionError, match="Permission denied"),
     ):
         _mkdir(tmp_path / "new_dir")
@@ -151,7 +151,7 @@ def test_mkdir_raises_ingestion_error_on_permission_denied(tmp_path):
 def test_mkdir_raises_ingestion_error_on_oserror(tmp_path):
 
     with (
-        patch("pathlib.Path.mkdir", side_effect=OSError("filesystem error")),
+        patch("os.makedirs", side_effect=OSError("filesystem error")),
         pytest.raises(IngestionError, match="Failed to create directory"),
     ):
         _mkdir(tmp_path / "new_dir")
